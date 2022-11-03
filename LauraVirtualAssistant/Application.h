@@ -2,6 +2,7 @@
 #define LAURA_APPLICATION_H
 
 #include "Assistant.h"
+#include "Window.h"
 
 class Application
 {
@@ -10,18 +11,19 @@ public:
 	~Application();
 
 	// Main methods
-	void Start();
+	int Start();
 
 	// Get methods
 	inline Assistant*& GetAssistant() { return s_Assistant; }
+	inline Window*& GetWindow()		  { return s_Window; }
 
 private:
-	bool m_IsRunning;
+	// Main methods
+	int Run();
 
-	void Run();
-
+	// Static attributes
 	static Assistant* s_Assistant;
-
+	static Window* s_Window;
 };
 
 #endif // !ASSISTANT_APPLICATION_H

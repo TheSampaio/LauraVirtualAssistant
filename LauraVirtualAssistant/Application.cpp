@@ -2,32 +2,63 @@
 #include "Application.h"
 
 Assistant* Application::s_Assistant = nullptr;
+Window*	   Application::s_Window = nullptr;
 
+// Allocates memory dynamically
 Application::Application()
-	: m_IsRunning(false)
 {
 	s_Assistant = new Assistant;
+	s_Window = new Window;
 }
 
+// Deletes allocated memory
 Application::~Application()
 {
 	delete s_Assistant;
+	delete s_Window;
 }
 
-void Application::Start()
+// Starts the application
+int Application::Start()
 {
-	s_Assistant->Start();
-	Run();
-}
-
-void Application::Run()
-{
-	m_IsRunning = true;
-
-	while (m_IsRunning)
+	// Create window and verify if was succeed
+	if (!s_Window->Create())
 	{
-		s_Assistant->Update();
+		MessageBox(NULL, L"Failed to create window.", L"Application", MB_OK | MB_ICONERROR);
+		return EXIT_FAILURE;
 	}
 
+	// Runs the application
+	return Run();
+}
+
+// Runs the application
+int Application::Run()
+{
+	// Starts the assistant
+	MSG Message{ NULL };
+	s_Assistant->SetWindow(s_Window);
+	s_Assistant->Start();
+
+	// Main loop
+	do
+	{
+		// Process all events
+		if (PeekMessage(&Message, NULL, 0, 0, PM_REMOVE))
+		{
+			TranslateMessage(&Message);
+			DispatchMessage(&Message);
+		}
+
+		else
+		{
+			s_Assistant->Update();
+			Sleep(10);
+		}
+
+	} while (Message.message != WM_QUIT);
+
+	// Finalizes the assistant and application
 	s_Assistant->End();
+	return static_cast<int>(Message.wParam);
 }

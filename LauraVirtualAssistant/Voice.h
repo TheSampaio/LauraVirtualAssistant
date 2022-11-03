@@ -7,9 +7,11 @@ public:
 	Voice();
 	~Voice();
 
+	// Main methods
 	void Speak(const std::wstring& Text);
 
 private:
+	// Attributes
 	ISpVoice* m_Voice;
 	HRESULT m_Result;
 };
