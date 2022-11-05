@@ -11,5 +11,5 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	Application.GetWindow()->SetBackgroundColor(230, 53, 39);
 
 	// Start application
-	return Application.Start();;
+	return Application.Start();
 }
