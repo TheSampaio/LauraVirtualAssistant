@@ -2,12 +2,14 @@
 #include "Application.h"
 
 Assistant* Application::s_Assistant = nullptr;
+Input*	   Application::s_Input = nullptr;
 Window*	   Application::s_Window = nullptr;
 
 // Allocates memory dynamically
 Application::Application()
 {
 	s_Assistant = new Assistant;
+	s_Input = new Input;
 	s_Window = new Window;
 }
 
@@ -15,6 +17,7 @@ Application::Application()
 Application::~Application()
 {
 	delete s_Assistant;
+	delete s_Input;
 	delete s_Window;
 }
 
@@ -37,7 +40,6 @@ int Application::Run()
 {
 	// Starts the assistant
 	MSG Message{ NULL };
-	s_Assistant->SetWindow(s_Window);
 	s_Assistant->Start();
 
 	// Main loop

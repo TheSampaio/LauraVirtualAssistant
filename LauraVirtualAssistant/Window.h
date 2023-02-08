@@ -13,14 +13,13 @@ public:
 
 	Window();
 
+	// Deleting copy constructors
+	Window(const Window&) = delete;
+	Window& operator=(const Window&) = delete;
+
 	// Main methods
 	bool Create();
 	inline void Close() { PostMessage(m_Id, WM_DESTROY, NULL, NULL); }
-
-	// Input methods
-	inline bool GetKeyPressed(int KeyCode)		 { return s_Keys[KeyCode]; }
-	inline bool GetKeyReleased(int KeyCode)		 { return !s_Keys[KeyCode]; }
-	inline std::array<int, 2> GetMousePosition() { return s_Mouse; }
 
 	// Get methods
 	inline HWND GetId()	const								{ return m_Id; }
@@ -42,9 +41,6 @@ public:
 	inline void SetCursor(const unsigned int Cursor) { m_Cursor = LoadCursor(GetModuleHandle(NULL), MAKEINTRESOURCE(Cursor)); };
 	inline void SetBackgroundColor(unsigned int Red, unsigned int Green, unsigned int Blue) { m_BackgroundColor = RGB(Red, Green, Blue); }
 
-	// Static methods
-	static LRESULT CALLBACK Procedure(HWND hWindow, UINT uMessage, WPARAM wParam, LPARAM lParam); // Window's procedure function
-
 private:
 	// Attributes
 	HWND m_Id;
@@ -62,10 +58,6 @@ private:
 	std::array<unsigned int, 2> m_Center;
 
 	unsigned int m_DisplayMode;
-
-	static bool s_bIsHidden;
-	static bool s_Keys[256];
-	static std::array<int, 2> s_Mouse;
 };
 
 #endif // !LAURA_WINDOW_H

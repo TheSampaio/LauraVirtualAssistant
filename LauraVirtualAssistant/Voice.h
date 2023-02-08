@@ -7,6 +7,10 @@ public:
 	Voice();
 	~Voice();
 
+	// Deleting copy constructors
+	Voice(const Voice&) = delete;
+	Voice& operator=(const Voice&) = delete;
+
 	// Main methods
 	void Speak(const std::wstring& Text);
 
@@ -16,4 +20,4 @@ private:
 	HRESULT m_Result;
 };
 
-#endif // !ASSISTANT_VOICE_H
+#endif // !LAURA_VOICE_H

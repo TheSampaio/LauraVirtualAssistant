@@ -1,9 +1,7 @@
 #include "PCH.h"
 #include "Window.h"
 
-bool Window::s_bIsHidden = true;
-bool Window::s_Keys[256] = { false };
-std::array<int, 2> Window::s_Mouse = { 0 };
+#include "Input.h"
 
 Window::Window()
 	: m_Id(NULL), m_Instance(GetModuleHandle(NULL))
@@ -44,7 +42,7 @@ bool Window::Create()
 	// Create and define window's class
 	WNDCLASSEX Window{ NULL };
 	Window.cbSize = sizeof(Window);
-	Window.lpfnWndProc = Window::Procedure;
+	Window.lpfnWndProc = Input::Procedure;
 	Window.style = CS_HREDRAW | CS_VREDRAW;
 	Window.cbClsExtra = NULL;
 	Window.cbWndExtra = NULL;
@@ -138,93 +136,5 @@ void Window::SetDisplayMode(unsigned int DisplayMode)
 		m_Position[1] = 0;
 
 		m_Style = WS_POPUP | WS_EX_TOPMOST | WS_VISIBLE;
-	}
-}
-
-LRESULT Window::Procedure(HWND hWindow, UINT uMessage, WPARAM wParam, LPARAM lParam)
-{
-	switch (uMessage)
-	{
-		/* ========== KEYBOARD ==================== */
-		// If keyboard's key was pressed
-	case WM_KEYDOWN:
-	case WM_SYSKEYDOWN:
-		s_Keys[wParam] = true;
-
-		if (s_Keys[VK_F4])
-		{
-			// Ask if user want to close the window
-			if (MessageBox(hWindow, L"Do you really want to close the window?", L"Window", MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING) == IDYES)
-			{
-				PostMessage(hWindow, WM_DESTROY, NULL, NULL);
-				return 0;
-			}
-
-			else
-			{
-				s_Keys[VK_F4] = false;
-				return 0;
-			}
-		}
-
-		return 0;
-
-		// If keyboard's key was released
-	case WM_KEYUP:
-	case WM_SYSKEYUP:
-		s_Keys[wParam] = false;
-		return 0;
-
-		/* ========== MOUSE ==================== */
-		// If mouse move
-	case WM_MOUSEMOVE:
-		s_Mouse[0] = GET_X_LPARAM(lParam);
-		s_Mouse[1] = GET_Y_LPARAM(lParam);
-		return 0;
-
-		// If mouse's left button pressed
-	case WM_LBUTTONDOWN:
-	case WM_LBUTTONDBLCLK:
-		s_Keys[VK_LBUTTON] = true;
-		return 0;
-
-		// If mouse's left button released
-	case WM_LBUTTONUP:
-		s_Keys[VK_LBUTTON] = false;
-		return 0;
-
-		// If mouse's right button pressed
-	case WM_RBUTTONDOWN:
-	case WM_RBUTTONDBLCLK:
-		s_Keys[VK_RBUTTON] = true;
-		return 0;
-
-		// If mouse's right button released
-	case WM_RBUTTONUP:
-		s_Keys[VK_RBUTTON] = false;
-		return 0;
-
-		/* ========== WINDOW ==================== */
-
-		// If a hot key was pressed
-	case WM_HOTKEY:
-		ShowWindow(hWindow, s_bIsHidden);
-		s_bIsHidden = !s_bIsHidden;
-		return 0;
-
-		// If window was closed
-	case WM_QUIT:
-	case WM_CLOSE:
-		PostMessage(hWindow, WM_DESTROY, NULL, NULL);
-		return 0;
-
-		// If window was destroyed
-	case WM_DESTROY:
-		PostQuitMessage(NULL);
-		return 0;
-
-		// Else return default behavior
-	default:
-		return DefWindowProc(hWindow, uMessage, wParam, lParam);
 	}
 }

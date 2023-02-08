@@ -1,18 +1,25 @@
 #include "PCH.h"
 #include "Assistant.h"
 
+#include "Application.h"
+
+System* Assistant::s_System = nullptr;
 Voice* Assistant::s_Voice = nullptr;
-Window* Assistant::s_Window = nullptr;
+
+Input*& Assistant::s_Input = Application::s_Input;
+Window*& Assistant::s_Window = Application::s_Window;
 
 // Allocates memory dynamically
 Assistant::Assistant()
 {
+	s_System = new System;
 	s_Voice = new Voice;
 }
 
 // Deletes allocated memory
 Assistant::~Assistant()
 {
+	delete s_System;
 	delete s_Voice;
 }
 
@@ -26,16 +33,16 @@ void Assistant::Start()
 	s_Voice->Speak(L"Registering hot keys");
 	RegisterHotKey(s_Window->GetId(), 1, MOD_ALT, 'L');
 
-	Sleep(500);
+	Sleep(1000);
 	s_Voice->Speak(L"Initializing completed");
 }
 
 // Updates the assistant
 void Assistant::Update()
 {
-	if (s_Window->GetKeyPressed(VK_SPACE))
+	if (s_Input->GetKeyTaped(VK_SPACE))
 	{
-		s_Voice->Speak(L"Yes baby");
+		s_Voice->Speak(L"You taped spacebar");
 	}
 }
 
@@ -43,21 +50,4 @@ void Assistant::Update()
 void Assistant::End()
 {
 	s_Voice->Speak(L"Uninitializing systems");
-}
-
-// Get current user profile
-std::wstring Assistant::GetUserProfile()
-{
-	TCHAR UserFolderPath[MAX_PATH];
-	std::vector<TCHAR> NewUserFolderPath;
-
-	if SUCCEEDED(SHGetFolderPath(NULL, CSIDL_PROFILE, NULL, 0, UserFolderPath))
-	{
-		for (unsigned int i = 0; (i < sizeof(UserFolderPath) / sizeof(UserFolderPath[0]) - 1) && (UserFolderPath[i] != '\0'); i++)
-		{
-			NewUserFolderPath.push_back(UserFolderPath[i]);
-		}
-	}
-
-	return std::wstring(UserFolderPath);
 }
