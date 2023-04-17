@@ -27,5 +27,5 @@ Voice::~Voice()
 void Voice::Speak(const std::wstring& Text)
 {
     m_Result = CoCreateInstance(CLSID_SpVoice, NULL, CLSCTX_ALL, IID_ISpVoice, (void**) &m_Voice);
-    if (SUCCEEDED(m_Result)) { m_Result = m_Voice->Speak((L"<voice required='Gender = Female; Language=409'>" + Text).c_str(), NULL, nullptr); }
+    if (SUCCEEDED(m_Result)) { m_Result = m_Voice->Speak((L"<rate absspeed='1'><voice required='Gender=Female; Age=Adult; Language=809'>" + Text).c_str(), NULL, nullptr); }
 }

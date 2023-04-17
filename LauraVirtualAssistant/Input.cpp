@@ -10,7 +10,7 @@ bool Input::s_bKeys[256] = { false };
 short              Input::s_MouseWheel = 0;
 std::array<int, 2> Input::s_MousePosition = { 0 };
 
-bool Input::GetKeyTaped(int KeyCode)
+bool Input::GetKeyTapped(int KeyCode)
 {
 	if (GetKeyPressed(KeyCode))
 	{

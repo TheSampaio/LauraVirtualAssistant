@@ -40,9 +40,9 @@ void Assistant::Start()
 // Updates the assistant
 void Assistant::Update()
 {
-	if (s_Input->GetKeyTaped(VK_SPACE))
+	if (s_Input->GetKeyTapped(VK_SPACE))
 	{
-		s_Voice->Speak(L"You taped spacebar");
+		s_Voice->Speak(L"You tapped spacebar");
 	}
 }
 

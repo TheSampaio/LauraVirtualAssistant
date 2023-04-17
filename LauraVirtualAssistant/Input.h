@@ -11,7 +11,7 @@ public:
 	Input& operator=(const Input&) = delete;
 
 	// Main methods
-	bool GetKeyTaped(int KeyCode);
+	bool GetKeyTapped(int KeyCode);
 
 	inline bool GetKeyPressed(int KeyCode)        const { return s_bKeys[KeyCode]; }
 	inline bool GetKeyReleased(int KeyCode)       const { return !s_bKeys[KeyCode]; }
