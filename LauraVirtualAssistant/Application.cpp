@@ -1,24 +1,16 @@
 #include "PCH.h"
 #include "Application.h"
 
-Assistant* Application::s_Assistant = nullptr;
-Input*	   Application::s_Input = nullptr;
-Window*	   Application::s_Window = nullptr;
+std::unique_ptr<Assistant> Application::s_Assistant = nullptr;
+std::unique_ptr<Input>     Application::s_Input = nullptr;
+std::unique_ptr<Window>    Application::s_Window = nullptr;
 
 // Allocates memory dynamically
 Application::Application()
 {
-	s_Assistant = new Assistant;
-	s_Input = new Input;
-	s_Window = new Window;
-}
-
-// Deletes allocated memory
-Application::~Application()
-{
-	delete s_Assistant;
-	delete s_Input;
-	delete s_Window;
+	s_Assistant = std::make_unique<Assistant>();
+	s_Input = std::make_unique<Input>();
+	s_Window = std::make_unique<Window>();
 }
 
 // Starts the application
@@ -27,7 +19,7 @@ int Application::Start()
 	// Create window and verify if was succeed
 	if (!s_Window->Create())
 	{
-		MessageBox(NULL, L"Failed to create window.", L"Application", MB_OK | MB_ICONERROR);
+		Debug::Message(Error, L"Failed to create window.", L"Application");
 		return EXIT_FAILURE;
 	}
 

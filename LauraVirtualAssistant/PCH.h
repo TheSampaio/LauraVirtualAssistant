@@ -1,9 +1,11 @@
-#ifndef LAURA_PCH_H
-#define LAURA_PCH_H
+#pragma once
 
 // Standard
 #include <array>
+#include <chrono>
+#include <format>
 #include <iostream>
+#include <memory>
 #include <vector>
 #include <string>
 
@@ -17,5 +19,3 @@
 	#include <windows.h>
 	#include <windowsx.h>
 #endif
-
-#endif // !ASSISTANT_PCH_H

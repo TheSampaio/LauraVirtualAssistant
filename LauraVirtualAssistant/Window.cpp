@@ -98,22 +98,19 @@ bool Window::Create()
 	return (m_Id) ? true : false;
 }
 
-void Window::SetSize(unsigned int Width, unsigned int Height)
+void Window::SetSize(unsigned Width, unsigned Height)
 {
 	// Window's size
-	m_Size[0] = Width;
-	m_Size[1] = Height;
+	m_Size = { Width, Height };
 
 	// Window's center
-	m_Center[0] = m_Size[0] / 2;
-	m_Center[1] = m_Size[1] / 2;
+	m_Center = { m_Size[0] / 2, m_Size[1] / 2 };
 
 	// Adust window to screen's center
-	m_Position[0] = (GetSystemMetrics(SM_CXSCREEN) / 2) - (m_Size[0] / 2);
-	m_Position[1] = (GetSystemMetrics(SM_CYSCREEN) / 2) - (m_Size[1] / 2);
+	m_Position = { (GetSystemMetrics(SM_CXSCREEN) / 2) - (m_Size[0] / 2), (GetSystemMetrics(SM_CYSCREEN) / 2) - (m_Size[1] / 2) };
 }
 
-void Window::SetDisplayMode(unsigned int DisplayMode)
+void Window::SetDisplayMode(unsigned DisplayMode)
 {
 	m_DisplayMode = DisplayMode;
 
@@ -127,13 +124,11 @@ void Window::SetDisplayMode(unsigned int DisplayMode)
 	else
 	{
 		// Resizes window
-		m_Size[0] = m_Screen[0];
-		m_Size[1] = m_Screen[1];
+		m_Size = { m_Screen[0], m_Screen[1] };
 
 
 		// Setup window's new position
-		m_Position[0] = 0;
-		m_Position[1] = 0;
+		m_Position = { 0, 0 };
 
 		m_Style = WS_POPUP | WS_EX_TOPMOST | WS_VISIBLE;
 	}

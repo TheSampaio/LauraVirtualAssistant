@@ -1,5 +1,4 @@
-#ifndef LAURA_VOICE_H
-#define LAURA_VOICE_H
+#pragma once
 
 class Voice
 {
@@ -7,7 +6,7 @@ public:
 	Voice();
 	~Voice();
 
-	// Deleting copy constructors
+	// Delete copy contructor and assigment operator
 	Voice(const Voice&) = delete;
 	Voice& operator=(const Voice&) = delete;
 
@@ -19,5 +18,3 @@ private:
 	ISpVoice* m_Voice;
 	HRESULT m_Result;
 };
-
-#endif // !LAURA_VOICE_H

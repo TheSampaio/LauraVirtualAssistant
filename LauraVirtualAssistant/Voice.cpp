@@ -1,6 +1,8 @@
 #include "PCH.h"
 #include "Voice.h"
 
+#include "Debug.h"
+
 // Initializes voice
 Voice::Voice()
     : m_Voice(nullptr)
@@ -10,7 +12,7 @@ Voice::Voice()
     // Initializes Windows COM
     if (FAILED(CoInitialize(NULL)))
     {
-        MessageBox(NULL, L"Failed to initialize COM.", L"Voice", MB_OK | MB_ICONERROR);
+        Debug::Message(Error, L"Failed to initialize COM.", L"Voice");
         exit(EXIT_FAILURE);
     }
 }

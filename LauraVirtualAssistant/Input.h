@@ -1,12 +1,11 @@
-#ifndef LAURA_INPUT_H
-#define LAURA_INPUT_H
+#pragma once
 
 class Input
 {
 public:
 	Input() {};
 
-	// Deleting copy constructors
+	// Delete copy contructor and assigment operator
 	Input(const Input&) = delete;
 	Input& operator=(const Input&) = delete;
 
@@ -32,5 +31,3 @@ private:
 	static std::array<int, 2> s_MousePosition;
 
 };
-
-#endif // !LAURA_INPUT_H

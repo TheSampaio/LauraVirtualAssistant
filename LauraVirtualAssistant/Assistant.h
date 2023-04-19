@@ -1,18 +1,14 @@
-#ifndef LAURA_ASSISTANT_H
-#define LAURA_ASSISTANT_H
+#pragma once
 
 #include "Voice.h"
-#include "Input.h"
 #include "System.h"
-#include "Window.h"
 
 class Assistant
 {
 public:
 	Assistant();
-	~Assistant();
 
-	// Deleting copy constructors
+	// Delete copy contructor and assigment operator
 	Assistant(const Assistant&) = delete;
 	Assistant& operator=(const Assistant&) = delete;
 
@@ -22,15 +18,14 @@ public:
 	void End();
 
 	// Get methods
-	inline Voice*& GetVoice() { return s_Voice; }
+	inline Voice* GetVoice()   { return s_Voice.get(); }
+	inline System* GetSystem() { return s_System.get(); }
 
 private:
+	// Main methods
+	void Initialize();
+
 	// Static attributes
-	static System* s_System;
-	static Voice* s_Voice;
-
-	static Input*& s_Input;
-	static Window*& s_Window;
+	static std::unique_ptr<System> s_System;
+	static std::unique_ptr<Voice> s_Voice;
 };
-
-#endif // !LAURA_ASSISTANT_H
