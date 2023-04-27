@@ -16,10 +16,10 @@ Assistant::Assistant()
 // Starts the assistant
 void Assistant::Start()
 {
-	/*Initialize();
+	Initialize();
 
 	s_Voice->Speak(L"Hello " + s_System->GetCurrentUserName());
-	s_Voice->Speak(L"My name is Laura, your personal virtual assistant");*/
+	s_Voice->Speak(L"My name is Laura, your personal virtual assistant");
 	s_Voice->Speak(L"Today is " + s_System->GetCurrentDate());
 }
 

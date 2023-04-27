@@ -28,8 +28,6 @@ std::wstring System::GetCurrentDate()
 	std::chrono::local_time LocalTime = std::chrono::current_zone()->to_local(std::chrono::system_clock::now());
 	std::string LocalDate = std::format("{:%d-%m-%Y}", LocalTime);
 
-	Debug::Message(Information, std::wstring(LocalDate.begin(), LocalDate.end()).data(), L"System");
-
 	return std::wstring(LocalDate.begin(), LocalDate.end());
 }
 
