@@ -1,2 +1,2 @@
-# LauraVirtualAssistant
- A Windows virtual assistant made with C++ and the Win32 API.
+# VirtualAssistant
+ A virtual assistant made with Python.
