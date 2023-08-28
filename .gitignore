@@ -1,7 +1,8 @@
 # Directories
 .vs/
-x64/
-LauraVirtualAssistant/x64
+.vscode/
+_Output/
 
 # Files
 *.user
+*.spec
