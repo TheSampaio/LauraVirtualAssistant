@@ -1,6 +1,7 @@
 # Directories
 .vs/
 .vscode/
+__pycache__/
 _Output/
 
 # Files
