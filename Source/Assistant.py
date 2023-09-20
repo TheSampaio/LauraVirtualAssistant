@@ -10,20 +10,21 @@ class Assistant():
     def __Initialize(self):
         self.__voice.Initialize()
         self.__voice.Speak("Initializing system")
-        self.__system.Sleep(0.5)
 
         self.__system.Initialize()
         self.__voice.Speak("Getting hardware and software information")
-        self.__system.Sleep(1.5)
+        self.__system.Sleep(1.0)
 
         self.__voice.Speak("System successfully initialized")
 
-    def Run(self):
-        self.__Initialize()
-
+    def __Greetings(self):
         self.__voice.Speak(f"Good {self.__GetDayPeriod(self.__system.GetTime()[0])} {self.__system.GetUsername()}")
         self.__voice.Speak(f"Today is {self.__system.GetDate()[0]} of {self.__GetMonth(self.__system.GetDate()[1])}, {self.__system.GetDate()[2]}")
         self.__voice.Speak(f"It is now {self.__system.GetTime()[0]} hours and {self.__system.GetTime()[1]} minutes, according to your OS")
+
+    def Run(self):
+        self.__Initialize()
+        self.__Greetings()
 
     # === GET methods ===
 
