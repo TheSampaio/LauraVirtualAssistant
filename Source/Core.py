@@ -40,5 +40,5 @@ class Voice():
         self.__id.setProperty("voice", self.__voices[2 if (len(self.__voices) > 0) else 0].id)
 
     def Speak(self, text : str):
-        self.__id.say(text=text)
+        self.__id.say(text)
         self.__id.runAndWait()
