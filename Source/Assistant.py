@@ -10,10 +10,8 @@ class Assistant():
     def __Initialize(self):
         self.__voice.Initialize()
         self.__voice.Speak("Initializing system")
-
         self.__system.Initialize()
-        self.__voice.Speak("Getting hardware and software information")
-        self.__system.Sleep(1.0)
+        self.__system.Sleep(2.0)
 
         self.__voice.Speak("System successfully initialized")
 
