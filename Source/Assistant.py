@@ -1,4 +1,3 @@
-import time
 from Core import System, Voice
 
 class Assistant():
@@ -20,7 +19,7 @@ class Assistant():
         self.__lastHour = self.__system.GetTime()[0]
 
     def __VerifyHours(self):
-        
+
         if (self.__system.GetTime()[0] != self.__lastHour):
             self.__lastHour = self.__system.GetTime()[0]
             self.__voice.Speak(f"It is now {self.__lastHour} hours")
@@ -30,7 +29,7 @@ class Assistant():
 
         while (True):
             self.__VerifyHours()
-            time.sleep(1.0)
+            self.__system.Sleep(1.0)
 
     # === GET methods ===
 

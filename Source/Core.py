@@ -8,8 +8,6 @@ class System():
 
     def __init__(self) -> None:
         self.__username = "sir"
-        self.__date = [datetime.datetime.today().day, datetime.datetime.today().month, datetime.datetime.today().year]
-        self.__time = [datetime.datetime.today().hour, datetime.datetime.today().minute]
 
     def Initialize(self):
         self.__username = getpass.getuser()
@@ -20,10 +18,10 @@ class System():
     # === GET methods ===
 
     def GetDate(self) -> str:
-        return self.__date
+        return [datetime.datetime.today().day, datetime.datetime.today().month, datetime.datetime.today().year]
     
     def GetTime(self) -> str:
-        return self.__time
+        return [datetime.datetime.today().hour, datetime.datetime.today().minute]
 
     def GetUsername(self) -> str:
         return self.__username
