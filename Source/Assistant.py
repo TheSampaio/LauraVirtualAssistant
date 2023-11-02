@@ -22,7 +22,12 @@ class Assistant():
 
         if (self.__system.GetTime()[0] != self.__lastHour):
             self.__lastHour = self.__system.GetTime()[0]
-            self.__voice.Speak(f"It is now {f'{self.__lastHour} hours' if (self.__lastHour != 0) else 'midnight'}")
+
+            if (self.__lastHour == '0'):
+                self.__voice.Speak(f"It is now midnight")
+
+            else:
+                self.__voice.Speak(f"It is now {self.__lastHour} hours")
 
     def Run(self):
         self.__Initialize()
