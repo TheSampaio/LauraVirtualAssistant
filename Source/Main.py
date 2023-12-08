@@ -1,5 +1,5 @@
-from Assistant import Assistant
+from application import Application, Assistant
 
 if __name__ == "__main__":
-    Application = Assistant()
-    Application.Run()
+    app = Application()
+    app.Run(Assistant())
