@@ -1,10 +1,12 @@
 from core import System, Voice
+from interface import FormMain
 
 class Assistant():
     
     def __init__(self) -> None:
         self.__system = System()
         self.__voice = Voice()
+        self.__window = FormMain()
 
         self.__NAME = "Laura"
         self.__nickname = None
@@ -28,6 +30,7 @@ class Assistant():
         print("Updating...")
 
     def OnRender(self):
+        self.__window.Run()
         print("Rendering...")
 
     def OnEnd(self):

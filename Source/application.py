@@ -6,7 +6,7 @@ class Application:
     def Run(self, assistant : Assistant):
 
         assistant.OnStart()
-
+        
         while(not assistant.Close()):
             assistant.OnUpdate()
             assistant.OnRender()
