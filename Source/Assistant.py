@@ -1,15 +1,11 @@
 from core import System, Voice
-from interface import FormMain
 
 class Assistant():
     
     def __init__(self) -> None:
         self.__system = System()
         self.__voice = Voice()
-        self.__window = FormMain()
 
-        self.__NAME = "Laura"
-        self.__nickname = None
         self.__username = self.__system.GetUsername()
 
         self.__close = False
@@ -24,14 +20,10 @@ class Assistant():
 
     def OnStart(self):
         self.__Greetings()
+        pass
 
     def OnUpdate(self):
         self.__VerifyHours()
-        print("Updating...")
-
-    def OnRender(self):
-        self.__window.Run()
-        print("Rendering...")
 
     def OnEnd(self):
         pass

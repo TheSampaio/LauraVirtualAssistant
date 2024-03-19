@@ -9,7 +9,6 @@ class Application:
         
         while(not assistant.Close()):
             assistant.OnUpdate()
-            assistant.OnRender()
             sleep(0.05) # 20 FPS
 
         assistant.OnEnd()
