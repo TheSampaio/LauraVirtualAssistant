@@ -20,7 +20,6 @@ class Assistant():
 
     def OnStart(self):
         self.__Greetings()
-        pass
 
     def OnUpdate(self):
         self.__VerifyHours()
@@ -40,7 +39,7 @@ class Assistant():
         if (self.__system.GetTime()[0] != self.__lastHour):
             self.__lastHour = self.__system.GetTime()[0]
 
-            if (self.__lastHour == '00'):
+            if (self.__lastHour == '0'):
                 self.__voice.Speak(f"It is now midnight")
 
             else:
