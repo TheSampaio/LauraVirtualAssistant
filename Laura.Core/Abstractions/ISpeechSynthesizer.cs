@@ -3,44 +3,44 @@ using Laura.Core.Speech;
 namespace Laura.Core.Abstractions;
 
 /// <summary>
-/// Motor de síntese de voz (text-to-speech).
+/// Speech synthesis engine (text-to-speech).
 ///
-/// Abstrai o motor concreto — SAPI no Windows hoje — para que o domínio não dependa
-/// de nenhuma API de plataforma e possa ser exercitado com dublês em teste.
+/// Abstracts the concrete engine - SAPI on Windows today - so the domain does not depend
+/// on any platform API and can be exercised with test doubles.
 /// </summary>
 public interface ISpeechSynthesizer : IAsyncDisposable
 {
     /// <summary>
-    /// Obtém um valor que indica se há fala em andamento neste momento.
+    /// Gets a value indicating whether speech is currently in progress.
     /// </summary>
     bool IsSpeaking { get; }
 
     /// <summary>
-    /// Lista as vozes instaladas no sistema.
+    /// Lists the voices installed on the system.
     ///
     /// Returns:
-    ///     As vozes disponíveis, possivelmente vazia quando nenhum motor de
-    ///     síntese está instalado.
+    ///     The available voices, possibly empty when no
+    ///     synthesis engine is installed.
     /// </summary>
     IReadOnlyList<VoiceDescriptor> GetAvailableVoices();
 
     /// <summary>
-    /// Fala o texto do pedido e aguarda a locução terminar.
+    /// Speaks the request text and waits for the utterance to finish.
     ///
-    /// Chamadas concorrentes são serializadas pela implementação: a segunda fala
-    /// só começa quando a primeira termina.
+    /// Concurrent calls are serialized by the implementation: the second speech
+    /// starts only when the first one finishes.
     ///
     /// Args:
-    ///     request: Texto e parâmetros de voz a aplicar.
-    ///     cancellationToken: Token que interrompe a locução em andamento.
+    ///     request: Text and voice parameters to apply.
+    ///     cancellationToken: Token that interrupts the current utterance.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando a locução termina ou é cancelada.
+    ///     A task completed when the utterance finishes or is canceled.
     /// </summary>
     Task SpeakAsync(SpeechRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Interrompe imediatamente a locução em andamento e descarta a fila de fala.
+    /// Immediately stops the current utterance and clears the speech queue.
     /// </summary>
     void CancelSpeech();
 }

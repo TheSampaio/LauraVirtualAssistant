@@ -5,17 +5,17 @@ using Laura.App.Theming;
 namespace Laura.App.Controls;
 
 /// <summary>
-/// Botão plano nos estilos primário e secundário do tema.
+/// Flat button in the theme primary and secondary styles.
 ///
-/// Dimensiona-se pelo próprio texto: com largura fixa, rótulos traduzidos apareciam
-/// cortados ("Restaurar padrões" virava "Rest").
+/// Sizes itself by its own text: with fixed width, translated labels appeared
+/// clipped ("Restore defaults" became "Rest").
 /// </summary>
 public sealed class FlatButton : Button
 {
     private bool _isPrimary = true;
 
     /// <summary>
-    /// Inicializa o botão com aparência plana e dimensionamento automático.
+    /// Initializes the button with flat appearance and automatic sizing.
     /// </summary>
     public FlatButton()
     {
@@ -33,10 +33,10 @@ public sealed class FlatButton : Button
     }
 
     /// <summary>
-    /// Obtém ou define se o botão usa a cor de destaque (ação primária).
+    /// Gets or sets whether the button uses the accent color (primary action).
     ///
-    /// Botões secundários ficam sobre a cor de superfície, para não competir com a
-    /// ação principal da janela.
+    /// Secondary buttons sit on the surface color so they do not compete with the
+    /// window's main action.
     /// </summary>
     public bool IsPrimary
     {
@@ -49,7 +49,7 @@ public sealed class FlatButton : Button
     }
 
     /// <summary>
-    /// Aplica as cores correspondentes ao papel do botão.
+    /// Applies the colors corresponding to the button role.
     /// </summary>
     private void ApplyPalette()
     {

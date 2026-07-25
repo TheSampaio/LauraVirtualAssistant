@@ -1,32 +1,32 @@
 # CLAUDE.md
 
-Orientações para trabalhar neste repositório. Leia antes de alterar código.
+Guidelines for working in this repository. Read this before changing code.
 
-## O que é a Laura
+## What Laura Is
 
-Assistente pessoal para Windows inspirada no Jarvis (versão feminina). Mora na
-bandeja do sistema, atende por voz ("Ok, Laura" / "Hey Laura") e mostra a janela de
-configurações com **Alt + L**. Migrada de Python para **C# / .NET 9**.
+Laura is a personal assistant for Windows inspired by Jarvis, in a feminine version.
+She lives in the system tray, responds by voice ("Ok, Laura" / "Hey Laura"), and
+shows the settings window with **Alt + L**. Migrated from Python to **C# / .NET 9**.
 
-O idioma padrão é **inglês (en-US) com voz feminina em inglês**: as vozes e o
-reconhecimento em inglês do Windows soam bem mais naturais que os equivalentes em
-português. É só o padrão — o usuário troca para pt-BR na janela.
+The default language is **English (en-US) with a feminine English voice**: Windows
+English voices and recognition sound much more natural than the Portuguese
+equivalents. It is only the default; the user can switch to pt-BR in the window.
 
-## Comandos
+## Commands
 
 ```powershell
-dotnet build Laura.sln          # compilar tudo
-dotnet test                     # rodar os testes
-dotnet run --project Laura.App  # executar (Build/Run.bat faz o mesmo)
+dotnet build Laura.sln          # build everything
+dotnet test                     # run the tests
+dotnet run --project Laura.App  # run (Build/Run.bat does the same)
 ```
 
-`Build/Publish.bat` gera um `Laura.exe` autocontido em `_Output/Publish`.
+`Build/Publish.bat` creates a self-contained `Laura.exe` in `_Output/Publish`.
 
-## Estrutura de pastas
+## Folder Structure
 
-Cada projeto fica em sua **própria pasta na raiz** — sem pasta `src/` agrupadora e
-sem `Directory.Build.props` compartilhado (cada `.csproj` declara as próprias
-propriedades). Não reintroduza nenhum dos dois.
+Each project lives in its **own folder at the root**. There is no grouping `src/`
+folder and no shared `Directory.Build.props` file (each `.csproj` declares its own
+properties). Do not reintroduce either one.
 
 ```
 Laura.sln
@@ -35,137 +35,135 @@ Laura.App/             Laura.Core.Tests/
 Build/  Data/
 ```
 
-## Arquitetura — respeite as camadas
+## Architecture - Respect the Layers
 
-A dependência flui numa direção só: `App → Platform.Windows → Core`. **O `Core`
-nunca depende de plataforma nem de UI.**
+Dependencies flow in only one direction: `App -> Platform.Windows -> Core`.
+**`Core` never depends on platform or UI.**
 
-| Projeto | Papel | Pode depender de |
+| Project | Role | May Depend On |
 | --- | --- | --- |
-| `Laura.Core` | Domínio puro (net9.0): motor, habilidades, configurações, localização | nada de plataforma |
-| `Laura.Platform.Windows` | Adaptadores SAPI e Win32 | `Core` |
-| `Laura.App` | Bandeja + UI em Windows Forms | `Core`, `Platform.Windows` |
-| `Laura.Core.Tests` | Testes xUnit | `Core` |
+| `Laura.Core` | Pure domain (net9.0): engine, skills, settings, localization | no platform |
+| `Laura.Platform.Windows` | SAPI and Win32 adapters | `Core` |
+| `Laura.App` | Tray + Windows Forms UI | `Core`, `Platform.Windows` |
+| `Laura.Core.Tests` | xUnit tests | `Core` |
 
-Regras:
-- Toda dependência externa (fala, sistema, rede, UI) entra no `Core` por **interface**
-  em `Laura.Core/Abstractions`. Implementações concretas ficam em `Platform.Windows`
-  ou `App`.
-- A ligação abstração → implementação acontece **só** em
-  [`ServiceConfiguration`](src/Laura.App/Composition/ServiceConfiguration.cs). Não
-  instancie serviços com `new` fora da raiz de composição e dos testes.
-- Para o domínio agir sobre a UI (abrir janela, encerrar), use `IShellController` —
-  nunca referencie Windows Forms a partir do `Core`.
+Rules:
+- Every external dependency (speech, system, network, UI) enters `Core` through an
+  **interface** in `Laura.Core/Abstractions`. Concrete implementations live in
+  `Platform.Windows` or `App`.
+- The abstraction-to-implementation connection happens **only** in
+  [`ServiceConfiguration`](Laura.App/Composition/ServiceConfiguration.cs). Do not
+  instantiate services with `new` outside the composition root and tests.
+- For the domain to act on the UI (open a window, exit), use `IShellController`;
+  never reference Windows Forms from `Core`.
 
-## UI: Windows Forms, não WPF nem MAUI
+## UI: Windows Forms, Not WPF or MAUI
 
-Decisão do dono do projeto. **Não migre para WPF nem MAUI.** Para um app de bandeja
-Windows-only com hotkey global, WinForms é o encaixe certo (`NotifyIcon` nativo,
-janela oculta trivial). A UI é montada **em código** (sem o designer). Toda a lógica
-mora no `Core`, então a apresentação é substituível sem tocar no domínio.
+This is the project owner's decision. **Do not migrate to WPF or MAUI.** For a
+Windows-only tray app with a global hotkey, WinForms is the right fit (native
+`NotifyIcon`, trivial hidden window). The UI is built **in code** (no designer). All
+logic lives in `Core`, so the presentation can be replaced without touching the
+domain.
 
-## Modelo de concorrência — não bloqueie a UI
+## Concurrency Model - Do Not Block the UI
 
-O `AssistantEngine` processa tudo num **único laço de consumo** alimentado por uma
-fila (`System.Threading.Channels`). Regras ao mexer nele:
-- Eventos do reconhecedor e chamadas da UI só **enfileiram** mensagens; nunca
-  executam trabalho no chamador. A UI não pode travar enquanto Laura ouve ou fala.
-- Só o laço altera o estado do motor — não introduza travas para proteger estado
-  compartilhado; enfileire uma mensagem.
-- Ao falar, a escuta é suspensa (senão Laura responde à própria voz). Preserve isso.
-- Eventos vindos de threads de segundo plano que tocam a UI passam por
-  `IUiDispatcher`.
+`AssistantEngine` processes everything in a **single consumer loop** fed by a queue
+(`System.Threading.Channels`). Rules when changing it:
+- Recognizer events and UI calls only **enqueue** messages; they never do work on the
+  caller. The UI must not freeze while Laura listens or speaks.
+- Only the loop changes engine state. Do not introduce locks to protect shared state;
+  enqueue a message.
+- Listening is suspended while speaking (otherwise Laura responds to her own voice).
+  Preserve that behavior.
+- Events from background threads that touch the UI go through `IUiDispatcher`.
 
-## Como adicionar uma habilidade (skill)
+## How to Add a Skill
 
-1. Crie a classe em `Laura.Core/Skills/Builtin/` implementando `ISkill` (ou herdando
-   de `PhraseSkillBase` quando ativada por lista de frases).
-2. Defina `Priority`: valores **menores** são avaliados primeiro. Gatilhos
-   específicos precisam preceder os genéricos (ex.: "abrir configurações" antes de
-   "abrir").
-3. As frases de ativação e as respostas vão nos **arquivos de idioma**, não no código.
-   Adicione a chave em `LocalizationKeys` e o texto em cada `Locales/<cultura>.json`.
-4. Registre em `AddSkills` na `ServiceConfiguration`.
-5. Habilidade não deve lançar para fluxo normal (ex.: app inexistente → resposta
-   falada, não exceção). Falhas inesperadas são isoladas pelo despachante.
+1. Create the class in `Laura.Core/Skills/Builtin/` implementing `ISkill` (or
+   inheriting from `PhraseSkillBase` when activated by a phrase list).
+2. Define `Priority`: **lower** values are evaluated first. Specific triggers need
+   to precede generic ones (for example, "open settings" before "open").
+3. Activation phrases and responses go in the **language files**, not in code. Add
+   the key to `LocalizationKeys` and the text to each `Locales/<culture>.json`.
+4. Register it in `AddSkills` in `ServiceConfiguration`.
+5. A skill should not throw for normal flow (for example, missing app -> spoken
+   response, not an exception). Unexpected failures are isolated by the dispatcher.
 
-Nunca escreva texto falado ou gatilho fixo (hard-coded) numa habilidade.
+Never hard-code spoken text or fixed triggers in a skill.
 
-## Localização
+## Localization
 
-- Textos e gatilhos: `src/Laura.Core/Localization/Locales/<cultura>.json`.
-- Uma chave pode ter string única ou lista (variações sorteadas / múltiplos gatilhos).
-- Ao adicionar uma chave, adicione em **todos** os idiomas (hoje `pt-BR` e `en-US`).
-- Chaves acessadas pelo domínio devem existir em `LocalizationKeys` (erro de
-  digitação vira erro de compilação).
+- Text and triggers: `Laura.Core/Localization/Locales/<culture>.json`.
+- A key may contain a single string or a list (random response variants / multiple
+  triggers).
+- When adding a key, add it in **all** languages (currently `pt-BR` and `en-US`).
+- Keys accessed by the domain must exist in `LocalizationKeys` (typos become compile
+  errors).
 
-## IA generativa é opcional
+## Generative AI Is Optional
 
-Comando não reconhecido por nenhuma habilidade **pode** ir a um modelo via
-`IConversationEngine`, mas o padrão é `NullConversationEngine` (inerte). **Laura tem
-de funcionar 100% offline.** Nunca torne a IA generativa um caminho obrigatório;
-ela é um modo extra a ligar nas configurações.
+A command not recognized by any skill **may** go to a model through
+`IConversationEngine`, but the default is `NullConversationEngine` (inert).
+**Laura must work 100% offline.** Never make generative AI a required path; it is an
+extra mode enabled in settings.
 
-## Estilo de código
+## Code Style
 
-- **Documente todo método com `<summary>` no estilo docstring do Google** — descrição,
-  depois `Args:` / `Returns:` / `Raises:` quando aplicável. `<inheritdoc />` em
-  implementações de interface.
-- Comentários explicam o **porquê**, não o quê. Siga a densidade de comentários do
-  código ao redor.
-- Aplique SOLID, DRY, KISS e Clean Code. Nomes descritivos; um método faz uma coisa.
-- `Nullable` e `ImplicitUsings` ligados; `TreatWarningsAsErrors` ligado — o build tem
-  de passar **sem warnings**.
-- Configurações são `record` imutáveis com um método `Sanitized()` que corrige
-  valores fora de faixa; dados lidos do disco sempre passam por ele.
-- **Idioma de TODO o código — identificadores, comentários, `<summary>`, logs,
-  mensagens de exceção e mensagens de commit — é INGLÊS.** (Decisão do dono do
-  projeto, revertendo o português anterior.) Apenas os arquivos de tradução
-  `Locales/pt-BR.json` contêm português, porque são a tradução para o usuário final.
-  Este próprio arquivo (CLAUDE.md) e a documentação para o dono podem seguir em
-  português.
+- **Document every method with `<summary>` in Google-style docstring form**:
+  description, then `Args:` / `Returns:` / `Raises:` when applicable.
+  Use `<inheritdoc />` for interface implementations.
+- Comments explain **why**, not what. Follow the surrounding code's comment density.
+- Apply SOLID, DRY, KISS, and Clean Code. Use descriptive names; one method does one
+  thing.
+- `Nullable` and `ImplicitUsings` are enabled; `TreatWarningsAsErrors` is enabled.
+  The build must pass **without warnings**.
+- Settings are immutable `record` types with a `Sanitized()` method that fixes
+  out-of-range values; data read from disk always goes through it.
+- The language of ALL code, including identifiers, comments, `<summary>`, logs,
+  exception messages, and commit messages, is ENGLISH.
 
-### Analisadores
+### Analyzers
 
-Os projetos de domínio e plataforma desligam `CA1848` e `CA1716` (ruído para este
-app); a UI desliga também `WFO1000`/`CA1859` (regras de designer/micro-perf). Cada
-`.csproj` declara isso no próprio `NoWarn`. Só amplie o `NoWarn` com uma justificativa
-em comentário; prefira corrigir o aviso.
+The domain and platform projects disable `CA1848` and `CA1716` (noise for this app);
+the UI also disables `WFO1000`/`CA1859` (designer and micro-performance rules). Each
+`.csproj` declares this in its own `NoWarn`. Only expand `NoWarn` with a comment
+justification; prefer fixing the warning.
 
-## Configurações em disco
+## Settings on Disk
 
-Persistidas em `Documentos/Laura Virtual Assistant/settings.ini` (via
-`Environment.SpecialFolder.MyDocuments`) — formato **INI** de propósito, para poder
-ser editado à mão. A gravação é UTF-8 **com BOM**, senão editores locais corrompem os
-acentos. `IniDocument` faz o parse tolerante (linha malformada é ignorada, não quebra
-a leitura); `IniSettingsStore` mapeia INI ↔ `LauraSettings`. Não volte para JSON nem
-para AppData. Idioma padrão é **en-US** (voz feminina em inglês soa mais natural).
+Settings are persisted in `Documents/Laura Virtual Assistant/settings.ini` (through
+`Environment.SpecialFolder.MyDocuments`) in **INI** format on purpose, so users can
+edit it by hand. Writes are UTF-8 **with BOM**, otherwise local editors corrupt
+accented characters. `IniDocument` parses tolerantly (malformed lines are ignored
+instead of breaking reads); `IniSettingsStore` maps INI <-> `LauraSettings`. Do not
+go back to JSON or AppData. The default language is **en-US** (a feminine English
+voice sounds more natural).
 
-## UI Windows Forms — armadilhas já resolvidas (não regrida)
+## Windows Forms UI - Solved Pitfalls (Do Not Regress)
 
-- Controles próprios (`Slider`, `ToggleSwitch`) pintam sobre **fundo opaco**
-  (`Palette.Surface`/`Field`), nunca `Color.Transparent` — transparente no WinForms
-  repinta o pai a cada quadro e **cintila** ao arrastar.
-- Todo `Label` de conteúdo usa `UseMnemonic = false`; senão o `&` de textos como
-  "Time & language" vira tecla de acesso e some da tela.
-- Campos de entrada passam por `InputFactory`/`ThemedComboBox` para não exibir a
-  borda e a seta claras do sistema sobre o tema escuro.
-- O rótulo de valor de um slider é inicializado lendo `slider.Value`, não o mínimo
-  da faixa.
-- `Application.SetUnhandledExceptionMode` tem de ser chamado **antes** de qualquer
-  controle existir (no início de `Main`), ou lança em runtime.
-- Layout dos cartões: `TableLayoutPanel` com `Dock = Fill` numa coluna de 100%, para
-  que todas as linhas tenham a mesma largura.
+- Custom controls (`Slider`, `ToggleSwitch`) paint over an **opaque background**
+  (`Palette.Surface`/`Field`), never `Color.Transparent`; transparency in WinForms
+  repaints the parent on every frame and **flickers** while dragging.
+- Every content `Label` uses `UseMnemonic = false`; otherwise `&` in text such as
+  "Time & language" becomes an access key and disappears from the screen.
+- Input fields go through `InputFactory`/`ThemedComboBox` so they do not show the
+  system's bright border and arrow over the dark theme.
+- A slider's value label is initialized by reading `slider.Value`, not the range
+  minimum.
+- `Application.SetUnhandledExceptionMode` must be called **before** any control
+  exists (at the start of `Main`), or it throws at runtime.
+- Card layout: `TableLayoutPanel` with `Dock = Fill` in a 100% column, so every row
+  has the same width.
 
-## Testes
+## Tests
 
-- Lógica nova de domínio (normalização, casamento de frases, saneamento, despacho)
-  precisa de teste em `Laura.Core.Tests`.
-- Use os dublês em `TestDoubles/` em vez de mocar frameworks.
-- A camada de plataforma (SAPI, Win32) e a UI não são cobertas por testes de unidade —
-  mantenha a lógica testável no `Core`.
+- New domain logic (normalization, phrase matching, sanitization, dispatch) needs a
+  test in `Laura.Core.Tests`.
+- Use the fakes in `TestDoubles/` instead of mocking frameworks.
+- The platform layer (SAPI, Win32) and UI are not covered by unit tests; keep logic
+  testable in `Core`.
 
 ## Git
 
-- Não faça commit sem o usuário pedir.
-- Mensagens de commit em português.
+- Do not commit unless the user asks.
+- Commit messages in English.

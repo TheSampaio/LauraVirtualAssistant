@@ -4,15 +4,15 @@ using Laura.Core.Configuration;
 namespace Laura.Core.Tests.TestDoubles;
 
 /// <summary>
-/// Serviço de configurações de teste com um valor fixo em memória.
+/// Test settings service with a fixed in-memory value.
 /// </summary>
 public sealed class StubSettingsService : ISettingsService
 {
     /// <summary>
-    /// Cria o serviço com as configurações informadas.
+    /// Creates the service with the given settings.
     ///
     /// Args:
-    ///     settings: Configurações devolvidas por <see cref="Current"/>.
+    ///     settings: Settings returned by <see cref="Current"/>.
     /// </summary>
     public StubSettingsService(LauraSettings settings) => Current = settings;
 

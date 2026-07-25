@@ -4,10 +4,10 @@ using Microsoft.Extensions.Logging;
 namespace Laura.Core.Engine;
 
 /// <summary>
-/// Anuncia cada hora cheia, quando a opção está ligada nas configurações.
+/// Announces each full hour when the option is enabled in settings.
 ///
-/// Sucede a verificação por sondagem do protótipo original: em vez de comparar a
-/// hora a cada quadro, o serviço dorme exatamente até a próxima virada.
+/// Replaces the original prototype's polling check: instead of comparing the
+/// hour every frame, the service sleeps exactly until the next rollover.
 /// </summary>
 public sealed class HourlyAnnouncer : IAsyncDisposable
 {
@@ -24,11 +24,11 @@ public sealed class HourlyAnnouncer : IAsyncDisposable
     /// Inicializa o anunciador.
     ///
     /// Args:
-    ///     engine: Motor usado para falar o anúncio.
-    ///     settings: Configurações consultadas a cada virada de hora.
-    ///     composer: Compositor do texto do anúncio.
+    ///     engine: Engine used to speak the announcement.
+    ///     settings: Settings checked at each hour rollover.
+    ///     composer: Announcement text composer.
     ///     clock: Fonte da hora atual.
-    ///     logger: Destino dos registros de diagnóstico.
+    ///     logger: Destination for diagnostic logs.
     /// </summary>
     public HourlyAnnouncer(
         IAssistantEngine engine,
@@ -78,16 +78,16 @@ public sealed class HourlyAnnouncer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Dorme até cada virada de hora e anuncia quando a opção está ligada.
+    /// Sleeps until each hour rollover and announces when the option is enabled.
     ///
-    /// A configuração é lida na virada, e não na inicialização, para que ligar ou
-    /// desligar o anúncio tenha efeito sem reiniciar Laura.
+    /// The setting is read at rollover, not startup, so enabling or
+    /// disabling the announcement takes effect without restarting Laura.
     ///
     /// Args:
     ///     cancellationToken: Token que encerra o acompanhamento.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando o acompanhamento termina.
+    ///     A task completed when monitoring ends.
     /// </summary>
     private async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -118,11 +118,11 @@ public sealed class HourlyAnnouncer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Calcula quanto falta para a próxima hora cheia.
+    /// Calculates how long remains until the next full hour.
     ///
     /// Returns:
-    ///     O intervalo até o próximo minuto zero, com uma folga de um segundo para
-    ///     que o anúncio nunca caia na hora anterior por arredondamento.
+    ///     The interval until the next zero minute, with a one-second cushion so
+    ///     the announcement never falls in the previous hour because of rounding.
     /// </summary>
     private TimeSpan GetDelayUntilNextHour()
     {

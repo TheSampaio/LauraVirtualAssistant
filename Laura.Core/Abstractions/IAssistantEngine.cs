@@ -3,31 +3,31 @@ using Laura.Core.Engine;
 namespace Laura.Core.Abstractions;
 
 /// <summary>
-/// Motor da assistente: orquestra escuta, despacho de habilidades e fala.
+/// Assistant engine: orchestrates listening, skill dispatch, and speech.
 /// </summary>
 public interface IAssistantEngine : IAsyncDisposable
 {
     /// <summary>
-    /// Ocorre quando o estado da assistente muda.
+    /// Occurs when the assistant state changes.
     ///
-    /// Disparado a partir do laço interno de processamento; assinantes de interface
+    /// Raised from the internal processing loop; UI subscribers
     /// precisam marshalar para a thread de UI.
     /// </summary>
     event EventHandler<AssistantState>? StateChanged;
 
     /// <summary>
-    /// Obtém o estado atual.
+    /// Gets the current state.
     /// </summary>
     AssistantState State { get; }
 
     /// <summary>
-    /// Inicia o motor: carrega a escuta e faz a saudação de abertura.
+    /// Starts the engine: loads listening and speaks the opening greeting.
     ///
     /// Args:
-    ///     cancellationToken: Token que aborta a inicialização.
+    ///     cancellationToken: Token that aborts startup.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando o motor está operante. A tarefa não
+    ///     A task completed when the engine is operational. The task does not
     ///     representa o tempo de vida do motor e retorna sem esperar pela fala.
     /// </summary>
     Task StartAsync(CancellationToken cancellationToken = default);
@@ -39,21 +39,21 @@ public interface IAssistantEngine : IAsyncDisposable
     ///     cancellationToken: Token que aborta a parada.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando o motor está parado.
+    ///     A task completed when the engine is stopped.
     /// </summary>
     Task StopAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Envia um comando em texto, como se tivesse sido ditado.
+    /// Sends a text command as if it had been dictated.
     ///
-    /// Serve para a interface e para testes; não exige palavra de ativação.
+    /// Used by the interface and tests; does not require a wake word.
     ///
     /// Args:
-    ///     text: Comando a executar.
-    ///     cancellationToken: Token que aborta a execução.
+    ///     text: Command to execute.
+    ///     cancellationToken: Token that aborts execution.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando o comando terminou de ser processado.
+    ///     A task completed when the command has finished processing.
     /// </summary>
     Task SubmitCommandAsync(string text, CancellationToken cancellationToken = default);
 
@@ -65,7 +65,7 @@ public interface IAssistantEngine : IAsyncDisposable
     ///     cancellationToken: Token que interrompe a fala.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando a fala termina.
+    ///     A task completed when speech ends.
     /// </summary>
     Task SpeakAsync(string text, CancellationToken cancellationToken = default);
 }

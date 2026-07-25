@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Laura.Core.Tests.Engine;
 
 /// <summary>
-/// Testes do despachante: ordem de prioridade, isolamento de falhas e recuo para a IA.
+/// Dispatcher tests: priority order, failure isolation, and AI fallback.
 /// </summary>
 public sealed class SkillDispatcherTests
 {
@@ -40,17 +40,17 @@ public sealed class SkillDispatcherTests
     [Fact]
     public async Task DispatchAsync_PrefersLowerPriorityValue()
     {
-        var specific = new FakeSkill("specific", priority: 10, "abrir configuracoes", SkillResponse.Speak("específica"));
-        var generic = new FakeSkill("generic", priority: 60, "abrir", SkillResponse.Speak("genérica"));
+        var specific = new FakeSkill("specific", priority: 10, "open settings", SkillResponse.Speak("specific"));
+        var generic = new FakeSkill("generic", priority: 60, "open", SkillResponse.Speak("generic"));
 
         SkillDispatcher dispatcher = CreateDispatcher(
             [generic, specific],
             new RecordingConversationEngine(isAvailable: false, answer: null),
             generativeEnabled: false);
 
-        SkillResponse response = await dispatcher.DispatchAsync(CommandFor("abrir configuracoes"));
+        SkillResponse response = await dispatcher.DispatchAsync(CommandFor("open settings"));
 
-        Assert.Equal("específica", response.SpokenText);
+        Assert.Equal("specific", response.SpokenText);
         Assert.Equal(1, specific.ExecutionCount);
         Assert.Equal(0, generic.ExecutionCount);
     }
@@ -58,7 +58,7 @@ public sealed class SkillDispatcherTests
     [Fact]
     public async Task DispatchAsync_ReturnsNotHandledWhenNoSkillMatchesAndAiDisabled()
     {
-        var conversationEngine = new RecordingConversationEngine(isAvailable: true, answer: "resposta");
+        var conversationEngine = new RecordingConversationEngine(isAvailable: true, answer: "answer");
 
         SkillDispatcher dispatcher = CreateDispatcher([], conversationEngine, generativeEnabled: false);
 
@@ -71,14 +71,14 @@ public sealed class SkillDispatcherTests
     [Fact]
     public async Task DispatchAsync_FallsBackToConversationEngineWhenEnabled()
     {
-        var conversationEngine = new RecordingConversationEngine(isAvailable: true, answer: "resposta da IA");
+        var conversationEngine = new RecordingConversationEngine(isAvailable: true, answer: "AI answer");
 
         SkillDispatcher dispatcher = CreateDispatcher([], conversationEngine, generativeEnabled: true);
 
         SkillResponse response = await dispatcher.DispatchAsync(CommandFor("me conte uma piada"));
 
         Assert.True(response.Handled);
-        Assert.Equal("resposta da IA", response.SpokenText);
+        Assert.Equal("AI answer", response.SpokenText);
         Assert.Equal(1, conversationEngine.CallCount);
     }
 
@@ -97,7 +97,7 @@ public sealed class SkillDispatcherTests
 
         SkillResponse response = await dispatcher.DispatchAsync(CommandFor("falhe agora"));
 
-        // A falha vira uma resposta falada, não uma exceção propagada.
+        // The failure becomes a spoken response, not a propagated exception.
         Assert.True(response.Handled);
         Assert.NotNull(response.SpokenText);
     }

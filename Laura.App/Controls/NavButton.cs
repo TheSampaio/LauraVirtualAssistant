@@ -6,7 +6,7 @@ using Laura.App.Theming;
 namespace Laura.App.Controls;
 
 /// <summary>
-/// Item da navegação lateral que alterna entre as seções de configuração.
+/// Side navigation item that switches between settings sections.
 /// </summary>
 public sealed class NavButton : Control
 {
@@ -14,11 +14,11 @@ public sealed class NavButton : Control
     private bool _hovered;
 
     /// <summary>
-    /// Inicializa o item de navegação.
+    /// Initializes the navigation item.
     ///
     /// Args:
-    ///     caption: Rótulo exibido.
-    ///     glyph: Emoji ou símbolo que precede o rótulo.
+    ///     caption: Displayed label.
+    ///     glyph: Emoji or symbol that precedes the label.
     /// </summary>
     public NavButton(string caption, string glyph)
     {
@@ -39,13 +39,13 @@ public sealed class NavButton : Control
         Font = FontFactory.Create(10f);
     }
 
-    /// <summary>Obtém o rótulo da seção.</summary>
+    /// <summary>Gets the section label.</summary>
     public string Caption { get; }
 
-    /// <summary>Obtém o símbolo exibido antes do rótulo.</summary>
+    /// <summary>Gets the symbol displayed before the label.</summary>
     public string Glyph { get; }
 
-    /// <summary>Obtém ou define se este é o item selecionado.</summary>
+    /// <summary>Gets or sets whether this is the selected item.</summary>
     public bool Selected
     {
         get => _selected;
@@ -107,10 +107,10 @@ public sealed class NavButton : Control
     }
 
     /// <summary>
-    /// Cria um retângulo de cantos arredondados.
+    /// Creates a rounded rectangle.
     ///
     /// Args:
-    ///     bounds: Área do retângulo.
+    ///     bounds: Rectangle area.
     ///     radius: Raio dos cantos.
     ///
     /// Returns:

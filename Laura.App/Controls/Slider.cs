@@ -8,9 +8,9 @@ namespace Laura.App.Controls;
 /// <summary>
 /// Controle deslizante desenhado do zero, para velocidade, tom e volume da voz.
 ///
-/// A <see cref="TrackBar"/> padrão não aceita as cores do tema. O fundo é opaco de
-/// propósito: fundo transparente no Windows Forms é emulado repintando o pai a cada
-/// quadro, o que provoca cintilação visível ao arrastar.
+/// The standard <see cref="TrackBar"/> does not accept theme colors. The background is deliberately opaque:
+/// transparent backgrounds in Windows Forms are emulated by repainting the parent on every
+/// frame, which causes visible flicker while dragging.
 /// </summary>
 public sealed class Slider : Control
 {
@@ -23,7 +23,7 @@ public sealed class Slider : Control
     private bool _dragging;
 
     /// <summary>
-    /// Inicializa o controle com renderização suave e sem cintilação.
+    /// Initializes the control with smooth, flicker-free rendering.
     /// </summary>
     public Slider()
     {
@@ -41,11 +41,11 @@ public sealed class Slider : Control
     }
 
     /// <summary>
-    /// Ocorre quando o valor muda por interação do usuário ou por atribuição.
+    /// Occurs when the value changes by user interaction or assignment.
     /// </summary>
     public event EventHandler? ValueChanged;
 
-    /// <summary>Obtém ou define o menor valor da faixa.</summary>
+    /// <summary>Gets or sets the smallest range value.</summary>
     public int Minimum
     {
         get => _minimum;
@@ -57,7 +57,7 @@ public sealed class Slider : Control
         }
     }
 
-    /// <summary>Obtém ou define o maior valor da faixa.</summary>
+    /// <summary>Gets or sets the largest range value.</summary>
     public int Maximum
     {
         get => _maximum;
@@ -69,7 +69,7 @@ public sealed class Slider : Control
         }
     }
 
-    /// <summary>Obtém ou define o valor atual, sempre dentro da faixa.</summary>
+    /// <summary>Gets or sets the current value, always within range.</summary>
     public int Value
     {
         get => _value;
@@ -197,10 +197,10 @@ public sealed class Slider : Control
     }
 
     /// <summary>
-    /// Calcula a fração preenchida da trilha para o valor atual.
+    /// Calculates the filled track fraction for the current value.
     ///
     /// Returns:
-    ///     Um número de 0.0 a 1.0.
+    ///     A number from 0.0 to 1.0.
     /// </summary>
     private float Fraction()
     {
@@ -215,7 +215,7 @@ public sealed class Slider : Control
     ///     x: Coordenada em pixels dentro do controle.
     ///
     /// Returns:
-    ///     O valor da faixa mais próximo da posição.
+    ///     The range value closest to the position.
     /// </summary>
     private int ValueFromPosition(int x)
     {

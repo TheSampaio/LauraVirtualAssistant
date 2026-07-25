@@ -4,8 +4,8 @@
   <assemblyIdentity version="2.0.0.0" name="Laura.App" />
 
   <!--
-    A consciência de DPI é configurada por ApplicationHighDpiMode no projeto e
-    aplicada por ApplicationConfiguration.Initialize(); mantê-la aqui também
+    DPI awareness is configured by ApplicationHighDpiMode in the project and
+    applied by ApplicationConfiguration.Initialize(); keeping it here too
     entraria em conflito com o Windows Forms.
   -->
 

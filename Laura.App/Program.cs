@@ -8,16 +8,16 @@ using Microsoft.Extensions.Logging;
 namespace Laura.App;
 
 /// <summary>
-/// Ponto de entrada da aplicação Laura.
+/// Entry point for the Laura application.
 /// </summary>
 internal static class Program
 {
     /// <summary>
-    /// Inicializa o Windows Forms, compõe as dependências e entrega o controle à
-    /// bandeja do sistema.
+    /// Initializes Windows Forms, composes dependencies, and hands control to the
+    /// system tray.
     ///
-    /// Uma única instância é garantida por um mútex nomeado: dois processos
-    /// disputariam o microfone e a tecla de atalho global.
+    /// A single instance is guaranteed by a named mutex: two processes
+    /// would contend for the microphone and global hotkey.
     /// </summary>
     [STAThread]
     private static void Main()
@@ -32,14 +32,14 @@ internal static class Program
             return;
         }
 
-        // Precisa vir antes de qualquer controle existir na thread; depois disso o
-        // Windows Forms recusa a troca de modo.
+        // This must run before any control exists on the thread; after that,
+        // Windows Forms refuses to change the mode.
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
 
         ApplicationConfiguration.Initialize();
 
-        // Instala o contexto de sincronização do Windows Forms antes de compor as
-        // dependências, para que o IUiDispatcher capture a thread da interface.
+        // Installs the Windows Forms synchronization context before composing
+        // dependencies so IUiDispatcher captures the UI thread.
         SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
 
         ServiceProvider provider = new ServiceCollection()
@@ -60,21 +60,21 @@ internal static class Program
     }
 
     /// <summary>
-    /// Registra Laura como responsável por exceções não tratadas.
+    /// Registers Laura as responsible for unhandled exceptions.
     ///
-    /// Sem isso, uma falha em um manipulador de evento derruba o laço de mensagens e
-    /// a aplicação fica presa em segundo plano: a bandeja continua lá, mas nada mais
-    /// responde. Registrar e seguir mantém a assistente utilizável.
+    /// Without this, a failure in an event handler tears down the message loop and
+    /// the application gets stuck in the background: the tray remains, but nothing else
+    /// responds. Logging and continuing keeps the assistant usable.
     ///
     /// Args:
-    ///     logger: Destino dos registros de falha.
+    ///     logger: Destination for failure logs.
     /// </summary>
     private static void InstallExceptionHandlers(ILogger logger)
     {
         Application.ThreadException += (_, args) =>
-            logger.LogError(args.Exception, "Exceção não tratada na thread da interface.");
+            logger.LogError(args.Exception, "Unhandled exception on the UI thread.");
 
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
-            logger.LogError(args.ExceptionObject as Exception, "Exceção não tratada no domínio da aplicação.");
+            logger.LogError(args.ExceptionObject as Exception, "Unhandled exception in the application domain.");
     }
 }

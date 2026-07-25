@@ -10,16 +10,16 @@ using Microsoft.Extensions.Logging;
 namespace Laura.App.Shell;
 
 /// <summary>
-/// Contexto de execução da aplicação: mantém Laura viva na bandeja sem uma janela
+/// Application execution context: keeps Laura alive in the tray without a window
 /// principal aberta.
 ///
-/// Substitui o laço <c>while</c> do protótipo original por um modelo dirigido a
-/// eventos — mensagens da bandeja, da tecla de atalho e do motor —, que é o que
-/// permite à interface nunca travar enquanto Laura ouve ou fala.
+/// Replaces the original prototype's <c>while</c> loop with an event-driven model
+/// of tray, hotkey, and engine messages, which is what
+/// allows the interface to never freeze while Laura listens or speaks.
 /// </summary>
 public sealed class LauraApplicationContext : ApplicationContext
 {
-    /// <summary>Tecla que, junto de Alt, abre e fecha a janela de configurações.</summary>
+    /// <summary>Key that, together with Alt, opens and closes the settings window.</summary>
     public const Keys ToggleKey = Keys.L;
 
     /// <summary>Modificador da tecla de atalho global.</summary>
@@ -40,10 +40,10 @@ public sealed class LauraApplicationContext : ApplicationContext
     private bool _shuttingDown;
 
     /// <summary>
-    /// Compõe a bandeja, a tecla de atalho e inicia os serviços de Laura.
+    /// Composes the tray, hotkey, and starts Laura services.
     ///
     /// Args:
-    ///     services: Provedor de dependências da aplicação.
+    ///     services: Application dependency provider.
     /// </summary>
     public LauraApplicationContext(IServiceProvider services)
     {
@@ -68,11 +68,11 @@ public sealed class LauraApplicationContext : ApplicationContext
     }
 
     /// <summary>
-    /// Registra Alt + L para alternar a janela de configurações.
+    /// Registers Alt + L to toggle the settings window.
     ///
     /// Returns:
-    ///     A tecla de atalho, ou <see langword="null"/> quando a combinação já está
-    ///     tomada — nesse caso Laura segue acessível pela bandeja.
+    ///     The hotkey, or <see langword="null"/> when the combination is already
+    ///     taken - in that case Laura remains accessible from the tray.
     /// </summary>
     private GlobalHotkey? RegisterToggleHotkey()
     {
@@ -80,7 +80,7 @@ public sealed class LauraApplicationContext : ApplicationContext
 
         if (hotkey is null)
         {
-            _logger.LogWarning("Alt+L já está em uso; a janela abrirá apenas pela bandeja.");
+            _logger.LogWarning("Alt+L is already in use; the window will open only from the tray.");
             return null;
         }
 
@@ -89,14 +89,14 @@ public sealed class LauraApplicationContext : ApplicationContext
     }
 
     /// <summary>
-    /// Inicia o motor da assistente, o anunciador de horas e prepara a janela.
+    /// Starts the assistant engine, the hourly announcer, and prepares the window.
     ///
-    /// A janela é construída aqui, com a aplicação já ociosa, e não no primeiro
-    /// Alt + L: montá-la sob demanda faria o atalho parecer travado enquanto o
+    /// The window is built here, with the application already idle, not on the first
+    /// Alt + L: building it on demand would make the shortcut feel frozen while the
     /// Windows enumera as vozes instaladas.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando os serviços foram iniciados.
+    ///     A task completed when the services have started.
     /// </summary>
     private async Task StartServicesAsync()
     {
@@ -109,19 +109,19 @@ public sealed class LauraApplicationContext : ApplicationContext
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Falha ao iniciar os serviços da assistente.");
+            _logger.LogError(exception, "Failed to start assistant services.");
         }
     }
 
-    // === Ações da janela ===
+    // === Window Actions ===
 
     /// <summary>
-    /// Exibe a janela de configurações, criando-a na primeira vez.
+    /// Shows the settings window, creating it the first time.
     /// </summary>
     private void ShowSettings() => EnsureSettingsForm().ShowFromTray();
 
     /// <summary>
-    /// Alterna a visibilidade da janela de configurações.
+    /// Toggles settings window visibility.
     /// </summary>
     private void ToggleSettings()
     {
@@ -138,15 +138,15 @@ public sealed class LauraApplicationContext : ApplicationContext
     }
 
     /// <summary>
-    /// Resolve a janela de configurações do contêiner na primeira necessidade.
+    /// Resolves the settings window from the container on first need.
     ///
     /// Returns:
-    ///     A instância única da janela, reutilizada entre aberturas.
+    ///     The single window instance, reused between openings.
     /// </summary>
     private SettingsForm EnsureSettingsForm() => _settingsForm ??= _services.GetRequiredService<SettingsForm>();
 
     /// <summary>
-    /// Liga ou desliga a escuta por voz a partir da bandeja.
+    /// Turns voice listening on or off from the tray.
     /// </summary>
     private void TogglePause()
     {
@@ -160,13 +160,13 @@ public sealed class LauraApplicationContext : ApplicationContext
     }
 
     /// <summary>
-    /// Persiste uma alteração de configuração feita fora da janela.
+    /// Persists a settings change made outside the window.
     ///
     /// Args:
-    ///     settings: Configurações a aplicar.
+    ///     settings: Settings to apply.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando a alteração foi persistida.
+    ///     A task completed when the change has been persisted.
     /// </summary>
     private async Task UpdateSettingsAsync(LauraSettings settings)
     {
@@ -176,16 +176,16 @@ public sealed class LauraApplicationContext : ApplicationContext
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Falha ao atualizar as configurações pela bandeja.");
+            _logger.LogError(exception, "Failed to update settings from the tray.");
         }
     }
 
     /// <summary>
-    /// Reage a mudanças de configuração atualizando o estado visível da bandeja.
+    /// Reacts to settings changes by updating the visible tray state.
     ///
     /// Args:
-    ///     sender: Serviço de configurações.
-    ///     settings: Configurações já vigentes.
+    ///     sender: Settings service.
+    ///     settings: Already-current settings.
     /// </summary>
     private void OnSettingsChanged(object? sender, LauraSettings settings) =>
         _trayIcon.SetPaused(!settings.Recognition.Enabled);
@@ -193,7 +193,7 @@ public sealed class LauraApplicationContext : ApplicationContext
     // === Encerramento ===
 
     /// <summary>
-    /// Encerra Laura de forma ordenada: para os serviços e libera os recursos.
+    /// Shuts Laura down cleanly: stops services and releases resources.
     /// </summary>
     private void ExitApplication()
     {
@@ -207,10 +207,10 @@ public sealed class LauraApplicationContext : ApplicationContext
     }
 
     /// <summary>
-    /// Para o motor e o anunciador antes de encerrar o laço de mensagens.
+    /// Stops the engine and announcer before ending the message loop.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando o encerramento termina.
+    ///     A task completed when shutdown ends.
     /// </summary>
     private async Task ShutdownAsync()
     {
@@ -221,7 +221,7 @@ public sealed class LauraApplicationContext : ApplicationContext
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Falha ao encerrar os serviços da assistente.");
+            _logger.LogError(exception, "Failed to stop assistant services.");
         }
         finally
         {

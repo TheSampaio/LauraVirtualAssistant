@@ -4,7 +4,7 @@ using Laura.Core.Abstractions;
 namespace Laura.Core.Tests.TestDoubles;
 
 /// <summary>
-/// Localizador de teste que devolve a própria chave, dispensando arquivos de idioma.
+/// Test localizer that returns the key itself, avoiding language files.
 /// </summary>
 public sealed class StubLocalizer : ILocalizer
 {

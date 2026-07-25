@@ -6,78 +6,78 @@ namespace Laura.Core.Abstractions;
 /// <summary>
 /// Motor de reconhecimento de fala (speech-to-text).
 ///
-/// A implementação escuta em uma thread própria e publica transcrições por evento,
-/// de modo que nem o motor da assistente nem a interface bloqueiem enquanto Laura ouve.
+/// The implementation listens on its own thread and publishes transcriptions through an event,
+/// so neither the assistant engine nor the interface blocks while Laura listens.
 /// </summary>
 public interface ISpeechRecognizer : IAsyncDisposable
 {
     /// <summary>
-    /// Ocorre quando o motor produz uma transcrição.
+    /// Occurs when the engine produces a transcription.
     ///
-    /// O evento é disparado em uma thread de segundo plano; assinantes que tocam a
+    /// The event is raised on a background thread; subscribers that touch the
     /// interface precisam marshalar para a thread de UI.
     /// </summary>
     event EventHandler<RecognitionResult>? Recognized;
 
     /// <summary>
-    /// Obtém o modo de escuta ativo.
+    /// Gets the active listening mode.
     /// </summary>
     RecognitionMode Mode { get; }
 
     /// <summary>
-    /// Obtém um valor que indica se o motor pôde ser inicializado nesta máquina.
+    /// Gets a value indicating whether the engine could be initialized on this machine.
     ///
-    /// É <see langword="false"/> quando não há microfone ou nenhum reconhecedor
+    /// It is <see langword="false"/> when there is no microphone or no recognizer
     /// instalado; nesse caso Laura opera apenas por interface, sem voz.
     /// </summary>
     bool IsAvailable { get; }
 
     /// <summary>
-    /// Inicializa o motor e passa a escutar pelas frases de ativação.
+    /// Initializes the engine and starts listening for wake phrases.
     ///
     /// Args:
-    ///     options: Frases de ativação, idioma e limiares de confiança.
-    ///     cancellationToken: Token que aborta a inicialização.
+    ///     options: Wake phrases, language, and confidence thresholds.
+    ///     cancellationToken: Token that aborts startup.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando o motor está escutando.
+    ///     A task completed when the engine is listening.
     /// </summary>
     Task StartAsync(RecognitionOptions options, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Interrompe a escuta e libera o dispositivo de áudio.
+    /// Stops listening and releases the audio device.
     ///
     /// Args:
     ///     cancellationToken: Token que aborta a parada.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando o motor deixou de escutar.
+    ///     A task completed when the engine has stopped listening.
     /// </summary>
     Task StopAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Alterna o modo de escuta, trocando a gramática carregada.
+    /// Switches the listening mode by changing the loaded grammar.
     ///
     /// Args:
     ///     mode: Modo desejado.
     ///     cancellationToken: Token que aborta a troca.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando o novo modo está ativo.
+    ///     A task completed when the new mode is active.
     /// </summary>
     Task SetModeAsync(RecognitionMode mode, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Aplica novas opções sem derrubar a sessão de escuta quando possível.
+    /// Applies new options without tearing down the listening session when possible.
     ///
-    /// Chamado quando o usuário altera idioma ou frases de ativação na interface.
+    /// Called when the user changes language or wake phrases in the interface.
     ///
     /// Args:
-    ///     options: Opções atualizadas.
-    ///     cancellationToken: Token que aborta a reconfiguração.
+    ///     options: Updated options.
+    ///     cancellationToken: Token that aborts reconfiguration.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando as opções estão em vigor.
+    ///     A task completed when the options are in effect.
     /// </summary>
     Task ApplyOptionsAsync(RecognitionOptions options, CancellationToken cancellationToken = default);
 }

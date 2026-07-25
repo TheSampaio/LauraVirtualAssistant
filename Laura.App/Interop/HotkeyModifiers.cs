@@ -23,6 +23,6 @@ public enum HotkeyModifiers : uint
     /// <summary>Tecla Windows.</summary>
     Windows = 0x0008,
 
-    /// <summary>Impede a repetição automática enquanto a combinação fica pressionada.</summary>
+    /// <summary>Prevents automatic repeat while the combination is held down.</summary>
     NoRepeat = 0x4000,
 }

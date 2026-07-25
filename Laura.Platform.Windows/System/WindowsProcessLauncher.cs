@@ -6,10 +6,10 @@ using Microsoft.Extensions.Logging;
 namespace Laura.Platform.Windows.System;
 
 /// <summary>
-/// Implementação de <see cref="IProcessLauncher"/> sobre o shell do Windows.
+/// Implementation of <see cref="IProcessLauncher"/> over the Windows shell.
 ///
-/// Todas as falhas viram <see langword="false"/> em vez de exceção: pedir um
-/// aplicativo que não existe é uso normal de uma assistente de voz, não um defeito.
+/// All failures become <see langword="false"/> instead of exceptions: asking for an
+/// application that does not exist is normal voice-assistant use, not a defect.
 /// </summary>
 public sealed class WindowsProcessLauncher : IProcessLauncher
 {
@@ -19,7 +19,7 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
     /// Inicializa o executor.
     ///
     /// Args:
-    ///     logger: Destino dos registros de diagnóstico.
+    ///     logger: Destination for diagnostic logs.
     /// </summary>
     public WindowsProcessLauncher(ILogger<WindowsProcessLauncher> logger)
     {
@@ -52,8 +52,8 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
     /// Inicia um processo capturando as falhas esperadas.
     ///
     /// Args:
-    ///     startInfo: Descrição do processo a iniciar.
-    ///     target: Descrição do alvo, usada apenas no registro de diagnóstico.
+    ///     startInfo: Description of the process to start.
+    ///     target: Target description, used only in diagnostic logging.
     ///
     /// Returns:
     ///     <see langword="true"/> quando o processo foi iniciado.
@@ -67,7 +67,7 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
         }
         catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or PlatformNotSupportedException)
         {
-            _logger.LogWarning(exception, "Não foi possível abrir {Target}.", target);
+            _logger.LogWarning(exception, "Could not open {Target}.", target);
             return false;
         }
     }

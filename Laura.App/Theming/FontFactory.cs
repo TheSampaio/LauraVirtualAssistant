@@ -3,22 +3,22 @@ using System.Drawing;
 namespace Laura.App.Theming;
 
 /// <summary>
-/// Cria fontes com recuo automático para uma família sempre presente.
+/// Creates fonts with automatic fallback to an always-present family.
 ///
-/// A família preferida ("Segoe UI Variable") só existe no Windows 11; sem o recuo,
-/// a interface apareceria com a fonte genérica do sistema no Windows 10.
+/// The preferred family ("Segoe UI Variable") exists only on Windows 11; without the fallback,
+/// the interface would appear with the generic system font on Windows 10.
 /// </summary>
 internal static class FontFactory
 {
     /// <summary>
-    /// Cria uma fonte no tamanho e peso pedidos.
+    /// Creates a font with the requested size and weight.
     ///
     /// Args:
-    ///     size: Tamanho em pontos.
-    ///     style: Estilo da fonte, como negrito.
+    ///     size: Size in points.
+    ///     style: Font style, such as bold.
     ///
     /// Returns:
-    ///     Uma fonte na família preferida, ou na de recuo quando aquela não existe.
+    ///     A font in the preferred family, or the fallback when that family is unavailable.
     /// </summary>
     internal static Font Create(float size, FontStyle style = FontStyle.Regular)
     {

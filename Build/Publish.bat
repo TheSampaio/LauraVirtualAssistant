@@ -1,4 +1,4 @@
-:: Gera um executável autocontido da Laura para Windows x64.
+:: Generates a self-contained Laura executable for Windows x64.
 @ECHO OFF
 TITLE Publicar Laura
 CLS

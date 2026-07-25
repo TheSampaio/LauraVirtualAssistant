@@ -4,30 +4,30 @@ using System.Windows.Forms;
 namespace Laura.App.Interop;
 
 /// <summary>
-/// Registra uma tecla de atalho global e avisa quando ela é pressionada.
+/// Registers a global hotkey and notifies when it is pressed.
 ///
-/// Usa uma janela-mensagem oculta em vez de um gancho de teclado: <c>RegisterHotKey</c>
-/// é tratado pelo próprio Windows, dispensando um gancho de baixo nível que
-/// inspecionaria cada tecla do sistema — mais leve e menos intrusivo.
+/// Uses a hidden message-only window instead of a keyboard hook: <c>RegisterHotKey</c>
+/// is handled by Windows itself, avoiding a low-level hook that
+/// would inspect every system keypress - lighter and less intrusive.
 /// </summary>
 public sealed partial class GlobalHotkey : IDisposable
 {
     private const int WmHotkey = 0x0312;
-    private const int HotkeyId = 0x4C41; // "LA", para não colidir com outros registros do processo.
+    private const int HotkeyId = 0x4C41; // "LA", to avoid colliding with other registrations in the process.
 
     private readonly MessageWindow _window;
     private bool _registered;
     private bool _disposed;
 
     /// <summary>
-    /// Cria a janela-mensagem e registra a combinação de teclas.
+    /// Creates the message-only window and registers the key combination.
     ///
-    /// Privado porque o registro pode falhar legitimamente — outra aplicação já pode
-    /// ter reservado a combinação. Use <see cref="TryRegister"/>.
+    /// Private because registration can legitimately fail - another application may already
+    /// have reserved the combination. Use <see cref="TryRegister"/>.
     ///
     /// Args:
-    ///     modifiers: Modificadores exigidos, como Alt.
-    ///     key: Tecla principal da combinação.
+    ///     modifiers: Required modifiers, such as Alt.
+    ///     key: Main key in the combination.
     /// </summary>
     private GlobalHotkey(HotkeyModifiers modifiers, Keys key)
     {
@@ -37,18 +37,18 @@ public sealed partial class GlobalHotkey : IDisposable
     }
 
     /// <summary>
-    /// Tenta registrar uma tecla de atalho global.
+    /// Attempts to register a global hotkey.
     ///
-    /// Não lança: uma combinação já tomada por outro programa é situação normal, e
-    /// a aplicação precisa seguir funcionando sem o atalho.
+    /// Does not throw: a combination already taken by another program is normal, and
+    /// the application must keep working without the shortcut.
     ///
     /// Args:
-    ///     modifiers: Modificadores exigidos, como Alt.
-    ///     key: Tecla principal da combinação.
+    ///     modifiers: Required modifiers, such as Alt.
+    ///     key: Main key in the combination.
     ///
     /// Returns:
-    ///     A tecla de atalho registrada, ou <see langword="null"/> quando o Windows
-    ///     recusou o registro.
+    ///     The registered hotkey, or <see langword="null"/> when Windows
+    ///     refused the registration.
     /// </summary>
     public static GlobalHotkey? TryRegister(HotkeyModifiers modifiers, Keys key)
     {
@@ -64,12 +64,12 @@ public sealed partial class GlobalHotkey : IDisposable
     }
 
     /// <summary>
-    /// Obtém um valor que indica se a combinação foi efetivamente registrada.
+    /// Gets a value indicating whether the combination was actually registered.
     /// </summary>
     public bool IsRegistered => _registered;
 
     /// <summary>
-    /// Ocorre quando a combinação registrada é pressionada.
+    /// Occurs when the registered combination is pressed.
     /// </summary>
     public event EventHandler? Pressed;
 
@@ -101,17 +101,17 @@ public sealed partial class GlobalHotkey : IDisposable
     private static partial bool UnregisterHotKey(nint hWnd, int id);
 
     /// <summary>
-    /// Janela invisível que recebe as mensagens de tecla de atalho.
+    /// Invisible window that receives hotkey messages.
     /// </summary>
     private sealed class MessageWindow : NativeWindow, IDisposable
     {
         /// <summary>
-        /// Cria a janela-mensagem, sem interface visível.
+        /// Creates the message-only window, with no visible interface.
         /// </summary>
         public MessageWindow() => CreateHandle(new CreateParams());
 
         /// <summary>
-        /// Ocorre quando chega a mensagem de tecla de atalho.
+        /// Occurs when the hotkey message arrives.
         /// </summary>
         public event EventHandler? HotkeyPressed;
 

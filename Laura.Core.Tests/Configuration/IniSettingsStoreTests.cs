@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Laura.Core.Tests.Configuration;
 
 /// <summary>
-/// Testes da persistência em INI: ida e volta dos valores e tolerância a lixo.
+/// Tests INI persistence: value round-tripping and tolerance for junk.
 /// </summary>
 public sealed class IniSettingsStoreTests : IDisposable
 {
@@ -63,7 +63,7 @@ public sealed class IniSettingsStoreTests : IDisposable
     {
         LauraSettings settings = LauraSettings.Default with
         {
-            GenerativeAi = GenerativeAiOptions.Default with { Persona = "Seja cordial e objetiva. Não use listas." },
+            GenerativeAi = GenerativeAiOptions.Default with { Persona = "Be warm and concise. Do not use lists." },
         };
 
         IniSettingsStore store = CreateStore();
@@ -89,9 +89,9 @@ public sealed class IniSettingsStoreTests : IDisposable
         await File.WriteAllTextAsync(
             _filePath,
             """
-            ; comentário solto
+            ; loose comment
             [Voz]
-            Velocidade = isto-nao-e-numero
+            Speed = this-is-not-a-number
             linha sem separador
             [Escuta]
             Ativada = talvez

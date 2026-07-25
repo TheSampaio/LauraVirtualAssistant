@@ -3,10 +3,10 @@ using Laura.Core.Abstractions;
 namespace Laura.Core.Conversation;
 
 /// <summary>
-/// Motor generativo inerte, registrado enquanto nenhum provedor real está conectado.
+/// Inert generative engine, registered while no real provider is connected.
 ///
-/// Aplicar o padrão Objeto Nulo aqui evita verificações de nulidade espalhadas pelo
-/// despachante e mantém o caminho sem IA como o caminho normal, não como exceção.
+/// Applying the Null Object pattern here avoids null checks scattered through the
+/// dispatcher and keeps the no-AI path as the normal path, not an exception.
 /// </summary>
 public sealed class NullConversationEngine : IConversationEngine
 {

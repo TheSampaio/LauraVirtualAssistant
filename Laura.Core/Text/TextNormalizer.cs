@@ -4,25 +4,25 @@ using System.Text;
 namespace Laura.Core.Text;
 
 /// <summary>
-/// Normaliza texto falado para comparação tolerante a acentuação, caixa e pontuação.
+/// Normalizes spoken text for comparisons tolerant of accents, casing, and punctuation.
 ///
-/// O reconhecedor de fala devolve transcrições com variações irrelevantes para o
-/// casamento de comandos ("Ok, Laura!" e "ok laura" são a mesma intenção). Toda
-/// comparação de frases no domínio passa por aqui para operar sobre uma forma única.
+/// The speech recognizer returns transcriptions with variations irrelevant to
+/// command matching ("Ok, Laura!" and "ok laura" are the same intent). Every
+/// phrase comparison in the domain goes through here to operate on one canonical form.
 /// </summary>
 public static class TextNormalizer
 {
     /// <summary>
-    /// Converte o texto para a forma canônica usada em comparações de comando.
+    /// Converts text to the canonical form used in command comparisons.
     ///
-    /// Remove diacríticos, converte para minúsculas usando a cultura invariante,
-    /// descarta pontuação e colapsa espaços em branco consecutivos.
+    /// Removes diacritics, converts to lowercase using the invariant culture,
+    /// drops punctuation, and collapses consecutive whitespace.
     ///
     /// Args:
     ///     text: Texto bruto transcrito pelo reconhecedor. Pode ser nulo ou vazio.
     ///
     /// Returns:
-    ///     O texto canônico, ou uma string vazia quando a entrada não contém
+    ///     The canonical text, or an empty string when the input contains
     ///     nenhum caractere significativo.
     /// </summary>
     public static string Normalize(string? text)
@@ -50,7 +50,7 @@ public static class TextNormalizer
                 continue;
             }
 
-            // Pontuação e espaços viram um único separador, nunca no início.
+            // Punctuation and spaces become one separator, never at the start.
             if (!previousWasSeparator && builder.Length > 0)
             {
                 builder.Append(' ');
@@ -62,18 +62,18 @@ public static class TextNormalizer
     }
 
     /// <summary>
-    /// Indica se o texto contém a frase informada como sequência completa de palavras.
+    /// Indicates whether the text contains the given phrase as a complete word sequence.
     ///
-    /// Diferente de <see cref="string.Contains(string, StringComparison)"/>, evita
-    /// falsos positivos em prefixos ("laura" não casa dentro de "lauraceas").
+    /// Unlike <see cref="string.Contains(string, StringComparison)"/>, this avoids
+    /// false positives in prefixes ("laura" does not match inside "lauraceas").
     ///
     /// Args:
-    ///     text: Texto já normalizado onde a busca ocorre.
-    ///     phrase: Frase já normalizada a procurar.
+    ///     text: Already-normalized text to search in.
+    ///     phrase: Already-normalized phrase to search for.
     ///
     /// Returns:
     ///     <see langword="true"/> quando a frase aparece delimitada por fronteiras
-    ///     de palavra; caso contrário, <see langword="false"/>.
+    ///     boundaries; otherwise, <see langword="false"/>.
     /// </summary>
     public static bool ContainsPhrase(string text, string phrase)
     {
@@ -102,18 +102,18 @@ public static class TextNormalizer
     }
 
     /// <summary>
-    /// Remove a primeira ocorrência da frase e devolve o restante do texto.
+    /// Removes the first occurrence of the phrase and returns the remaining text.
     ///
-    /// Usado para separar o gatilho do conteúdo do comando, como em
-    /// "ok laura que horas sao" onde o gatilho precisa ser descartado.
+    /// Used to separate the trigger from the command content, as in
+    /// "ok laura what time is it" where the trigger must be discarded.
     ///
     /// Args:
-    ///     text: Texto já normalizado.
-    ///     phrase: Frase já normalizada a remover.
+    ///     text: Already-normalized text.
+    ///     phrase: Already-normalized phrase to remove.
     ///
     /// Returns:
-    ///     O texto sem a frase e sem espaços nas extremidades. Quando a frase não
-    ///     é encontrada, devolve o texto original inalterado.
+    ///     The text without the phrase and without surrounding spaces. When the phrase is not
+    ///     found, returns the original text unchanged.
     /// </summary>
     public static string RemovePhrase(string text, string phrase)
     {

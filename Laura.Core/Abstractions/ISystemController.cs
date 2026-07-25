@@ -1,12 +1,12 @@
 namespace Laura.Core.Abstractions;
 
 /// <summary>
-/// Ações sobre a sessão do sistema operacional que Laura sabe executar.
+/// Actions on the operating system session that Laura can execute.
 /// </summary>
 public interface ISystemController
 {
     /// <summary>
-    /// Bloqueia a estação de trabalho.
+    /// Locks the workstation.
     /// </summary>
     void LockWorkstation();
 
@@ -14,7 +14,7 @@ public interface ISystemController
     /// Ajusta o volume principal em passos.
     ///
     /// Args:
-    ///     steps: Número de incrementos; valores negativos reduzem o volume.
+    ///     steps: Number of increments; negative values reduce the volume.
     /// </summary>
     void AdjustVolume(int steps);
 

@@ -1108,7 +1108,7 @@ public sealed class SettingsForm : Form
     /// <summary>Formats a duration in seconds using the active translation.</summary>
     private string FormatSeconds(int value) => _localizer.Get("ui.recognition.seconds", value);
 
-    /// <summary>Composes a culture's display name, such as "Português (Brasil)".</summary>
+    /// <summary>Composes a culture's display name, such as "Portuguese (Brazil)".</summary>
     private static string FormatCultureName(CultureInfo culture) =>
         CultureInfo.CurrentCulture.TextInfo.ToTitleCase(culture.NativeName);
 }

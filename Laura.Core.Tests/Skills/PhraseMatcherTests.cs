@@ -4,7 +4,7 @@ using Laura.Core.Text;
 namespace Laura.Core.Tests.Skills;
 
 /// <summary>
-/// Testes do casamento de frases e prefixos usado pelas habilidades.
+/// Tests phrase and prefix matching used by skills.
 /// </summary>
 public sealed class PhraseMatcherTests
 {
@@ -31,7 +31,7 @@ public sealed class PhraseMatcherTests
     [Fact]
     public void TryMatchPrefix_ReturnsFalseWhenNoPrefixPresent()
     {
-        string text = TextNormalizer.Normalize("que horas sao");
+        string text = TextNormalizer.Normalize("what time is it");
 
         bool matched = PhraseMatcher.TryMatchPrefix(text, SearchPrefixes, out string argument);
 

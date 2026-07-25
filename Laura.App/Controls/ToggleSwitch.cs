@@ -6,9 +6,9 @@ using Laura.App.Theming;
 namespace Laura.App.Controls;
 
 /// <summary>
-/// Interruptor liga/desliga, mais direto para opções binárias do que uma caixa de seleção.
+/// On/off switch, more direct for binary options than a checkbox.
 ///
-/// Como o <see cref="Slider"/>, pinta sobre um fundo opaco para não cintilar.
+/// Like <see cref="Slider"/>, paints over an opaque background to avoid flicker.
 /// </summary>
 public sealed class ToggleSwitch : Control
 {
@@ -19,7 +19,7 @@ public sealed class ToggleSwitch : Control
     private bool _isOn;
 
     /// <summary>
-    /// Inicializa o interruptor com renderização suave.
+    /// Initializes the switch with smooth rendering.
     /// </summary>
     public ToggleSwitch()
     {
@@ -37,11 +37,11 @@ public sealed class ToggleSwitch : Control
     }
 
     /// <summary>
-    /// Ocorre quando o estado muda por clique ou por atribuição.
+    /// Occurs when the state changes by click or assignment.
     /// </summary>
     public event EventHandler? CheckedChanged;
 
-    /// <summary>Obtém ou define se o interruptor está ligado.</summary>
+    /// <summary>Gets or sets whether the switch is on.</summary>
     public bool Checked
     {
         get => _isOn;
@@ -112,10 +112,10 @@ public sealed class ToggleSwitch : Control
     /// Cria o contorno arredondado do trilho.
     ///
     /// Args:
-    ///     bounds: Retângulo do trilho.
+    ///     bounds: Track rectangle.
     ///
     /// Returns:
-    ///     Um caminho em forma de cápsula.
+    ///     A capsule-shaped path.
     /// </summary>
     private static GraphicsPath CreateCapsule(Rectangle bounds)
     {

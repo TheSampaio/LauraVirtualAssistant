@@ -3,24 +3,24 @@ using System.Runtime.InteropServices;
 namespace Laura.Platform.Windows.Interop;
 
 /// <summary>
-/// Funções da API do Windows usadas pelos adaptadores de plataforma.
+/// Windows API functions used by platform adapters.
 /// </summary>
 internal static partial class NativeMethods
 {
-    /// <summary>Código da tecla multimídia de silenciar.</summary>
+    /// <summary>Virtual key code for mute.</summary>
     internal const byte VirtualKeyVolumeMute = 0xAD;
 
-    /// <summary>Código da tecla multimídia de diminuir volume.</summary>
+    /// <summary>Virtual key code for volume down.</summary>
     internal const byte VirtualKeyVolumeDown = 0xAE;
 
-    /// <summary>Código da tecla multimídia de aumentar volume.</summary>
+    /// <summary>Virtual key code for volume up.</summary>
     internal const byte VirtualKeyVolumeUp = 0xAF;
 
-    /// <summary>Sinaliza que o evento de teclado corresponde à soltura da tecla.</summary>
+    /// <summary>Signals that the keyboard event corresponds to key release.</summary>
     internal const uint KeyEventKeyUp = 0x0002;
 
     /// <summary>
-    /// Bloqueia a estação de trabalho, como faz a combinação Windows + L.
+    /// Locks the workstation, like the Windows + L combination.
     ///
     /// Returns:
     ///     <see langword="true"/> quando o pedido de bloqueio foi aceito.
@@ -32,12 +32,12 @@ internal static partial class NativeMethods
     /// <summary>
     /// Sintetiza um evento de teclado.
     ///
-    /// É como as teclas multimídia de volume são acionadas sem envolver COM nem o
-    /// mixer de áudio: o shell do Windows já trata esses códigos.
+    /// This is how multimedia volume keys are triggered without involving COM or the
+    /// audio mixer: the Windows shell already handles these codes.
     ///
     /// Args:
-    ///     virtualKey: Código virtual da tecla.
-    ///     scanCode: Código de varredura do hardware; zero é aceito.
+    ///     virtualKey: Virtual key code.
+    ///     scanCode: Hardware scan code; zero is accepted.
     ///     flags: Sinalizadores do evento, como <see cref="KeyEventKeyUp"/>.
     ///     extraInfo: Valor adicional associado ao evento.
     /// </summary>

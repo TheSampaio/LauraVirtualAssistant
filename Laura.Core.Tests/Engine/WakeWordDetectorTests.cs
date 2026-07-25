@@ -5,7 +5,7 @@ using Laura.Core.Text;
 namespace Laura.Core.Tests.Engine;
 
 /// <summary>
-/// Testes da detecção da palavra de ativação e da separação do comando.
+/// Tests wake-word detection and command separation.
 /// </summary>
 public sealed class WakeWordDetectorTests
 {
@@ -30,19 +30,19 @@ public sealed class WakeWordDetectorTests
     public void TryDetect_ExtractsInlineCommand()
     {
         bool detected = WakeWordDetector.TryDetect(
-            TextNormalizer.Normalize("Ok Laura que horas são"),
+            TextNormalizer.Normalize("Ok Laura what time is it"),
             Options,
             out string command);
 
         Assert.True(detected);
-        Assert.Equal("que horas sao", command);
+        Assert.Equal("what time is it", command);
     }
 
     [Fact]
     public void TryDetect_ReturnsFalseWithoutWakePhrase()
     {
         bool detected = WakeWordDetector.TryDetect(
-            TextNormalizer.Normalize("que horas são"),
+            TextNormalizer.Normalize("what time is it"),
             Options,
             out string command);
 

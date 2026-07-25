@@ -5,12 +5,12 @@ using Laura.App.Theming;
 namespace Laura.App.Controls;
 
 /// <summary>
-/// Cria campos de entrada já vestidos com o tema escuro.
+/// Creates input fields already dressed with the dark theme.
 ///
-/// Caixas de texto e de seleção do Windows Forms desenham a própria borda com as
-/// cores do sistema, que aparecem claras sobre a interface escura. A saída é
+/// Windows Forms text boxes and combo boxes draw their own border with
+/// system colors, which appear bright over the dark interface. The way out is
 /// remover a borda nativa e apoiar o campo sobre um painel com a cor de campo,
-/// deixando o contraste com a superfície delimitar a área editável.
+/// letting contrast with the surface define the editable area.
 /// </summary>
 internal static class InputFactory
 {
@@ -18,7 +18,7 @@ internal static class InputFactory
     private const int SingleLineHeight = 30;
 
     /// <summary>
-    /// Cria uma caixa de texto de linha única sobre um painel temático.
+    /// Creates a single-line text box over a themed panel.
     ///
     /// Args:
     ///     width: Largura total do campo.
@@ -34,14 +34,14 @@ internal static class InputFactory
     }
 
     /// <summary>
-    /// Cria uma caixa de texto de várias linhas sobre um painel temático.
+    /// Creates a multiline text box over a themed panel.
     ///
     /// Args:
     ///     height: Altura total do campo.
     ///     textBox: Recebe a caixa de texto criada.
     ///
     /// Returns:
-    ///     O painel que embala a caixa de texto, ocupando a largura disponível.
+    ///     The panel wrapping the text box, occupying the available width.
     /// </summary>
     internal static Control CreateMultilineTextBox(int height, out TextBox textBox)
     {
@@ -56,13 +56,13 @@ internal static class InputFactory
     }
 
     /// <summary>
-    /// Cria uma caixa de seleção suspensa vestida com o tema.
+    /// Creates a themed combo box.
     ///
     /// Args:
     ///     width: Largura do campo.
     ///
     /// Returns:
-    ///     A caixa de seleção pronta para receber itens.
+    ///     The combo box ready to receive items.
     /// </summary>
     internal static ComboBox CreateComboBox(int width) => new ThemedComboBox
     {
@@ -74,7 +74,7 @@ internal static class InputFactory
     /// Cria uma caixa de texto sem borda nativa.
     ///
     /// Args:
-    ///     multiline: <see langword="true"/> para aceitar várias linhas.
+    ///     multiline: <see langword="true"/> to accept multiple lines.
     ///
     /// Returns:
     ///     A caixa de texto configurada.
@@ -90,7 +90,7 @@ internal static class InputFactory
     };
 
     /// <summary>
-    /// Apoia um controle de entrada sobre um painel com a cor de campo.
+    /// Places an input control on a panel with the field color.
     ///
     /// Args:
     ///     input: Controle a embalar.

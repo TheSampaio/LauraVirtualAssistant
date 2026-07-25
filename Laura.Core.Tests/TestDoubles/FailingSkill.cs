@@ -4,7 +4,7 @@ using Laura.Core.Skills;
 namespace Laura.Core.Tests.TestDoubles;
 
 /// <summary>
-/// Habilidade de teste que sempre lança, para verificar o isolamento de falhas.
+/// Test skill that always throws, to verify failure isolation.
 /// </summary>
 public sealed class FailingSkill : ISkill
 {
