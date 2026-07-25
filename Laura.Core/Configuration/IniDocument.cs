@@ -75,7 +75,7 @@ public sealed class IniDocument
     ///
     /// Args:
     ///     section: Section name.
-    ///     key: Nome da chave.
+    ///     key: Key name.
     ///     value: Valor a gravar.
     /// </summary>
     public void Set(string section, string key, string value)
@@ -93,11 +93,11 @@ public sealed class IniDocument
     }
 
     /// <summary>
-    /// Define uma chave a partir de um valor booleano.
+    /// Sets a key from a boolean value.
     ///
     /// Args:
     ///     section: Section name.
-    ///     key: Nome da chave.
+    ///     key: Key name.
     ///     value: Valor a gravar.
     /// </summary>
     public void SetBoolean(string section, string key, bool value) =>
@@ -108,18 +108,18 @@ public sealed class IniDocument
     ///
     /// Args:
     ///     section: Section name.
-    ///     key: Nome da chave.
+    ///     key: Key name.
     ///     value: Valor a gravar.
     /// </summary>
     public void SetNumber(string section, string key, double value) =>
         Set(section, key, value.ToString("0.####", CultureInfo.InvariantCulture));
 
     /// <summary>
-    /// Define uma chave a partir de uma lista, separando os itens por barra vertical.
+    /// Sets a key from a list, separating items with a pipe.
     ///
     /// Args:
     ///     section: Section name.
-    ///     key: Nome da chave.
+    ///     key: Key name.
     ///     values: Itens a gravar.
     /// </summary>
     public void SetList(string section, string key, IEnumerable<string> values) =>
@@ -130,7 +130,7 @@ public sealed class IniDocument
     ///
     /// Args:
     ///     section: Section name.
-    ///     key: Nome da chave.
+    ///     key: Key name.
     ///     fallback: Value returned when the key does not exist.
     ///
     /// Returns:
@@ -148,7 +148,7 @@ public sealed class IniDocument
     ///
     /// Args:
     ///     section: Section name.
-    ///     key: Nome da chave.
+    ///     key: Key name.
     ///     fallback: Value returned when the key is missing or invalid.
     ///
     /// Returns:
@@ -162,7 +162,7 @@ public sealed class IniDocument
     ///
     /// Args:
     ///     section: Section name.
-    ///     key: Nome da chave.
+    ///     key: Key name.
     ///     fallback: Value returned when the key is missing or invalid.
     ///
     /// Returns:
@@ -182,7 +182,7 @@ public sealed class IniDocument
     ///
     /// Args:
     ///     section: Section name.
-    ///     key: Nome da chave.
+    ///     key: Key name.
     ///     fallback: Value returned when the key is missing or invalid.
     ///
     /// Returns:
@@ -202,7 +202,7 @@ public sealed class IniDocument
     ///
     /// Args:
     ///     section: Section name.
-    ///     key: Nome da chave.
+    ///     key: Key name.
     ///     fallback: List returned when the key is missing or empty.
     ///
     /// Returns:

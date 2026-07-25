@@ -10,9 +10,8 @@ public sealed record LauraSettings
     /// <summary>
     /// Culture used when nothing has been configured.
     ///
-    /// English is the default because the Windows female English voices sound far
-    /// more natural than the Portuguese ones, and because English speech recognition
-    /// ships on most machines.
+    /// Laura is English-only, so persisted values from older multilingual builds are
+    /// normalized back to this culture.
     /// </summary>
     public const string DefaultCulture = "en-US";
 
@@ -67,14 +66,8 @@ public sealed record LauraSettings
     /// </summary>
     public CultureInfo ResolveCulture()
     {
-        try
-        {
-            return CultureInfo.GetCultureInfo(Culture);
-        }
-        catch (CultureNotFoundException)
-        {
-            return CultureInfo.GetCultureInfo(Default.Culture);
-        }
+        _ = Culture;
+        return CultureInfo.GetCultureInfo(DefaultCulture);
     }
 
     /// <summary>
@@ -85,14 +78,13 @@ public sealed record LauraSettings
     /// </summary>
     public LauraSettings Sanitized()
     {
-        string culture = ResolveCulture().Name;
-
         return this with
         {
-            Culture = culture,
+            Culture = DefaultCulture,
             UserNickname = UserNickname.Trim(),
             Voice = Voice.Sanitized(),
-            Recognition = Recognition.Sanitized() with { Culture = culture },
+            Recognition = Recognition.Sanitized() with { Culture = DefaultCulture },
+            GenerativeAi = GenerativeAi.Sanitized(),
         };
     }
 }

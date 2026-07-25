@@ -24,12 +24,12 @@ public sealed class SkillDispatcher : ISkillDispatcher
     private readonly ILogger<SkillDispatcher> _logger;
 
     /// <summary>
-    /// Inicializa o despachante ordenando as habilidades registradas.
+    /// Initializes the dispatcher by ordering the registered skills.
     ///
     /// Args:
     ///     skills: Available skills, in any order.
     ///     localizer: Source of error and refusal messages.
-    ///     conversationEngine: Motor generativo opcional.
+    ///     conversationEngine: Optional generative engine.
     ///     settings: Current settings, consulted to know whether generative mode
     ///     is enabled.
     ///     userContext: User context passed to the generative engine.
@@ -76,12 +76,22 @@ public sealed class SkillDispatcher : ISkillDispatcher
 
             if (response.Handled)
             {
-                _logger.LogInformation("Comando \"{Command}\" atendido por {Skill}.", request.RawText, skill.Id);
+                _logger.LogInformation("Command \"{Command}\" handled by {Skill}.", request.RawText, skill.Id);
                 return response;
             }
         }
 
         return await AskConversationEngineAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public bool CanUseGenerativeFallback(SkillRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return _settings.Current.GenerativeAi.Enabled
+            && _conversationEngine.IsAvailable
+            && !_skills.Any(skill => skill.CanHandle(request));
     }
 
     /// <summary>
@@ -92,7 +102,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
     ///
     /// Args:
     ///     skill: Skill to run.
-    ///     request: Comando a atender.
+    ///     request: Command to handle.
     ///     cancellationToken: Token that aborts execution.
     ///
     /// Returns:

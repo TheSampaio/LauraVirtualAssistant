@@ -118,9 +118,11 @@ public static class ServiceConfiguration
     /// </summary>
     private static void AddPlatform(IServiceCollection services)
     {
-        // WinRT gives access to the natural OneCore/neural voices; SAPI only had the
-        // robotic desktop voices.
-        services.AddSingleton<ISpeechSynthesizer, WinRtSpeechSynthesizer>();
+        services.AddSingleton<WinRtSpeechSynthesizer>();
+        services.AddSingleton<ISpeechSynthesizer>(provider => new SherpaOnnxSpeechSynthesizer(
+            provider.GetRequiredService<WinRtSpeechSynthesizer>(),
+            GetTtsModelDirectory(),
+            provider.GetRequiredService<ILogger<SherpaOnnxSpeechSynthesizer>>()));
         services.AddSingleton<ISpeechRecognizer, SapiSpeechRecognizer>();
         services.AddSingleton<ISystemController, WindowsSystemController>();
         services.AddSingleton<IProcessLauncher, WindowsProcessLauncher>();
@@ -150,4 +152,7 @@ public static class ServiceConfiguration
     /// </summary>
     private static string GetLocalesDirectory() =>
         Path.Combine(AppContext.BaseDirectory, "Localization", "Locales");
+
+    private static string GetTtsModelDirectory() =>
+        Path.Combine(AppContext.BaseDirectory, "Data", "Tts", "kokoro-en");
 }

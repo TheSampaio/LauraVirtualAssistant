@@ -111,10 +111,10 @@ public sealed class NavButton : Control
     ///
     /// Args:
     ///     bounds: Rectangle area.
-    ///     radius: Raio dos cantos.
+    ///     radius: Corner radius.
     ///
     /// Returns:
-    ///     O caminho correspondente.
+    ///     The corresponding path.
     /// </summary>
     private static GraphicsPath CreateRoundedRectangle(Rectangle bounds, int radius)
     {

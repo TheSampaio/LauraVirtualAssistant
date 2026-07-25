@@ -1,6 +1,7 @@
 using System.Threading.Channels;
 using Laura.Core.Abstractions;
 using Laura.Core.Configuration;
+using Laura.Core.Conversation;
 using Laura.Core.Localization;
 using Laura.Core.Skills;
 using Laura.Core.Speech;
@@ -13,8 +14,8 @@ namespace Laura.Core.Engine;
 /// Orchestrates the assistant's full cycle: listen, understand, act, and answer.
 ///
 /// All work happens in a single consumer loop fed by a queue.
-/// Escolha deliberada: os eventos do reconhecedor chegam em threads do motor de
-/// audio and the interface calls the engine from the UI thread - enqueuing instead of
+/// This is deliberate: recognizer events arrive on audio engine threads and the
+/// interface calls the engine from the UI thread - enqueuing instead of
 /// running on the caller keeps both free while Laura listens or speaks, and
 /// avoids locks for protecting state, since only the loop modifies it.
 /// </summary>
@@ -34,15 +35,19 @@ public sealed class AssistantEngine : IAssistantEngine
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly List<ConversationMessage> _conversationHistory = [];
+    private readonly object _conversationHistoryGate = new();
 
     // How many times in a row Laura re-listens after failing to understand before
     // giving up, so a persistent misunderstanding does not loop forever.
     private const int MaxCommandRetries = 2;
+    private const int MaxConversationHistory = 200;
 
     private Task? _worker;
     private bool _recognizerRunning;
     private long _listeningEpoch;
     private int _commandRetries;
+    private bool _foregroundListening;
 
     // Stored as an int because volatile reads of enums are not supported; the state
     // is read by the UI while the loop writes it.
@@ -52,14 +57,14 @@ public sealed class AssistantEngine : IAssistantEngine
     /// Initializes the engine with its dependencies.
     ///
     /// Args:
-    ///     recognizer: Motor de reconhecimento de fala.
+    ///     recognizer: Speech recognition engine.
     ///     synthesizer: Speech synthesis engine.
-    ///     dispatcher: Despachante de habilidades.
+    ///     dispatcher: Skill dispatcher.
     ///     settings: Current settings and their change notifications.
     ///     localizer: Source of text in the active language.
     ///     shell: Visual layer control, used to shut down the application.
     ///     greetingComposer: Opening greeting composer.
-    ///     clock: Fonte de data e hora.
+    ///     clock: Source of date and time.
     ///     logger: Destination for diagnostic logs.
     /// </summary>
     public AssistantEngine(
@@ -98,7 +103,22 @@ public sealed class AssistantEngine : IAssistantEngine
     public event EventHandler<AssistantState>? StateChanged;
 
     /// <inheritdoc />
+    public event EventHandler<ConversationMessage>? ConversationMessageReceived;
+
+    /// <inheritdoc />
     public AssistantState State => (AssistantState)Volatile.Read(ref _state);
+
+    /// <inheritdoc />
+    public IReadOnlyList<ConversationMessage> ConversationHistory
+    {
+        get
+        {
+            lock (_conversationHistoryGate)
+            {
+                return [.. _conversationHistory];
+            }
+        }
+    }
 
     /// <inheritdoc />
     public async Task StartAsync(CancellationToken cancellationToken = default)
@@ -177,6 +197,12 @@ public sealed class AssistantEngine : IAssistantEngine
     }
 
     /// <inheritdoc />
+    public Task SetForegroundListeningAsync(bool enabled, CancellationToken cancellationToken = default) =>
+        EnqueueAndWaitAsync(
+            completion => new ForegroundListeningChanged(enabled) { Completion = completion },
+            cancellationToken);
+
+    /// <inheritdoc />
     public Task SpeakAsync(string text, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(text);
@@ -184,6 +210,13 @@ public sealed class AssistantEngine : IAssistantEngine
         return EnqueueAndWaitAsync(
             completion => new SpeechRequested(text) { Completion = completion },
             cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public void StopSpeaking()
+    {
+        _synthesizer.CancelSpeech();
+        Enqueue(new StopRequested());
     }
 
     /// <inheritdoc />
@@ -215,7 +248,7 @@ public sealed class AssistantEngine : IAssistantEngine
         }
         catch (OperationCanceledException)
         {
-            // Encerramento normal.
+            // Normal shutdown.
         }
         catch (Exception exception)
         {
@@ -228,7 +261,7 @@ public sealed class AssistantEngine : IAssistantEngine
     ///
     /// Args:
     ///     message: Message to handle.
-    ///     cancellationToken: Token que aborta o tratamento.
+    ///     cancellationToken: Token that aborts handling.
     ///
     /// Returns:
     ///     A task completed when the message has been handled.
@@ -244,6 +277,7 @@ public sealed class AssistantEngine : IAssistantEngine
                     break;
 
                 case CommandSubmitted submitted:
+                    PublishConversation(ConversationMessageSource.UserTyped, submitted.Text);
                     await ExecuteCommandAsync(
                         submitted.Text,
                         confidence: 1.0,
@@ -263,6 +297,14 @@ public sealed class AssistantEngine : IAssistantEngine
                     await ApplySettingsAsync(applied.Settings, cancellationToken).ConfigureAwait(false);
                     break;
 
+                case ForegroundListeningChanged changed:
+                    await ApplyForegroundListeningAsync(changed.Enabled, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case StopRequested:
+                    await StopListeningAndSpeakingAsync(cancellationToken).ConfigureAwait(false);
+                    break;
+
                 default:
                     _logger.LogWarning("Unknown message in queue: {Message}.", message.GetType().Name);
                     break;
@@ -274,7 +316,7 @@ public sealed class AssistantEngine : IAssistantEngine
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Falha ao tratar {Message}.", message.GetType().Name);
+            _logger.LogError(exception, "Failed to handle {Message}.", message.GetType().Name);
         }
         finally
         {
@@ -287,7 +329,7 @@ public sealed class AssistantEngine : IAssistantEngine
     ///
     /// Args:
     ///     result: Transcription and its confidence.
-    ///     cancellationToken: Token que aborta o tratamento.
+    ///     cancellationToken: Token that aborts handling.
     ///
     /// Returns:
     ///     A task completed when the transcription has been processed.
@@ -313,9 +355,16 @@ public sealed class AssistantEngine : IAssistantEngine
             return;
         }
 
+        PublishConversation(ConversationMessageSource.UserVoice, result.Text);
+
+        if (State is AssistantState.Speaking)
+        {
+            _synthesizer.CancelSpeech();
+        }
+
         bool wakeDetected = WakeWordDetector.TryDetect(text, options, out string remainder);
 
-        if (State is AssistantState.ListeningForCommand)
+        if (State is AssistantState.ListeningForCommand or AssistantState.Speaking)
         {
             // Repeating the trigger while listening only renews the waiting window.
             string command = wakeDetected ? remainder : text;
@@ -352,7 +401,7 @@ public sealed class AssistantEngine : IAssistantEngine
     /// Opens the window where Laura waits for the command after waking.
     ///
     /// Args:
-    ///     speakAcknowledgement: <see langword="true"/> para responder "Sim?" antes de escutar.
+    ///     speakAcknowledgement: <see langword="true"/> to answer "Yes?" before listening.
     ///     cancellationToken: Token that aborts the operation.
     ///
     /// Returns:
@@ -372,7 +421,10 @@ public sealed class AssistantEngine : IAssistantEngine
         SetState(AssistantState.ListeningForCommand);
         await SetRecognizerModeAsync(RecognitionMode.Command, cancellationToken).ConfigureAwait(false);
 
-        ScheduleListeningTimeout(epoch, _settings.Current.Recognition.CommandTimeout);
+        if (!_foregroundListening)
+        {
+            ScheduleListeningTimeout(epoch, _settings.Current.Recognition.CommandTimeout);
+        }
     }
 
     /// <summary>
@@ -426,6 +478,24 @@ public sealed class AssistantEngine : IAssistantEngine
         SetState(AssistantState.Working);
 
         SkillRequest request = SkillRequest.Create(text, _localizer.Culture, _clock.Now, source, confidence);
+
+        if (source is SkillRequestSource.Voice && IsCancelCommand(request.NormalizedText))
+        {
+            await SpeakInternalAsync(_localizer.Get(LocalizationKeys.Assistant.ConversationClosed), cancellationToken)
+                .ConfigureAwait(false);
+            await StopListeningAndSpeakingAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        bool willUseGenerativeAi = _settings.Current.GenerativeAi.Enabled
+            && _dispatcher.CanUseGenerativeFallback(request);
+
+        if (willUseGenerativeAi)
+        {
+            string thinking = _localizer.Get(LocalizationKeys.Assistant.Thinking);
+            await SpeakInternalAsync(thinking, cancellationToken).ConfigureAwait(false);
+        }
+
         SkillResponse response = await _dispatcher.DispatchAsync(request, cancellationToken).ConfigureAwait(false);
 
         if (!response.Handled && source is SkillRequestSource.Voice)
@@ -439,8 +509,6 @@ public sealed class AssistantEngine : IAssistantEngine
             ? response.SpokenText
             : _localizer.Get(LocalizationKeys.Assistant.NotUnderstood);
 
-        await ReturnToIdleAsync(cancellationToken).ConfigureAwait(false);
-
         if (!string.IsNullOrWhiteSpace(spokenText))
         {
             await SpeakInternalAsync(spokenText, cancellationToken).ConfigureAwait(false);
@@ -449,6 +517,16 @@ public sealed class AssistantEngine : IAssistantEngine
         if (response.RequestsShutdown)
         {
             _shell.Shutdown();
+            return;
+        }
+
+        if (source is SkillRequestSource.Voice)
+        {
+            await BeginListeningWindowAsync(speakAcknowledgement: false, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await ReturnToIdleAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -483,14 +561,14 @@ public sealed class AssistantEngine : IAssistantEngine
     }
 
     /// <summary>
-    /// Fala um texto, suspendendo a escuta enquanto isso.
+    /// Speaks text while suspending recognition.
     ///
-    /// Without this suspension the recognizer would transcribe Laura's own voice and she
-    /// responderia a si mesma.
+    /// Without this suspension the recognizer transcribes Laura's own voice and can
+    /// trap the assistant in a response loop.
     ///
     /// Args:
-    ///     text: Texto a falar.
-    ///     cancellationToken: Token que interrompe a fala.
+    ///     text: Text to speak.
+    ///     cancellationToken: Token that interrupts speech.
     ///
     /// Returns:
     ///     A task completed when speech ends and listening is restored.
@@ -518,6 +596,7 @@ public sealed class AssistantEngine : IAssistantEngine
             LauraSettings settings = _settings.Current;
             var request = new SpeechRequest(text, settings.Voice, settings.Culture);
 
+            PublishConversation(ConversationMessageSource.Assistant, text);
             await _synthesizer.SpeakAsync(request, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -529,6 +608,15 @@ public sealed class AssistantEngine : IAssistantEngine
 
             SetState(previousState);
         }
+    }
+
+    private async Task StopListeningAndSpeakingAsync(CancellationToken cancellationToken)
+    {
+        _synthesizer.CancelSpeech();
+        _foregroundListening = false;
+        _commandRetries = 0;
+
+        await ReturnToIdleAsync(cancellationToken).ConfigureAwait(false);
     }
 
     // === State and listening ===
@@ -612,6 +700,7 @@ public sealed class AssistantEngine : IAssistantEngine
             LocalizationKeys.Skills.VolumeDownPhrases,
             LocalizationKeys.Skills.VolumeMutePhrases,
             LocalizationKeys.Skills.SettingsPhrases,
+            LocalizationKeys.Skills.CancelPhrases,
         ];
 
         return [.. keys
@@ -645,16 +734,63 @@ public sealed class AssistantEngine : IAssistantEngine
             return;
         }
 
+        if (_foregroundListening)
+        {
+            await SetRecognizerModeAsync(RecognitionMode.Command, cancellationToken).ConfigureAwait(false);
+            SetState(AssistantState.ListeningForCommand);
+            return;
+        }
+
         await SetRecognizerModeAsync(RecognitionMode.WakeWord, cancellationToken).ConfigureAwait(false);
         SetState(AssistantState.AwaitingWakeWord);
+    }
+
+    private async Task ApplyForegroundListeningAsync(bool enabled, CancellationToken cancellationToken)
+    {
+        _foregroundListening = enabled;
+
+        if (enabled)
+        {
+            await BeginListeningWindowAsync(speakAcknowledgement: false, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await ReturnToIdleAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private bool IsCancelCommand(string normalizedText) =>
+        _localizer.GetPhrases(LocalizationKeys.Skills.CancelPhrases)
+            .Select(TextNormalizer.Normalize)
+            .Any(phrase => TextNormalizer.ContainsPhrase(normalizedText, phrase));
+
+    private void PublishConversation(ConversationMessageSource source, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        var message = new ConversationMessage(source, text.Trim(), _clock.Now);
+
+        lock (_conversationHistoryGate)
+        {
+            _conversationHistory.Add(message);
+
+            if (_conversationHistory.Count > MaxConversationHistory)
+            {
+                _conversationHistory.RemoveRange(0, _conversationHistory.Count - MaxConversationHistory);
+            }
+        }
+
+        ConversationMessageReceived?.Invoke(this, message);
     }
 
     /// <summary>
     /// Changes the recognizer mode when it is active.
     ///
     /// Args:
-    ///     mode: Modo desejado.
-    ///     cancellationToken: Token que aborta a troca.
+    ///     mode: Desired mode.
+    ///     cancellationToken: Token that aborts the switch.
     ///
     /// Returns:
     ///     A task completed when the mode has been applied, or immediately
@@ -668,7 +804,7 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <summary>
     /// Schedules the end of the listening window.
     ///
-    /// O aviso volta pela fila em vez de agir direto, para que o estado continue
+    /// The notice returns through the queue instead of acting directly, so state keeps
     /// being changed by a single thread.
     ///
     /// Args:
@@ -688,7 +824,7 @@ public sealed class AssistantEngine : IAssistantEngine
     /// Publishes a new state, ignoring repeats.
     ///
     /// Args:
-    ///     state: Estado a publicar.
+    ///     state: State to publish.
     /// </summary>
     private void SetState(AssistantState state)
     {
@@ -700,7 +836,7 @@ public sealed class AssistantEngine : IAssistantEngine
         StateChanged?.Invoke(this, state);
     }
 
-    // === Entrada de mensagens ===
+    // === Message Input ===
 
     /// <summary>
     /// Enqueues a message, releasing anyone waiting if the queue is already closed.
@@ -721,7 +857,7 @@ public sealed class AssistantEngine : IAssistantEngine
     ///
     /// Args:
     ///     factory: Creates the message already associated with the completion signal.
-    ///     cancellationToken: Token que aborta a espera.
+    ///     cancellationToken: Token that aborts waiting.
     ///
     /// Returns:
     ///     A task completed when the message has been handled.
@@ -742,7 +878,7 @@ public sealed class AssistantEngine : IAssistantEngine
     /// Returns immediately: blocking here would hold the speech engine audio thread.
     ///
     /// Args:
-    ///     sender: Reconhecedor que emitiu o evento.
+    ///     sender: Recognizer that emitted the event.
     ///     result: Received transcription.
     /// </summary>
     private void OnSpeechRecognized(object? sender, RecognitionResult result) =>
@@ -758,10 +894,10 @@ public sealed class AssistantEngine : IAssistantEngine
     private void OnSettingsChanged(object? sender, LauraSettings settings) =>
         Enqueue(new SettingsApplied(settings));
 
-    // === Mensagens internas ===
+    // === Internal Messages ===
 
     /// <summary>
-    /// Item da fila de processamento do motor.
+    /// Engine processing queue item.
     /// </summary>
     private abstract record EngineMessage
     {
@@ -775,10 +911,10 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <summary>Transcription from the microphone.</summary>
     private sealed record SpeechHeard(RecognitionResult Result) : EngineMessage;
 
-    /// <summary>Comando enviado em texto pela interface.</summary>
+    /// <summary>Text command sent by the interface.</summary>
     private sealed record CommandSubmitted(string Text) : EngineMessage;
 
-    /// <summary>Pedido de fala avulso.</summary>
+    /// <summary>Standalone speech request.</summary>
     private sealed record SpeechRequested(string Text) : EngineMessage;
 
     /// <summary>Notice that the listening window ended.</summary>
@@ -786,4 +922,11 @@ public sealed class AssistantEngine : IAssistantEngine
 
     /// <summary>Settings to apply to the recognizer and language.</summary>
     private sealed record SettingsApplied(LauraSettings Settings) : EngineMessage;
+
+    /// <summary>Request to keep command listening active while the UI is open.</summary>
+    private sealed record ForegroundListeningChanged(bool Enabled) : EngineMessage;
+
+    /// <summary>Request to stop speech and command listening immediately.</summary>
+    private sealed record StopRequested : EngineMessage;
+
 }

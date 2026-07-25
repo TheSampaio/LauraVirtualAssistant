@@ -9,10 +9,12 @@ using Microsoft.Extensions.Logging;
 namespace Laura.Platform.Windows.Speech;
 
 /// <summary>
-/// Sintetizador de voz apoiado no SAPI, o mesmo motor que atende as vozes do Windows.
+/// Speech synthesizer backed by SAPI, the same engine that serves Windows voices.
 /// </summary>
 public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
 {
+    private const string PreferredEnglishVoice = "Microsoft Aria";
+
     private readonly SpeechSynthesizer _synthesizer = new();
     private readonly SemaphoreSlim _speechGate = new(1, 1);
     private readonly ILogger<SapiSpeechSynthesizer> _logger;
@@ -48,6 +50,7 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
         {
             return [.. _synthesizer.GetInstalledVoices()
                 .Where(static voice => voice.Enabled)
+                .Where(static voice => IsSelectableNaturalVoice(voice.VoiceInfo))
                 .Select(static voice => new VoiceDescriptor(
                     voice.VoiceInfo.Name,
                     BuildDisplayName(voice.VoiceInfo),
@@ -131,7 +134,7 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
     /// <see cref="TaskCompletionSource"/> subscribed only during this utterance.
     ///
     /// Args:
-    ///     ssml: Documento a falar.
+    ///     ssml: Document to speak.
     ///     cancellationToken: Token that interrupts the utterance.
     ///
     /// Returns:
@@ -159,7 +162,7 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
         catch (FormatException exception)
         {
             // Text that produces invalid SSML cannot silence Laura completely.
-            _logger.LogError(exception, "O SAPI recusou o documento SSML gerado.");
+            _logger.LogError(exception, "SAPI rejected the generated SSML document.");
         }
         finally
         {
@@ -171,8 +174,8 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
     /// Applies rate, volume, and voice choice before the utterance.
     ///
     /// Args:
-    ///     profile: Perfil de voz configurado.
-    ///     culture: Cultura usada para escolher uma voz quando nenhuma foi fixada.
+    ///     profile: Configured voice profile.
+    ///     culture: Culture used to choose a voice when none was fixed.
     /// </summary>
     private void ApplyVoiceProfile(VoiceProfile profile, CultureInfo culture)
     {
@@ -206,15 +209,24 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
     /// preferred; only then does any voice for the language come next.
     ///
     /// Args:
-    ///     culture: Cultura desejada.
+    ///     culture: Desired culture.
     ///
     /// Returns:
-    ///     O nome da voz escolhida, ou <see langword="null"/> quando nenhuma voz
+    ///     The chosen voice name, or <see langword="null"/> when no voice
     ///     matches the culture and the choice should stay with the system.
     /// </summary>
     private string? FindPreferredVoiceName(CultureInfo culture)
     {
         IReadOnlyList<VoiceDescriptor> voices = GetAvailableVoices();
+        const string preferredName = PreferredEnglishVoice;
+
+        VoiceDescriptor? preferredNatural = voices.FirstOrDefault(voice =>
+            voice.Name.Contains(preferredName, StringComparison.OrdinalIgnoreCase));
+
+        if (preferredNatural is not null)
+        {
+            return preferredNatural.Name;
+        }
 
         bool MatchesLanguage(VoiceDescriptor voice) => voice.Culture.StartsWith(
             culture.TwoLetterISOLanguageName,
@@ -231,7 +243,7 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
     /// Resolves the received culture name, tolerating invalid values.
     ///
     /// Args:
-    ///     cultureName: Nome da cultura no formato BCP-47.
+    ///     cultureName: Culture name in BCP-47 format.
     ///
     /// Returns:
     ///     The matching culture, or the current culture when the name is invalid.
@@ -252,11 +264,22 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
     /// Composes a voice label for display in the interface.
     ///
     /// Args:
-    ///     info: Metadados da voz instalada.
+    ///     info: Installed voice metadata.
     ///
     /// Returns:
-    ///     A label such as "Maria (Portuguese (Brazil))".
+    ///     A label such as "Microsoft Aria (English (United States))".
     /// </summary>
     private static string BuildDisplayName(VoiceInfo info) =>
         $"{info.Name} ({info.Culture.NativeName})";
+
+    private static bool IsSelectableNaturalVoice(VoiceInfo info)
+    {
+        if (!info.Name.Contains("Microsoft", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return info.Name.Contains("Natural", StringComparison.OrdinalIgnoreCase)
+            || info.Name.Contains(PreferredEnglishVoice, StringComparison.OrdinalIgnoreCase);
+    }
 }

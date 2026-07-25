@@ -7,14 +7,14 @@ searching the web, opening applications, adjusting the volume, and locking the
 computer.
 
 The interface stays hidden and appears with **Alt + L**, where you can change the
-voice, language, tone, and other preferences. All listening and speaking happens
+voice, tone, listening behavior, and other preferences. All listening and speaking happens
 off the UI thread, so the window never freezes while Laura listens or answers.
 
 ## Requirements
 
 - Windows 10 or 11
 - [.NET 9 SDK](https://dotnet.microsoft.com/download) to build
-- A microphone and the speech pack for the desired language
+- A microphone and the English (United States) speech pack
   (Windows Settings > Time & language > Speech) for voice commands
 
 Without a microphone or an installed recognizer, Laura remains usable through the
@@ -55,11 +55,10 @@ to it. Adding a new capability means registering one more skill without touching
 engine or the existing skills. The phrases that trigger each skill live in language
 files, not in code.
 
-### Languages
+### Language
 
-Text and triggers live in `Laura.Core/Localization/Locales/<culture>.json`.
-Translating Laura or adding another way to ask for something means editing a language
-file. Portuguese (Brazil) and English (United States) are included.
+Laura is English-only. Text and triggers live in
+`Laura.Core/Localization/Locales/en-US.json`.
 
 ### Generative Mode (Planned)
 

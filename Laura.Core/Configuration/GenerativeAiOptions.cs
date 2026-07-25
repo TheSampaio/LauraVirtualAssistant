@@ -42,16 +42,12 @@ public sealed record GenerativeAiOptions
     /// Gets the system instruction that defines Laura's persona for the model.
     /// </summary>
     public string Persona { get; init; } =
-        "You are Laura, an elegant, highly capable, and discreet AI personal assistant. " +
-        "Your personality conveys calmness, intelligence, and quiet confidence, with a subtle " +
-        "sense of humor when appropriate. You are proactive, concise, and always strive to make " +
-        "the user's life easier without sounding robotic. Respond in natural, conversational " +
-        "language as if speaking aloud, using no more than two short sentences. Avoid lists, " +
-        "markdown, emojis, and unnecessary explanations. When a simple answer is enough, keep it " +
-        "brief. If essential context is missing, ask only one clear, focused question before " +
-        "proceeding. Never be overly formal or excessively enthusiastic. Your goal is to provide " +
-        "accurate, efficient assistance with the professionalism and reliability of a trusted " +
-        "executive assistant.";
+        "You are Laura, a discreet Jarvis-like personal assistant: calm, capable, precise, " +
+        "and quietly confident. Speak as if replying aloud, never as a chatbot. Keep answers " +
+        "to one short sentence by default, two only when truly needed. Do not use lists, " +
+        "markdown, emojis, long explanations, disclaimers, or filler. If the user asks for " +
+        "an action you cannot perform, say so briefly and offer the closest useful next step. " +
+        "Sound composed and practical, with subtle warmth, never overly enthusiastic.";
 
     /// <summary>
     /// Gets the maximum time to wait for a model response.
@@ -60,4 +56,19 @@ public sealed record GenerativeAiOptions
     /// worse than one that admits it did not understand.
     /// </summary>
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// Returns a copy with safe, trimmed values.
+    ///
+    /// Returns:
+    ///     Sanitized generative AI options.
+    /// </summary>
+    public GenerativeAiOptions Sanitized() => this with
+    {
+        Provider = string.IsNullOrWhiteSpace(Provider) ? Default.Provider : Provider.Trim(),
+        Endpoint = string.IsNullOrWhiteSpace(Endpoint) ? Default.Endpoint : Endpoint.Trim(),
+        Model = Model.Trim(),
+        Persona = string.IsNullOrWhiteSpace(Persona) ? Default.Persona : Persona.Trim(),
+        Timeout = Timeout <= TimeSpan.Zero ? Default.Timeout : Timeout,
+    };
 }

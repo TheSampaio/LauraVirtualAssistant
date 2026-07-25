@@ -20,7 +20,7 @@ public sealed class TrayIcon : IDisposable
     /// Creates the tray icon and builds its menu.
     ///
     /// Args:
-    ///     localizer: Fonte dos textos do menu e da dica.
+    ///     localizer: Source for menu and tooltip text.
     ///     onOpen: Action when choosing "open settings" or double-clicking.
     ///     onTogglePause: Action when toggling listening pause.
     ///     onExit: Action when choosing "exit".

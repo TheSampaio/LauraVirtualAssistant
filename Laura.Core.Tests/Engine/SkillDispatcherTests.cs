@@ -14,7 +14,7 @@ public sealed class SkillDispatcherTests
 {
     private static SkillRequest CommandFor(string text) => SkillRequest.Create(
         text,
-        CultureInfo.GetCultureInfo("pt-BR"),
+        CultureInfo.GetCultureInfo("en-US"),
         DateTimeOffset.Now,
         SkillRequestSource.Voice);
 
@@ -62,7 +62,7 @@ public sealed class SkillDispatcherTests
 
         SkillDispatcher dispatcher = CreateDispatcher([], conversationEngine, generativeEnabled: false);
 
-        SkillResponse response = await dispatcher.DispatchAsync(CommandFor("qualquer coisa"));
+        SkillResponse response = await dispatcher.DispatchAsync(CommandFor("anything"));
 
         Assert.False(response.Handled);
         Assert.Equal(0, conversationEngine.CallCount);
@@ -75,7 +75,7 @@ public sealed class SkillDispatcherTests
 
         SkillDispatcher dispatcher = CreateDispatcher([], conversationEngine, generativeEnabled: true);
 
-        SkillResponse response = await dispatcher.DispatchAsync(CommandFor("me conte uma piada"));
+        SkillResponse response = await dispatcher.DispatchAsync(CommandFor("tell me a joke"));
 
         Assert.True(response.Handled);
         Assert.Equal("AI answer", response.SpokenText);
@@ -95,7 +95,7 @@ public sealed class SkillDispatcherTests
             new StubUserContext(),
             NullLogger<SkillDispatcher>.Instance);
 
-        SkillResponse response = await dispatcher.DispatchAsync(CommandFor("falhe agora"));
+        SkillResponse response = await dispatcher.DispatchAsync(CommandFor("fail now"));
 
         // The failure becomes a spoken response, not a propagated exception.
         Assert.True(response.Handled);

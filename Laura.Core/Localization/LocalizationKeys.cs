@@ -26,6 +26,12 @@ public static class LocalizationKeys
 
         /// <summary>Spoken confirmation that settings were saved.</summary>
         public const string SettingsSaved = "assistant.settingsSaved";
+
+        /// <summary>Short filler while the generative model is thinking.</summary>
+        public const string Thinking = "assistant.thinking";
+
+        /// <summary>Confirmation that the command listening window was closed.</summary>
+        public const string ConversationClosed = "assistant.conversationClosed";
     }
 
     /// <summary>Opening greeting and full-hour announcement.</summary>
@@ -136,6 +142,9 @@ public static class LocalizationKeys
 
         /// <summary>Confirmation of opening the settings window.</summary>
         public const string SettingsResponse = "skill.settings.response";
+
+        /// <summary>Triggers that close the current command-listening window.</summary>
+        public const string CancelPhrases = "phrases.cancel";
     }
 
     /// <summary>Friendly names for the applications Laura can open.</summary>

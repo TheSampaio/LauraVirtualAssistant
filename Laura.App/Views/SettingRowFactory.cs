@@ -145,7 +145,7 @@ internal static class SettingRowFactory
     /// Args:
     ///     title: Option title.
     ///     hint: Helper description, or empty.
-    ///     textBox: Recebe a caixa de texto criada.
+    ///     textBox: Receives the created text box.
     ///
     /// Returns:
     ///     The row card.
@@ -169,8 +169,8 @@ internal static class SettingRowFactory
     /// Args:
     ///     title: Option title.
     ///     hint: Helper description, or empty.
-    ///     height: Altura da caixa de texto, em pixels.
-    ///     textBox: Recebe a caixa de texto criada.
+    ///     height: Text box height, in pixels.
+    ///     textBox: Receives the created text box.
     ///
     /// Returns:
     ///     The row card.
@@ -233,7 +233,7 @@ internal static class SettingRowFactory
     ///     hint: Helper description; when empty, no extra line is created.
     ///
     /// Returns:
-    ///     Um painel com o texto empilhado.
+    ///     A panel with stacked text.
     /// </summary>
     private static Control CreateTextStack(string title, string hint)
     {

@@ -1,7 +1,7 @@
 namespace Laura.Core.Speech;
 
 /// <summary>
-/// Modo de escuta do reconhecedor de fala.
+/// Speech recognizer listening mode.
 ///
 /// The separation exists for precision: a grammar restricted to the trigger almost
 /// eliminates accidental activations, while free dictation - required for arbitrary

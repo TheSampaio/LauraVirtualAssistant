@@ -11,16 +11,16 @@ public enum HotkeyModifiers : uint
     /// <summary>Nenhum modificador.</summary>
     None = 0x0000,
 
-    /// <summary>Tecla Alt.</summary>
+    /// <summary>Alt key.</summary>
     Alt = 0x0001,
 
-    /// <summary>Tecla Ctrl.</summary>
+    /// <summary>Ctrl key.</summary>
     Control = 0x0002,
 
-    /// <summary>Tecla Shift.</summary>
+    /// <summary>Shift key.</summary>
     Shift = 0x0004,
 
-    /// <summary>Tecla Windows.</summary>
+    /// <summary>Windows key.</summary>
     Windows = 0x0008,
 
     /// <summary>Prevents automatic repeat while the combination is held down.</summary>

@@ -11,34 +11,40 @@ namespace Laura.App.Theming;
 internal static class Palette
 {
     /// <summary>Main window background.</summary>
-    internal static Color Background { get; } = Color.FromArgb(0x1B, 0x1B, 0x1F);
+    internal static Color Background { get; } = Color.FromArgb(0x08, 0x09, 0x0C);
 
     /// <summary>Background for cards and raised panels.</summary>
-    internal static Color Surface { get; } = Color.FromArgb(0x25, 0x25, 0x2B);
+    internal static Color Surface { get; } = Color.FromArgb(0x12, 0x14, 0x19);
 
     /// <summary>Input field background.</summary>
-    internal static Color Field { get; } = Color.FromArgb(0x2E, 0x2E, 0x35);
+    internal static Color Field { get; } = Color.FromArgb(0x1A, 0x1D, 0x24);
 
     /// <summary>Accent color used for focus, selection, and primary actions.</summary>
-    internal static Color Accent { get; } = Color.FromArgb(0x7C, 0x5C, 0xFF);
+    internal static Color Accent { get; } = Color.FromArgb(0xD9, 0x1F, 0x2E);
 
     /// <summary>Lighter accent variant for hover states.</summary>
-    internal static Color AccentHover { get; } = Color.FromArgb(0x8E, 0x72, 0xFF);
+    internal static Color AccentHover { get; } = Color.FromArgb(0xF0, 0x3A, 0x49);
 
     /// <summary>Primary text.</summary>
-    internal static Color TextPrimary { get; } = Color.FromArgb(0xF2, 0xF2, 0xF5);
+    internal static Color TextPrimary { get; } = Color.FromArgb(0xF5, 0xF7, 0xFA);
 
     /// <summary>Secondary text for hints and descriptions.</summary>
-    internal static Color TextSecondary { get; } = Color.FromArgb(0x9A, 0x9A, 0xA6);
+    internal static Color TextSecondary { get; } = Color.FromArgb(0xA2, 0xA7, 0xB3);
 
     /// <summary>Subtle dividers and outlines.</summary>
-    internal static Color Border { get; } = Color.FromArgb(0x3A, 0x3A, 0x42);
+    internal static Color Border { get; } = Color.FromArgb(0x24, 0x28, 0x32);
+
+    /// <summary>Dark chat scrollbar track.</summary>
+    internal static Color ScrollTrack { get; } = Color.FromArgb(0x0D, 0x0F, 0x14);
+
+    /// <summary>Dark chat scrollbar thumb.</summary>
+    internal static Color ScrollThumb { get; } = Color.FromArgb(0x33, 0x38, 0x45);
 
     /// <summary>Active listening indicator color.</summary>
-    internal static Color Listening { get; } = Color.FromArgb(0x4C, 0xC2, 0x8C);
+    internal static Color Listening { get; } = Color.FromArgb(0x38, 0xD9, 0x96);
 
     /// <summary>Speaking indicator color.</summary>
-    internal static Color Speaking { get; } = Color.FromArgb(0x5A, 0x9C, 0xFF);
+    internal static Color Speaking { get; } = Color.FromArgb(0x64, 0xB5, 0xF6);
 
     /// <summary>Idle indicator color.</summary>
     internal static Color Muted { get; } = Color.FromArgb(0x6C, 0x6C, 0x78);

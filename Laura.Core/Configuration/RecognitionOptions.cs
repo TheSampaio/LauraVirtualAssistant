@@ -62,7 +62,7 @@ public sealed record RecognitionOptions
     /// Higher values reduce accidental activations at the cost of demanding clearer
     /// diction. The default is deliberately lenient so normal speech is not dropped.
     /// </summary>
-    public double MinimumConfidence { get; init; } = 0.35;
+    public double MinimumConfidence { get; init; } = 0.5;
 
     /// <summary>
     /// Gets how long Laura waits for the command after being woken before returning

@@ -277,7 +277,7 @@ public sealed class SapiSpeechRecognizer : ISpeechRecognizer
 
         try
         {
-            engine.UpdateRecognizerSetting("CFGConfidenceRejectionThreshold", 20);
+            engine.UpdateRecognizerSetting("CFGConfidenceRejectionThreshold", 35);
             engine.UpdateRecognizerSetting("ResponseSpeed", 150);
         }
         catch (KeyNotFoundException)

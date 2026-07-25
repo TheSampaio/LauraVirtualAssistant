@@ -19,7 +19,7 @@ public sealed class IniSettingsStoreTests : IDisposable
     {
         LauraSettings original = new LauraSettings
         {
-            Culture = "pt-BR",
+            Culture = "en-US",
             GreetOnStartup = false,
             AnnounceHourly = true,
             StartWithWindows = true,
@@ -27,7 +27,7 @@ public sealed class IniSettingsStoreTests : IDisposable
             Recognition = new RecognitionOptions
             {
                 Enabled = false,
-                WakePhrases = ["ok laura", "ei laura"],
+                WakePhrases = ["ok laura", "hey laura"],
                 MinimumConfidence = 0.75,
                 CommandTimeout = TimeSpan.FromSeconds(12),
                 AllowInlineCommand = false,
@@ -37,7 +37,7 @@ public sealed class IniSettingsStoreTests : IDisposable
                 Enabled = true,
                 Endpoint = "http://localhost:11434",
                 Model = "llama3.2",
-                Persona = "Seja breve.",
+                Persona = "Be brief.",
             },
         }.Sanitized();
 
@@ -90,11 +90,11 @@ public sealed class IniSettingsStoreTests : IDisposable
             _filePath,
             """
             ; loose comment
-            [Voz]
+            [Voice]
             Speed = this-is-not-a-number
-            linha sem separador
-            [Escuta]
-            Ativada = talvez
+            line without separator
+            [Listening]
+            Enabled = maybe
             """);
 
         LauraSettings loaded = await CreateStore().LoadAsync();
@@ -107,13 +107,13 @@ public sealed class IniSettingsStoreTests : IDisposable
     public void IniDocument_ReadsSectionsKeysAndLists()
     {
         IniDocument document = IniDocument.Parse("""
-            [Escuta]
-            FrasesDeAtivacao = ok laura | hey laura
-            ConfiancaMinima = 0.7
+            [Listening]
+            WakePhrases = ok laura | hey laura
+            MinimumConfidence = 0.7
             """);
 
-        Assert.Equal(["ok laura", "hey laura"], document.GetList("Escuta", "FrasesDeAtivacao", []));
-        Assert.Equal(0.7, document.GetDouble("Escuta", "ConfiancaMinima", 0.0));
+        Assert.Equal(["ok laura", "hey laura"], document.GetList("Listening", "WakePhrases", []));
+        Assert.Equal(0.7, document.GetDouble("Listening", "MinimumConfidence", 0.0));
     }
 
     /// <inheritdoc />

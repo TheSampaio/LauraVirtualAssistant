@@ -20,7 +20,7 @@ public sealed class WinFormsShellController : IShellController
     private Action? _shutdown;
 
     /// <summary>
-    /// Inicializa o controlador.
+    /// Initializes the controller.
     ///
     /// Args:
     ///     dispatcher: Executor que garante a thread da interface.
