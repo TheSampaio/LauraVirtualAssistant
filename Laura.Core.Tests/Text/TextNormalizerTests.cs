@@ -3,14 +3,14 @@ using Laura.Core.Text;
 namespace Laura.Core.Tests.Text;
 
 /// <summary>
-/// Testes da normalização de texto, base de todo o casamento de comandos.
+/// Tests text normalization, the basis for all command matching.
 /// </summary>
 public sealed class TextNormalizerTests
 {
     [Theory]
     [InlineData("Ok, Laura!", "ok laura")]
-    [InlineData("QUE HORAS SÃO?", "que horas sao")]
-    [InlineData("  Olá   Mundo  ", "ola mundo")]
+    [InlineData("WHAT TIME IS IT?", "what time is it")]
+    [InlineData("  Hello   World  ", "hello world")]
     [InlineData("Pesquise por gatos.", "pesquise por gatos")]
     public void Normalize_RemovesAccentsCaseAndPunctuation(string input, string expected) =>
         Assert.Equal(expected, TextNormalizer.Normalize(input));
@@ -26,13 +26,13 @@ public sealed class TextNormalizerTests
     [Fact]
     public void ContainsPhrase_MatchesWholeWordsOnly()
     {
-        Assert.True(TextNormalizer.ContainsPhrase("ok laura que horas sao", "laura"));
+        Assert.True(TextNormalizer.ContainsPhrase("ok laura what time is it", "laura"));
         Assert.False(TextNormalizer.ContainsPhrase("lauraceas sao plantas", "laura"));
     }
 
     [Fact]
     public void RemovePhrase_StripsFirstOccurrenceAndTrims() =>
-        Assert.Equal("que horas sao", TextNormalizer.RemovePhrase("ok laura que horas sao", "ok laura"));
+        Assert.Equal("what time is it", TextNormalizer.RemovePhrase("ok laura what time is it", "ok laura"));
 
     [Fact]
     public void RemovePhrase_ReturnsOriginalWhenPhraseAbsent() =>

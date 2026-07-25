@@ -1,27 +1,27 @@
 namespace Laura.Core.Abstractions;
 
 /// <summary>
-/// Controla a camada visual da aplicação a partir do domínio.
+/// Controls the application visual layer from the domain.
 ///
-/// Permite que uma habilidade abra o painel de configurações ou que o motor peça
-/// o encerramento sem que <c>Laura.Core</c> conheça WPF.
+/// Allows a skill to open the settings panel or the engine to request
+/// shutdown without <c>Laura.Core</c> knowing about WPF.
 /// </summary>
 public interface IShellController
 {
     /// <summary>
-    /// Exibe o painel de configurações e traz a janela para frente.
+    /// Shows the settings panel and brings the window to the front.
     /// </summary>
     void ShowSettings();
 
     /// <summary>
-    /// Alterna a visibilidade do painel de configurações.
+    /// Toggles settings panel visibility.
     ///
-    /// É o que a tecla de atalho global aciona.
+    /// This is what the global hotkey triggers.
     /// </summary>
     void ToggleSettings();
 
     /// <summary>
-    /// Encerra a aplicação de forma ordenada.
+    /// Shuts down the application cleanly.
     /// </summary>
     void Shutdown();
 }

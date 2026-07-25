@@ -6,10 +6,10 @@ using Microsoft.Extensions.Logging;
 namespace Laura.Core.Localization;
 
 /// <summary>
-/// Localizador que lê os textos de arquivos JSON, um por cultura.
+/// Localizer that reads text from JSON files, one per culture.
 ///
-/// Cada chave aceita uma string única ou uma lista de strings; listas servem tanto
-/// para redações alternativas de uma resposta quanto para os gatilhos de uma habilidade.
+/// Each key accepts a single string or a string list; lists are used both
+/// for alternate response wording and for a skill's triggers.
 /// </summary>
 public sealed class JsonLocalizer : ILocalizer
 {
@@ -29,11 +29,11 @@ public sealed class JsonLocalizer : ILocalizer
     private IReadOnlyDictionary<string, IReadOnlyList<string>> _fallback;
 
     /// <summary>
-    /// Inicializa o localizador carregando todos os arquivos de idioma da pasta.
+    /// Initializes the localizer by loading every language file in the folder.
     ///
     /// Args:
     ///     localesDirectory: Pasta com os arquivos <c>&lt;cultura&gt;.json</c>.
-    ///     logger: Destino dos registros de diagnóstico.
+    ///     logger: Destination for diagnostic logs.
     /// </summary>
     public JsonLocalizer(string localesDirectory, ILogger<JsonLocalizer> logger)
     {
@@ -78,7 +78,7 @@ public sealed class JsonLocalizer : ILocalizer
         Culture = resolved;
         _active = _catalogs[resolved.Name];
 
-        _logger.LogInformation("Idioma alterado para {Culture}.", resolved.Name);
+        _logger.LogInformation("Language changed to {Culture}.", resolved.Name);
         CultureChanged?.Invoke(this, resolved);
     }
 
@@ -110,14 +110,14 @@ public sealed class JsonLocalizer : ILocalizer
     }
 
     /// <summary>
-    /// Busca uma chave na cultura ativa e, se necessário, na cultura de recurso.
+    /// Looks up a key in the active culture and, when needed, in the resource culture.
     ///
     /// Args:
     ///     key: Chave a procurar.
     ///
     /// Returns:
-    ///     Os valores cadastrados, ou uma lista vazia quando a chave não existe
-    ///     em nenhum dos dois catálogos.
+    ///     The registered values, or an empty list when the key does not exist
+    ///     in either catalog.
     /// </summary>
     private IReadOnlyList<string> Lookup(string key)
     {
@@ -132,16 +132,16 @@ public sealed class JsonLocalizer : ILocalizer
     }
 
     /// <summary>
-    /// Escolhe a cultura suportada mais próxima da solicitada.
+    /// Chooses the supported culture closest to the requested one.
     ///
-    /// Tenta a correspondência exata, depois qualquer cultura com o mesmo idioma
+    /// Tries an exact match, then any culture with the same language
     /// (pt-PT atende um pedido de pt-BR) e, por fim, a cultura de recurso.
     ///
     /// Args:
     ///     requested: Cultura solicitada.
     ///
     /// Returns:
-    ///     Uma cultura para a qual existe catálogo carregado.
+    ///     A culture for which a catalog is loaded.
     /// </summary>
     private CultureInfo ResolveSupportedCulture(CultureInfo requested)
     {
@@ -158,7 +158,7 @@ public sealed class JsonLocalizer : ILocalizer
         if (sameLanguage is not null)
         {
             _logger.LogInformation(
-                "Cultura {Requested} não encontrada; usando {Resolved}.",
+                "Culture {Requested} not found; using {Resolved}.",
                 requested.Name,
                 sameLanguage.Name);
 
@@ -169,18 +169,18 @@ public sealed class JsonLocalizer : ILocalizer
     }
 
     /// <summary>
-    /// Lê todos os arquivos de idioma da pasta informada.
+    /// Reads every language file from the given folder.
     ///
     /// Args:
     ///     directory: Pasta com os arquivos <c>&lt;cultura&gt;.json</c>.
-    ///     logger: Destino dos registros de diagnóstico.
+    ///     logger: Destination for diagnostic logs.
     ///
     /// Returns:
-    ///     Um catálogo por cultura, indexado pelo nome BCP-47 da cultura.
+    ///     One catalog per culture, indexed by the culture's BCP-47 name.
     ///
     /// Raises:
-    ///     InvalidOperationException: Quando nenhum arquivo de idioma válido é
-    ///     encontrado — sem textos, Laura não teria o que dizer.
+    ///     InvalidOperationException: When no valid language file is
+    ///     found - without text, Laura would have nothing to say.
     /// </summary>
     private static Dictionary<string, IReadOnlyDictionary<string, IReadOnlyList<string>>> LoadCatalogs(
         string directory,
@@ -191,7 +191,7 @@ public sealed class JsonLocalizer : ILocalizer
 
         if (!Directory.Exists(directory))
         {
-            throw new InvalidOperationException($"Pasta de idiomas não encontrada: {directory}");
+            throw new InvalidOperationException($"Language folder not found: {directory}");
         }
 
         foreach (string path in Directory.EnumerateFiles(directory, "*.json"))
@@ -218,23 +218,23 @@ public sealed class JsonLocalizer : ILocalizer
             }
             catch (Exception exception) when (exception is JsonException or CultureNotFoundException or IOException)
             {
-                logger.LogWarning(exception, "Arquivo de idioma ignorado: {Path}.", path);
+                logger.LogWarning(exception, "Language file ignored: {Path}.", path);
             }
         }
 
         return catalogs.Count > 0
             ? catalogs
-            : throw new InvalidOperationException($"Nenhum arquivo de idioma válido em: {directory}");
+            : throw new InvalidOperationException($"No valid language file in: {directory}");
     }
 
     /// <summary>
-    /// Converte um valor do arquivo de idioma em lista de strings.
+    /// Converts a language file value into a string list.
     ///
     /// Args:
-    ///     element: Valor JSON, string única ou vetor de strings.
+    ///     element: JSON value, single string, or string array.
     ///
     /// Returns:
-    ///     Os valores como lista; uma lista vazia para tipos não suportados.
+    ///     The values as a list; an empty list for unsupported types.
     /// </summary>
     private static IReadOnlyList<string> ReadValues(JsonElement element) => element.ValueKind switch
     {

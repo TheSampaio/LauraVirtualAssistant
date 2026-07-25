@@ -3,61 +3,61 @@ using System.Globalization;
 namespace Laura.Core.Abstractions;
 
 /// <summary>
-/// Fornece os textos que Laura fala e exibe, no idioma ativo.
+/// Provides the text Laura speaks and displays, in the active language.
 ///
-/// Além das mensagens, guarda as listas de frases que cada habilidade reconhece —
-/// traduzir Laura é editar um arquivo de idioma, nunca recompilar as habilidades.
+/// Besides messages, stores the phrase lists each skill recognizes -
+/// translating Laura means editing a language file, never recompiling skills.
 /// </summary>
 public interface ILocalizer
 {
     /// <summary>
-    /// Ocorre depois que o idioma ativo muda.
+    /// Occurs after the active language changes.
     /// </summary>
     event EventHandler<CultureInfo>? CultureChanged;
 
     /// <summary>
-    /// Obtém a cultura ativa.
+    /// Gets the active culture.
     /// </summary>
     CultureInfo Culture { get; }
 
     /// <summary>
-    /// Obtém as culturas para as quais existe um arquivo de idioma.
+    /// Gets the cultures for which a language file exists.
     /// </summary>
     IReadOnlyList<CultureInfo> AvailableCultures { get; }
 
     /// <summary>
-    /// Troca o idioma ativo.
+    /// Changes the active language.
     ///
     /// Args:
-    ///     culture: Cultura desejada. Quando não há arquivo correspondente, a
-    ///     cultura mais próxima disponível é usada.
+    ///     culture: Desired culture. When there is no matching file, the
+    ///     closest available culture is used.
     /// </summary>
     void SetCulture(CultureInfo culture);
 
     /// <summary>
-    /// Obtém uma mensagem formatada.
+    /// Gets a formatted message.
     ///
-    /// Quando a chave define várias redações, uma delas é sorteada — a variação
-    /// é o que impede Laura de soar como uma gravação.
+    /// When the key defines several phrasings, one is selected at random - variation
+    /// is what keeps Laura from sounding like a recording.
     ///
     /// Args:
-    ///     key: Chave da mensagem, como <c>skill.time.response</c>.
-    ///     arguments: Valores aplicados ao formato da mensagem.
+    ///     key: Message key, such as <c>skill.time.response</c>.
+    ///     arguments: Values applied to the message format.
     ///
     /// Returns:
-    ///     A mensagem formatada na cultura ativa, ou a própria chave entre
-    ///     colchetes quando ela não existe no arquivo de idioma.
+    ///     The formatted message in the active culture, or the key itself in
+    ///     brackets when it does not exist in the language file.
     /// </summary>
     string Get(string key, params object?[] arguments);
 
     /// <summary>
-    /// Obtém a lista de frases associada a uma chave.
+    /// Gets the phrase list associated with a key.
     ///
     /// Args:
     ///     key: Chave da lista, como <c>phrases.time</c>.
     ///
     /// Returns:
-    ///     As frases cadastradas, ou uma lista vazia quando a chave não existe.
+    ///     The registered phrases, or an empty list when the key does not exist.
     /// </summary>
     IReadOnlyList<string> GetPhrases(string key);
 }

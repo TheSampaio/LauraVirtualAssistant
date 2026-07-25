@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 namespace Laura.Core.Configuration;
 
 /// <summary>
-/// Implementação de <see cref="ISettingsService"/> sobre um <see cref="ISettingsStore"/>.
+/// Implementation of <see cref="ISettingsService"/> over an <see cref="ISettingsStore"/>.
 /// </summary>
 public sealed class SettingsService : ISettingsService, IDisposable
 {
@@ -15,11 +15,11 @@ public sealed class SettingsService : ISettingsService, IDisposable
     private LauraSettings _current = LauraSettings.Default;
 
     /// <summary>
-    /// Inicializa o serviço com o armazenamento e o registrador informados.
+    /// Initializes the service with the given store and logger.
     ///
     /// Args:
-    ///     store: Armazenamento onde as configurações são lidas e gravadas.
-    ///     logger: Destino dos registros de diagnóstico.
+    ///     store: Storage where settings are read and written.
+    ///     logger: Destination for diagnostic logs.
     /// </summary>
     public SettingsService(ISettingsStore store, ILogger<SettingsService> logger)
     {
@@ -42,7 +42,7 @@ public sealed class SettingsService : ISettingsService, IDisposable
         LauraSettings loaded = (await _store.LoadAsync(cancellationToken).ConfigureAwait(false)).Sanitized();
         Publish(loaded);
 
-        _logger.LogInformation("Configurações carregadas (cultura {Culture}).", loaded.Culture);
+        _logger.LogInformation("Settings loaded (culture {Culture}).", loaded.Culture);
         return loaded;
     }
 
@@ -66,7 +66,7 @@ public sealed class SettingsService : ISettingsService, IDisposable
 
         Publish(sanitized);
 
-        _logger.LogInformation("Configurações atualizadas (cultura {Culture}).", sanitized.Culture);
+        _logger.LogInformation("Settings updated (culture {Culture}).", sanitized.Culture);
         return sanitized;
     }
 
@@ -74,10 +74,10 @@ public sealed class SettingsService : ISettingsService, IDisposable
     public void Dispose() => _writeLock.Dispose();
 
     /// <summary>
-    /// Torna as configurações vigentes e notifica os assinantes.
+    /// Makes the settings current and notifies subscribers.
     ///
     /// Args:
-    ///     settings: Configurações já saneadas.
+    ///     settings: Already-sanitized settings.
     /// </summary>
     private void Publish(LauraSettings settings)
     {

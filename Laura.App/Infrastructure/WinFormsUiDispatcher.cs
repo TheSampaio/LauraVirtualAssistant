@@ -3,7 +3,7 @@ using System.Threading;
 namespace Laura.App.Infrastructure;
 
 /// <summary>
-/// Implementação de <see cref="IUiDispatcher"/> sobre o <see cref="SynchronizationContext"/>
+/// Implementation of <see cref="IUiDispatcher"/> over <see cref="SynchronizationContext"/>
 /// da thread da interface.
 /// </summary>
 public sealed class WinFormsUiDispatcher : IUiDispatcher
@@ -11,13 +11,13 @@ public sealed class WinFormsUiDispatcher : IUiDispatcher
     private readonly SynchronizationContext _synchronizationContext;
 
     /// <summary>
-    /// Captura o contexto de sincronização da thread atual.
+    /// Captures the current thread synchronization context.
     ///
-    /// Deve ser construído na thread da interface, depois de o Windows Forms ter
-    /// instalado seu contexto de sincronização.
+    /// Must be built on the UI thread, after Windows Forms has
+    /// installed its synchronization context.
     ///
     /// Raises:
-    ///     InvalidOperationException: Quando não há contexto de interface ativo.
+    ///     InvalidOperationException: When there is no active UI context.
     /// </summary>
     public WinFormsUiDispatcher()
     {

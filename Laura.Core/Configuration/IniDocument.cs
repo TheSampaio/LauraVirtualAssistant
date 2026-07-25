@@ -6,9 +6,9 @@ namespace Laura.Core.Configuration;
 /// <summary>
 /// Leitor e escritor de arquivos INI.
 ///
-/// O formato foi escolhido por ser legível e editável à mão sem ferramenta nenhuma —
-/// abrir o arquivo no Bloco de Notas e corrigir um valor é parte do fluxo esperado.
-/// Chaves e seções não diferenciam maiúsculas de minúsculas.
+/// The format was chosen because it is readable and editable by hand with no tools -
+/// opening the file in Notepad and correcting a value is part of the expected flow.
+/// Keys and sections are case-insensitive.
 /// </summary>
 public sealed class IniDocument
 {
@@ -21,16 +21,16 @@ public sealed class IniDocument
         new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Interpreta o conteúdo de um arquivo INI.
+    /// Parses the contents of an INI file.
     ///
-    /// Linhas malformadas são ignoradas em vez de interromper a leitura: uma edição
-    /// manual desastrada não deve impedir Laura de iniciar.
+    /// Malformed lines are ignored instead of interrupting reads: a clumsy manual
+    /// edit should not prevent Laura from starting.
     ///
     /// Args:
-    ///     content: Texto completo do arquivo.
+    ///     content: Complete file text.
     ///
     /// Returns:
-    ///     Um documento com as seções e chaves encontradas.
+    ///     A document with the sections and keys found.
     /// </summary>
     public static IniDocument Parse(string content)
     {
@@ -71,10 +71,10 @@ public sealed class IniDocument
     }
 
     /// <summary>
-    /// Define o valor de uma chave, criando a seção quando necessário.
+    /// Sets a key value, creating the section when needed.
     ///
     /// Args:
-    ///     section: Nome da seção.
+    ///     section: Section name.
     ///     key: Nome da chave.
     ///     value: Valor a gravar.
     /// </summary>
@@ -96,7 +96,7 @@ public sealed class IniDocument
     /// Define uma chave a partir de um valor booleano.
     ///
     /// Args:
-    ///     section: Nome da seção.
+    ///     section: Section name.
     ///     key: Nome da chave.
     ///     value: Valor a gravar.
     /// </summary>
@@ -104,10 +104,10 @@ public sealed class IniDocument
         Set(section, key, value ? "true" : "false");
 
     /// <summary>
-    /// Define uma chave a partir de um número, sempre na cultura invariante.
+    /// Sets a key from a number, always using the invariant culture.
     ///
     /// Args:
-    ///     section: Nome da seção.
+    ///     section: Section name.
     ///     key: Nome da chave.
     ///     value: Valor a gravar.
     /// </summary>
@@ -118,7 +118,7 @@ public sealed class IniDocument
     /// Define uma chave a partir de uma lista, separando os itens por barra vertical.
     ///
     /// Args:
-    ///     section: Nome da seção.
+    ///     section: Section name.
     ///     key: Nome da chave.
     ///     values: Itens a gravar.
     /// </summary>
@@ -126,12 +126,12 @@ public sealed class IniDocument
         Set(section, key, string.Join(" | ", values));
 
     /// <summary>
-    /// Lê o valor de uma chave.
+    /// Reads a key value.
     ///
     /// Args:
-    ///     section: Nome da seção.
+    ///     section: Section name.
     ///     key: Nome da chave.
-    ///     fallback: Valor devolvido quando a chave não existe.
+    ///     fallback: Value returned when the key does not exist.
     ///
     /// Returns:
     ///     O valor gravado, ou o valor de recuo.
@@ -144,12 +144,12 @@ public sealed class IniDocument
             : fallback;
 
     /// <summary>
-    /// Lê uma chave como booleano.
+    /// Reads a key as a boolean.
     ///
     /// Args:
-    ///     section: Nome da seção.
+    ///     section: Section name.
     ///     key: Nome da chave.
-    ///     fallback: Valor devolvido quando a chave falta ou é inválida.
+    ///     fallback: Value returned when the key is missing or invalid.
     ///
     /// Returns:
     ///     O booleano lido, ou o valor de recuo.
@@ -158,12 +158,12 @@ public sealed class IniDocument
         bool.TryParse(GetString(section, key, string.Empty), out bool value) ? value : fallback;
 
     /// <summary>
-    /// Lê uma chave como inteiro.
+    /// Reads a key as an integer.
     ///
     /// Args:
-    ///     section: Nome da seção.
+    ///     section: Section name.
     ///     key: Nome da chave.
-    ///     fallback: Valor devolvido quando a chave falta ou é inválida.
+    ///     fallback: Value returned when the key is missing or invalid.
     ///
     /// Returns:
     ///     O inteiro lido, ou o valor de recuo.
@@ -178,15 +178,15 @@ public sealed class IniDocument
             : fallback;
 
     /// <summary>
-    /// Lê uma chave como número de ponto flutuante.
+    /// Reads a key as a floating-point number.
     ///
     /// Args:
-    ///     section: Nome da seção.
+    ///     section: Section name.
     ///     key: Nome da chave.
-    ///     fallback: Valor devolvido quando a chave falta ou é inválida.
+    ///     fallback: Value returned when the key is missing or invalid.
     ///
     /// Returns:
-    ///     O número lido, ou o valor de recuo.
+    ///     The parsed number, or the fallback value.
     /// </summary>
     public double GetDouble(string section, string key, double fallback) =>
         double.TryParse(
@@ -198,12 +198,12 @@ public sealed class IniDocument
             : fallback;
 
     /// <summary>
-    /// Lê uma chave como lista separada por barra vertical.
+    /// Reads a key as a pipe-separated list.
     ///
     /// Args:
-    ///     section: Nome da seção.
+    ///     section: Section name.
     ///     key: Nome da chave.
-    ///     fallback: Lista devolvida quando a chave falta ou está vazia.
+    ///     fallback: List returned when the key is missing or empty.
     ///
     /// Returns:
     ///     Os itens lidos, ou a lista de recuo.
@@ -225,10 +225,10 @@ public sealed class IniDocument
     /// Serializa o documento no formato INI.
     ///
     /// Args:
-    ///     header: Comentário opcional inserido no topo do arquivo.
+    ///     header: Optional comment inserted at the top of the file.
     ///
     /// Returns:
-    ///     O texto pronto para gravação.
+    ///     The text ready to write.
     /// </summary>
     public string ToIniString(string? header = null)
     {

@@ -3,51 +3,51 @@ using Laura.Core.Skills;
 namespace Laura.Core.Abstractions;
 
 /// <summary>
-/// Uma capacidade isolada de Laura, como dizer as horas ou abrir um aplicativo.
+/// Uma capacidade isolada de Laura, como dizer as horas ou open um aplicativo.
 ///
-/// Cada habilidade decide sozinha se um comando lhe pertence e executa apenas isso;
-/// acrescentar uma capacidade nova é registrar uma implementação a mais, sem tocar
+/// Each skill decides on its own whether a command belongs to it and only executes that;
+/// adding a new capability means registering one more implementation, without touching
 /// no motor nem nas habilidades existentes.
 /// </summary>
 public interface ISkill
 {
     /// <summary>
-    /// Obtém o identificador estável da habilidade, usado em registros de diagnóstico.
+    /// Gets the stable skill identifier, used in diagnostic logs.
     /// </summary>
     string Id { get; }
 
     /// <summary>
-    /// Obtém a ordem de avaliação; valores menores são consultados primeiro.
+    /// Gets the evaluation order; lower values are queried first.
     ///
-    /// Habilidades com gatilhos específicos precisam preceder as de gatilho amplo,
-    /// para que "abrir configurações" não seja capturado por "abrir".
+    /// Skills with specific triggers must precede broad-trigger skills,
+    /// so "open settings" is not captured by "open".
     /// </summary>
     int Priority { get; }
 
     /// <summary>
-    /// Informa se esta habilidade reconhece o comando.
+    /// Reports whether this skill recognizes the command.
     ///
-    /// Deve ser barata e livre de efeitos colaterais: é chamada para cada
-    /// habilidade registrada até que uma aceite.
+    /// Must be cheap and free of side effects: it is called for each
+    /// registered skill until one accepts.
     ///
     /// Args:
     ///     request: Comando a avaliar.
     ///
     /// Returns:
-    ///     <see langword="true"/> quando a habilidade sabe atender o comando.
+    ///     <see langword="true"/> when the skill knows how to handle the command.
     /// </summary>
     bool CanHandle(SkillRequest request);
 
     /// <summary>
-    /// Executa o comando.
+    /// Executes the command.
     ///
     /// Args:
-    ///     request: Comando a atender, já aprovado por <see cref="CanHandle"/>.
-    ///     cancellationToken: Token que aborta a execução.
+    ///     request: Command to handle, already approved by <see cref="CanHandle"/>.
+    ///     cancellationToken: Token that aborts execution.
     ///
     /// Returns:
-    ///     A resposta a falar, ou <see cref="SkillResponse.NotHandled"/> quando a
-    ///     habilidade desiste após inspecionar o comando mais a fundo.
+    ///     A answer a falar, ou <see cref="SkillResponse.NotHandled"/> quando a
+    ///     skill gives up after inspecting the command more deeply.
     /// </summary>
     Task<SkillResponse> ExecuteAsync(SkillRequest request, CancellationToken cancellationToken = default);
 }

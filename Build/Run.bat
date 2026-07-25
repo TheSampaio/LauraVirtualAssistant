@@ -1,4 +1,4 @@
-:: Compila e executa a Laura em modo de depuração.
+:: Builds and runs Laura in debug mode.
 @ECHO OFF
 TITLE Executar Laura
 CLS

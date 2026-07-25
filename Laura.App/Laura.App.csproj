@@ -21,11 +21,11 @@
     <!-- Exigido pelo gerador de LibraryImport usado na hotkey global e na moldura escura. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!--
-      WFO1000/CA1859: regras voltadas ao designer visual e à micro-otimização de
-      construtores de UI; esta interface é montada inteiramente em código.
+      WFO1000/CA1859: rules aimed at the visual designer and micro-optimization of
+      UI constructors; this interface is built entirely in code.
     -->
     <NoWarn>$(NoWarn);CA1848;CA1716;WFO1000;CA1859</NoWarn>
-    <Description>Aplicação de bandeja e interface de configuração da assistente Laura.</Description>
+    <Description>Tray application and settings interface for the Laura assistant.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -5,10 +5,10 @@ using Laura.Core.Abstractions;
 namespace Laura.App.Shell;
 
 /// <summary>
-/// Ícone da assistente na bandeja do sistema e seu menu de contexto.
+/// Assistant icon in the system tray and its context menu.
 ///
-/// É o único ponto de presença visível permanente de Laura: a janela fica oculta,
-/// mas o ícone dá acesso às configurações, à pausa da escuta e ao encerramento.
+/// It is Laura's only permanent visible presence: the window stays hidden,
+/// but the icon gives access to settings, listening pause, and exit.
 /// </summary>
 public sealed class TrayIcon : IDisposable
 {
@@ -17,13 +17,13 @@ public sealed class TrayIcon : IDisposable
     private readonly ToolStripMenuItem _pauseItem;
 
     /// <summary>
-    /// Cria o ícone da bandeja e monta seu menu.
+    /// Creates the tray icon and builds its menu.
     ///
     /// Args:
     ///     localizer: Fonte dos textos do menu e da dica.
-    ///     onOpen: Ação ao escolher "abrir configurações" ou dar duplo clique.
-    ///     onTogglePause: Ação ao alternar a pausa da escuta.
-    ///     onExit: Ação ao escolher "encerrar".
+    ///     onOpen: Action when choosing "open settings" or double-clicking.
+    ///     onTogglePause: Action when toggling listening pause.
+    ///     onExit: Action when choosing "exit".
     /// </summary>
     public TrayIcon(ILocalizer localizer, Action onOpen, Action onTogglePause, Action onExit)
     {
@@ -63,10 +63,10 @@ public sealed class TrayIcon : IDisposable
     }
 
     /// <summary>
-    /// Reflete no menu se a escuta está pausada.
+    /// Reflects in the menu whether listening is paused.
     ///
     /// Args:
-    ///     paused: <see langword="true"/> quando a escuta por voz está desligada.
+    ///     paused: <see langword="true"/> when voice listening is off.
     /// </summary>
     public void SetPaused(bool paused) => _pauseItem.Checked = paused;
 
@@ -78,10 +78,10 @@ public sealed class TrayIcon : IDisposable
     }
 
     /// <summary>
-    /// Carrega o ícone da aplicação, recorrendo ao ícone padrão do sistema.
+    /// Loads the application icon, falling back to the default system icon.
     ///
     /// Returns:
-    ///     O ícone da bandeja.
+    ///     The tray icon.
     /// </summary>
     private static Icon LoadIcon()
     {

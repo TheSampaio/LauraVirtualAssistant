@@ -3,7 +3,7 @@ using Laura.Core.Configuration;
 namespace Laura.Core.Tests.Configuration;
 
 /// <summary>
-/// Testes do saneamento das configurações, a defesa contra valores fora de faixa.
+/// Tests settings sanitization, the defense against out-of-range values.
 /// </summary>
 public sealed class SanitizationTests
 {
@@ -58,7 +58,7 @@ public sealed class SanitizationTests
     [Fact]
     public void LauraSettings_FallsBackToDefaultCultureWhenInvalid()
     {
-        LauraSettings sanitized = new LauraSettings { Culture = "não-existe" }.Sanitized();
+        LauraSettings sanitized = new LauraSettings { Culture = "does-not-exist" }.Sanitized();
         Assert.Equal(LauraSettings.Default.Culture, sanitized.Culture);
     }
 

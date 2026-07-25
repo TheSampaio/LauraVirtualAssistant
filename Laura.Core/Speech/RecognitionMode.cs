@@ -3,18 +3,18 @@ namespace Laura.Core.Speech;
 /// <summary>
 /// Modo de escuta do reconhecedor de fala.
 ///
-/// A separação existe por precisão: uma gramática restrita ao gatilho praticamente
-/// elimina ativações acidentais, enquanto o ditado livre — necessário para comandos
-/// arbitrários — é ruidoso demais para ficar ativo o tempo todo.
+/// The separation exists for precision: a grammar restricted to the trigger almost
+/// eliminates accidental activations, while free dictation - required for arbitrary
+/// commands - is too noisy to stay active all the time.
 /// </summary>
 public enum RecognitionMode
 {
-    /// <summary>Escuta suspensa; nenhum áudio é processado.</summary>
+    /// <summary>Listening suspended; no audio is processed.</summary>
     Idle,
 
-    /// <summary>Escuta apenas as frases de ativação ("Ok, Laura").</summary>
+    /// <summary>Listens only for wake phrases ("Ok, Laura").</summary>
     WakeWord,
 
-    /// <summary>Escuta um comando completo após a ativação.</summary>
+    /// <summary>Listens for a full command after activation.</summary>
     Command,
 }

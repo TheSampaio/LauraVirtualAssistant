@@ -7,12 +7,12 @@ using Microsoft.Extensions.Logging;
 namespace Laura.Core.Engine;
 
 /// <summary>
-/// Escolhe e executa a habilidade que atende cada comando.
+/// Chooses and runs the skill that handles each command.
 ///
-/// A ordem de consulta é fixada por <see cref="ISkill.Priority"/> no momento da
-/// construção. Se nenhuma habilidade aceitar o comando e o modo generativo estiver
-/// ligado, o pedido é encaminhado ao modelo — esse é o único ponto do sistema que
-/// conhece a existência do modo generativo.
+/// The query order is fixed by <see cref="ISkill.Priority"/> at
+/// construction time. If no skill accepts the command and generative mode is
+/// enabled, the request is forwarded to the model - this is the only system point that
+/// knows generative mode exists.
 /// </summary>
 public sealed class SkillDispatcher : ISkillDispatcher
 {
@@ -27,13 +27,13 @@ public sealed class SkillDispatcher : ISkillDispatcher
     /// Inicializa o despachante ordenando as habilidades registradas.
     ///
     /// Args:
-    ///     skills: Habilidades disponíveis, em qualquer ordem.
-    ///     localizer: Fonte das mensagens de erro e recusa.
+    ///     skills: Available skills, in any order.
+    ///     localizer: Source of error and refusal messages.
     ///     conversationEngine: Motor generativo opcional.
-    ///     settings: Configurações vigentes, consultadas para saber se o modo
-    ///     generativo está ligado.
-    ///     userContext: Contexto do usuário repassado ao motor generativo.
-    ///     logger: Destino dos registros de diagnóstico.
+    ///     settings: Current settings, consulted to know whether generative mode
+    ///     is enabled.
+    ///     userContext: User context passed to the generative engine.
+    ///     logger: Destination for diagnostic logs.
     /// </summary>
     public SkillDispatcher(
         IEnumerable<ISkill> skills,
@@ -85,18 +85,18 @@ public sealed class SkillDispatcher : ISkillDispatcher
     }
 
     /// <summary>
-    /// Executa uma habilidade isolando falhas dela.
+    /// Runs a skill while isolating its failures.
     ///
-    /// Uma habilidade que lança não pode derrubar a assistente inteira; o erro vira
-    /// uma resposta falada e o registro guarda o detalhe.
+    /// A skill that throws cannot bring down the whole assistant; the error becomes
+    /// a spoken response and the log keeps the details.
     ///
     /// Args:
-    ///     skill: Habilidade a executar.
+    ///     skill: Skill to run.
     ///     request: Comando a atender.
-    ///     cancellationToken: Token que aborta a execução.
+    ///     cancellationToken: Token that aborts execution.
     ///
     /// Returns:
-    ///     A resposta da habilidade, ou uma resposta de falha genérica.
+    ///     The skill response, or a generic failure response.
     /// </summary>
     private async Task<SkillResponse> ExecuteSafelyAsync(
         ISkill skill,
@@ -113,21 +113,21 @@ public sealed class SkillDispatcher : ISkillDispatcher
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "A habilidade {Skill} falhou ao atender \"{Command}\".", skill.Id, request.RawText);
+            _logger.LogError(exception, "Skill {Skill} failed while handling \"{Command}\".", skill.Id, request.RawText);
             return SkillResponse.Speak(_localizer.Get(LocalizationKeys.Assistant.SkillFailed));
         }
     }
 
     /// <summary>
-    /// Encaminha ao modelo generativo um comando que nenhuma habilidade reconheceu.
+    /// Forwards to the generative model a command no skill recognized.
     ///
     /// Args:
-    ///     request: Comando não reconhecido.
-    ///     cancellationToken: Token que aborta a requisição.
+    ///     request: Unrecognized command.
+    ///     cancellationToken: Token that aborts the request.
     ///
     /// Returns:
-    ///     A resposta do modelo, ou <see cref="SkillResponse.NotHandled"/> quando o
-    ///     modo generativo está desligado, indisponível ou não respondeu.
+    ///     The model response, or <see cref="SkillResponse.NotHandled"/> when
+    ///     generative mode is off, unavailable, or did not answer.
     /// </summary>
     private async Task<SkillResponse> AskConversationEngineAsync(
         SkillRequest request,
@@ -135,7 +135,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
     {
         if (!_settings.Current.GenerativeAi.Enabled || !_conversationEngine.IsAvailable)
         {
-            _logger.LogInformation("Nenhuma habilidade reconheceu \"{Command}\".", request.RawText);
+            _logger.LogInformation("No skill recognized \"{Command}\".", request.RawText);
             return SkillResponse.NotHandled;
         }
 

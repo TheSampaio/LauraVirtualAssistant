@@ -7,10 +7,10 @@ using Microsoft.Win32;
 namespace Laura.Platform.Windows.System;
 
 /// <summary>
-/// Registra a inicialização automática na chave <c>Run</c> do usuário atual.
+/// Registers automatic startup in the current user's <c>Run</c> key.
 ///
-/// A chave por usuário é usada de propósito: não exige elevação e não afeta outras
-/// contas da máquina.
+/// The per-user key is used deliberately: it does not require elevation and does not affect other
+/// accounts on the machine.
 /// </summary>
 public sealed class RegistryStartupRegistration : IStartupRegistration
 {
@@ -23,7 +23,7 @@ public sealed class RegistryStartupRegistration : IStartupRegistration
     /// Inicializa o registro.
     ///
     /// Args:
-    ///     logger: Destino dos registros de diagnóstico.
+    ///     logger: Destination for diagnostic logs.
     /// </summary>
     public RegistryStartupRegistration(ILogger<RegistryStartupRegistration> logger)
     {
@@ -41,7 +41,7 @@ public sealed class RegistryStartupRegistration : IStartupRegistration
         }
         catch (Exception exception) when (exception is SecurityException or UnauthorizedAccessException)
         {
-            _logger.LogWarning(exception, "Não foi possível ler o registro de inicialização automática.");
+            _logger.LogWarning(exception, "Could not read the automatic startup registry entry.");
             return false;
         }
     }
@@ -53,7 +53,7 @@ public sealed class RegistryStartupRegistration : IStartupRegistration
 
         if (executablePath is null)
         {
-            _logger.LogWarning("Caminho do executável indisponível; a inicialização automática foi ignorada.");
+            _logger.LogWarning("Executable path unavailable; automatic startup was skipped.");
             return;
         }
 
@@ -72,15 +72,15 @@ public sealed class RegistryStartupRegistration : IStartupRegistration
         }
         catch (Exception exception) when (exception is SecurityException or UnauthorizedAccessException)
         {
-            _logger.LogWarning(exception, "Não foi possível gravar o registro de inicialização automática.");
+            _logger.LogWarning(exception, "Could not write the automatic startup registry entry.");
         }
     }
 
     /// <summary>
-    /// Devolve o caminho do executável em uso, para diagnóstico.
+    /// Returns the executable path in use, for diagnostics.
     ///
     /// Returns:
-    ///     O caminho do processo atual, ou uma string vazia quando indisponível.
+    ///     The current process path, or an empty string when unavailable.
     /// </summary>
     internal static string GetExecutablePath() =>
         Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;

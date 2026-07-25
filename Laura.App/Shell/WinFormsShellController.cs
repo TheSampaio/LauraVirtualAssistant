@@ -4,12 +4,12 @@ using Laura.Core.Abstractions;
 namespace Laura.App.Shell;
 
 /// <summary>
-/// Implementação de <see cref="IShellController"/> que encaminha pedidos do domínio
+/// Implementation of <see cref="IShellController"/> that forwards domain requests
 /// para a camada Windows Forms, sempre na thread da interface.
 ///
-/// As ações concretas são fornecidas pela camada de apresentação em
-/// <see cref="Bind"/>, o que mantém o domínio ignorante do Windows Forms enquanto
-/// ainda pode abrir a janela ou encerrar a aplicação.
+/// Concrete actions are provided by the presentation layer in
+/// <see cref="Bind"/>, which keeps the domain unaware of Windows Forms while
+/// still allowing it to open the window or shut down the application.
 /// </summary>
 public sealed class WinFormsShellController : IShellController
 {
@@ -32,12 +32,12 @@ public sealed class WinFormsShellController : IShellController
     }
 
     /// <summary>
-    /// Associa as ações concretas da camada de apresentação.
+    /// Binds the concrete actions from the presentation layer.
     ///
     /// Args:
-    ///     showSettings: Exibe a janela de configurações.
-    ///     toggleSettings: Alterna a visibilidade da janela.
-    ///     shutdown: Encerra a aplicação.
+    ///     showSettings: Shows the settings window.
+    ///     toggleSettings: Toggles window visibility.
+    ///     shutdown: Shuts down the application.
     /// </summary>
     public void Bind(Action showSettings, Action toggleSettings, Action shutdown)
     {

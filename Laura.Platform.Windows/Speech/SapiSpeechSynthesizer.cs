@@ -21,10 +21,10 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
     private bool _disposed;
 
     /// <summary>
-    /// Inicializa o sintetizador e direciona a saída para o dispositivo padrão.
+    /// Initializes the synthesizer and routes output to the default device.
     ///
     /// Args:
-    ///     logger: Destino dos registros de diagnóstico.
+    ///     logger: Destination for diagnostic logs.
     /// </summary>
     public SapiSpeechSynthesizer(ILogger<SapiSpeechSynthesizer> logger)
     {
@@ -41,7 +41,7 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
     [SuppressMessage(
         "Globalization",
         "CA1304:Specify CultureInfo",
-        Justification = "A interface precisa listar todas as vozes instaladas, não apenas as da cultura ativa.")]
+        Justification = "The interface needs to list every installed voice, not only voices for the active culture.")]
     public IReadOnlyList<VoiceDescriptor> GetAvailableVoices()
     {
         try
@@ -56,7 +56,7 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
         }
         catch (Exception exception) when (exception is InvalidOperationException or PlatformNotSupportedException)
         {
-            _logger.LogError(exception, "Não foi possível listar as vozes instaladas.");
+            _logger.LogError(exception, "Could not list installed voices.");
             return [];
         }
     }
@@ -72,7 +72,7 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
             return;
         }
 
-        // As falas são serializadas: duas locuções simultâneas se atropelariam no SAPI.
+        // Speech is serialized: two simultaneous utterances would collide in SAPI.
         await _speechGate.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
@@ -103,7 +103,7 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
         }
         catch (ObjectDisposedException)
         {
-            // O sintetizador já foi liberado; não há fala a interromper.
+            // The synthesizer has already been disposed; there is no speech to stop.
         }
     }
 
@@ -125,17 +125,17 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
     }
 
     /// <summary>
-    /// Entrega o documento SSML ao SAPI e aguarda o fim da locução.
+    /// Passes the SSML document to SAPI and waits for the utterance to finish.
     ///
-    /// A API do SAPI é baseada em eventos; a ponte para <c>async</c> é feita com um
-    /// <see cref="TaskCompletionSource"/> assinado apenas durante esta locução.
+    /// The SAPI API is event-based; the bridge to <c>async</c> is made with a
+    /// <see cref="TaskCompletionSource"/> subscribed only during this utterance.
     ///
     /// Args:
     ///     ssml: Documento a falar.
-    ///     cancellationToken: Token que interrompe a locução.
+    ///     cancellationToken: Token that interrupts the utterance.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando a locução termina ou é interrompida.
+    ///     A task completed when the utterance finishes or is interrupted.
     /// </summary>
     private async Task SpeakSsmlAsync(string ssml, CancellationToken cancellationToken)
     {
@@ -158,7 +158,7 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
         }
         catch (FormatException exception)
         {
-            // Um texto que produza SSML inválido não pode calar Laura por completo.
+            // Text that produces invalid SSML cannot silence Laura completely.
             _logger.LogError(exception, "O SAPI recusou o documento SSML gerado.");
         }
         finally
@@ -168,7 +168,7 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
     }
 
     /// <summary>
-    /// Aplica ritmo, volume e escolha de voz antes da locução.
+    /// Applies rate, volume, and voice choice before the utterance.
     ///
     /// Args:
     ///     profile: Perfil de voz configurado.
@@ -193,24 +193,24 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
         }
         catch (ArgumentException exception)
         {
-            // A voz salva pode ter sido desinstalada; a voz padrão do sistema atende.
-            _logger.LogWarning(exception, "A voz {Voice} não está disponível.", desiredVoice);
+            // The saved voice may have been uninstalled; the system default voice is acceptable.
+            _logger.LogWarning(exception, "Voice {Voice} is not available.", desiredVoice);
             _selectedVoiceName = null;
         }
     }
 
     /// <summary>
-    /// Escolhe a voz padrão para uma cultura.
+    /// Chooses the default voice for a culture.
     ///
-    /// Laura é uma persona feminina, então uma voz feminina no idioma certo é
-    /// preferida; só depois vem qualquer voz do idioma.
+    /// Laura is a feminine persona, so a feminine voice in the right language is
+    /// preferred; only then does any voice for the language come next.
     ///
     /// Args:
     ///     culture: Cultura desejada.
     ///
     /// Returns:
     ///     O nome da voz escolhida, ou <see langword="null"/> quando nenhuma voz
-    ///     atende a cultura e a escolha deve ficar com o sistema.
+    ///     matches the culture and the choice should stay with the system.
     /// </summary>
     private string? FindPreferredVoiceName(CultureInfo culture)
     {
@@ -228,13 +228,13 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
     }
 
     /// <summary>
-    /// Resolve o nome de cultura recebido, tolerando valores inválidos.
+    /// Resolves the received culture name, tolerating invalid values.
     ///
     /// Args:
     ///     cultureName: Nome da cultura no formato BCP-47.
     ///
     /// Returns:
-    ///     A cultura correspondente, ou a cultura atual quando o nome é inválido.
+    ///     The matching culture, or the current culture when the name is invalid.
     /// </summary>
     private static CultureInfo ResolveCulture(string cultureName)
     {
@@ -249,13 +249,13 @@ public sealed class SapiSpeechSynthesizer : ISpeechSynthesizer
     }
 
     /// <summary>
-    /// Compõe o rótulo de uma voz para exibição na interface.
+    /// Composes a voice label for display in the interface.
     ///
     /// Args:
     ///     info: Metadados da voz instalada.
     ///
     /// Returns:
-    ///     Um rótulo como "Maria (português (Brasil))".
+    ///     A label such as "Maria (Portuguese (Brazil))".
     /// </summary>
     private static string BuildDisplayName(VoiceInfo info) =>
         $"{info.Name} ({info.Culture.NativeName})";

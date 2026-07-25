@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace Laura.Platform.Windows.System;
 
 /// <summary>
-/// Implementação de <see cref="ISystemController"/> sobre a API do Windows.
+/// Implementation of <see cref="ISystemController"/> over the Windows API.
 /// </summary>
 public sealed class WindowsSystemController : ISystemController
 {
@@ -15,7 +15,7 @@ public sealed class WindowsSystemController : ISystemController
     /// Inicializa o controlador.
     ///
     /// Args:
-    ///     logger: Destino dos registros de diagnóstico.
+    ///     logger: Destination for diagnostic logs.
     /// </summary>
     public WindowsSystemController(ILogger<WindowsSystemController> logger)
     {
@@ -28,7 +28,7 @@ public sealed class WindowsSystemController : ISystemController
     {
         if (!NativeMethods.LockWorkStation())
         {
-            _logger.LogWarning("O Windows recusou o pedido de bloqueio da estação de trabalho.");
+            _logger.LogWarning("Windows refused the workstation lock request.");
         }
     }
 
@@ -47,10 +47,10 @@ public sealed class WindowsSystemController : ISystemController
     public void ToggleMute() => PressKey(NativeMethods.VirtualKeyVolumeMute);
 
     /// <summary>
-    /// Simula o pressionar e soltar de uma tecla multimídia.
+    /// Simulates pressing and releasing a multimedia key.
     ///
     /// Args:
-    ///     virtualKey: Código virtual da tecla.
+    ///     virtualKey: Virtual key code.
     /// </summary>
     private static void PressKey(byte virtualKey)
     {

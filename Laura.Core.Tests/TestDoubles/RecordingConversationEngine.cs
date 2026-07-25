@@ -4,14 +4,14 @@ using Laura.Core.Conversation;
 namespace Laura.Core.Tests.TestDoubles;
 
 /// <summary>
-/// Motor generativo de teste que devolve uma resposta fixa e registra as chamadas.
+/// Test generative engine that returns a fixed answer and records calls.
 /// </summary>
 public sealed class RecordingConversationEngine : IConversationEngine
 {
     private readonly string? _answer;
 
     /// <summary>
-    /// Cria o motor de teste.
+    /// Creates the test engine.
     ///
     /// Args:
     ///     isAvailable: Valor devolvido por <see cref="IsAvailable"/>.
@@ -26,7 +26,7 @@ public sealed class RecordingConversationEngine : IConversationEngine
     /// <inheritdoc />
     public bool IsAvailable { get; }
 
-    /// <summary>Obtém quantas vezes o motor foi consultado.</summary>
+    /// <summary>Gets how many times the engine was queried.</summary>
     public int CallCount { get; private set; }
 
     /// <inheritdoc />

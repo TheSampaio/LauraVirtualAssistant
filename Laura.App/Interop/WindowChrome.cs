@@ -3,20 +3,20 @@ using System.Runtime.InteropServices;
 namespace Laura.App.Interop;
 
 /// <summary>
-/// Ajustes na moldura nativa das janelas que o Windows Forms não expõe.
+/// Adjustments to native window chrome that Windows Forms does not expose.
 /// </summary>
 public static partial class WindowChrome
 {
     private const int DwmwaUseImmersiveDarkMode = 20;
 
     /// <summary>
-    /// Pinta a barra de título de uma janela no modo escuro.
+    /// Paints a window title bar in dark mode.
     ///
-    /// Sem isso, a barra de título permaneceria clara sobre uma interface escura,
-    /// quebrando a impressão de um tema único.
+    /// Without this, the title bar would remain bright over a dark interface,
+    /// breaking the impression of a unified theme.
     ///
     /// Args:
-    ///     handle: Identificador nativo da janela.
+    ///     handle: Native window handle.
     ///     enabled: <see langword="true"/> para a barra escura.
     /// </summary>
     public static void UseDarkTitleBar(nint handle, bool enabled = true)
@@ -28,7 +28,7 @@ public static partial class WindowChrome
 
         int value = enabled ? 1 : 0;
 
-        // Silenciosamente ignorado em versões do Windows anteriores ao suporte ao modo escuro.
+        // Silently ignored on Windows versions before dark mode support.
         _ = DwmSetWindowAttribute(handle, DwmwaUseImmersiveDarkMode, ref value, sizeof(int));
     }
 

@@ -3,9 +3,9 @@ using System.Globalization;
 namespace Laura.Core.Conversation;
 
 /// <summary>
-/// Pergunta encaminhada ao modelo generativo, com o contexto mínimo para respondê-la.
+/// Prompt sent to the generative model, with the minimum context needed to answer it.
 /// </summary>
-/// <param name="Prompt">Texto do usuário, na forma original.</param>
-/// <param name="Culture">Idioma esperado na resposta.</param>
-/// <param name="UserDisplayName">Nome pelo qual o modelo pode se dirigir ao usuário.</param>
+/// <param name="Prompt">User text, in its original form.</param>
+/// <param name="Culture">Expected response language.</param>
+/// <param name="UserDisplayName">Name the model may use to address the user.</param>
 public sealed record ConversationTurn(string Prompt, CultureInfo Culture, string UserDisplayName);

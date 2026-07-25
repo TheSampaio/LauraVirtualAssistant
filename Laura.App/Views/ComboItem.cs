@@ -1,17 +1,17 @@
 namespace Laura.App.Views;
 
 /// <summary>
-/// Par de rótulo e valor exibido em uma caixa de seleção.
+/// Display label and value pair shown in a combo box.
 /// </summary>
-/// <param name="Display">Texto mostrado ao usuário.</param>
-/// <param name="Value">Valor associado, devolvido quando o item é escolhido.</param>
+/// <param name="Display">Text shown to the user.</param>
+/// <param name="Value">Associated value, returned when the item is selected.</param>
 public sealed record ComboItem(string Display, string? Value)
 {
     /// <summary>
-    /// Devolve o texto exibido pela caixa de seleção.
+    /// Returns the text displayed by the combo box.
     ///
     /// Returns:
-    ///     O rótulo do item.
+    ///     The item label.
     /// </summary>
     public override string ToString() => Display;
 }

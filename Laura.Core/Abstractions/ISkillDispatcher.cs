@@ -3,20 +3,20 @@ using Laura.Core.Skills;
 namespace Laura.Core.Abstractions;
 
 /// <summary>
-/// Encaminha um comando para a habilidade adequada.
+/// Routes a command to the appropriate skill.
 /// </summary>
 public interface ISkillDispatcher
 {
     /// <summary>
-    /// Encontra a habilidade capaz de atender o comando e a executa.
+    /// Finds the skill able to handle the command and runs it.
     ///
     /// Args:
     ///     request: Comando recebido.
     ///     cancellationToken: Token que aborta o despacho.
     ///
     /// Returns:
-    ///     A resposta da habilidade escolhida, ou <see cref="SkillResponse.NotHandled"/>
-    ///     quando nenhuma reconhece o comando.
+    ///     The chosen skill response, or <see cref="SkillResponse.NotHandled"/>
+    ///     when none recognizes the command.
     /// </summary>
     Task<SkillResponse> DispatchAsync(SkillRequest request, CancellationToken cancellationToken = default);
 }

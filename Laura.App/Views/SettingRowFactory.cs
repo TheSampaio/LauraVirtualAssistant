@@ -6,12 +6,12 @@ using Laura.App.Theming;
 namespace Laura.App.Views;
 
 /// <summary>
-/// Monta as linhas de configuração com aparência e espaçamento uniformes.
+/// Builds settings rows with consistent appearance and spacing.
 ///
-/// Cada cartão é um <see cref="TableLayoutPanel"/> ancorado por <see cref="DockStyle.Fill"/>:
-/// acoplado a uma coluna de 100% na seção, todos ficam exatamente com a mesma largura.
-/// Uma versão anterior usava painéis com dimensionamento automático em largura, o que
-/// encolhia cada cartão até o próprio conteúdo e deixava a lista desalinhada.
+/// Each card is a <see cref="TableLayoutPanel"/> anchored with <see cref="DockStyle.Fill"/>:
+/// attached to a 100% column in the section, they all get exactly the same width.
+/// An earlier version used panels with automatic width sizing, which
+/// shrunk each card to its own content and left the list misaligned.
 /// </summary>
 internal static class SettingRowFactory
 {
@@ -19,13 +19,13 @@ internal static class SettingRowFactory
     private const int InputWidth = 240;
 
     /// <summary>
-    /// Cria um cabeçalho de seção.
+    /// Creates a section header.
     ///
     /// Args:
-    ///     text: Título da seção.
+    ///     text: Section title.
     ///
     /// Returns:
-    ///     Um rótulo estilizado como título.
+    ///     A label styled as a title.
     /// </summary>
     internal static Control Heading(string text) => new Label
     {
@@ -42,12 +42,12 @@ internal static class SettingRowFactory
     /// Cria uma linha com um interruptor liga/desliga.
     ///
     /// Args:
-    ///     title: Título da opção.
-    ///     hint: Descrição auxiliar, ou vazio.
+    ///     title: Option title.
+    ///     hint: Helper description, or empty.
     ///     toggle: Recebe o interruptor criado, para leitura posterior.
     ///
     /// Returns:
-    ///     O cartão da linha.
+    ///     The row card.
     /// </summary>
     internal static Control Toggle(string title, string hint, out ToggleSwitch toggle)
     {
@@ -64,14 +64,14 @@ internal static class SettingRowFactory
     /// Cria uma linha com um controle deslizante e leitura do valor.
     ///
     /// Args:
-    ///     title: Título da opção.
+    ///     title: Option title.
     ///     minimum: Menor valor da faixa.
     ///     maximum: Maior valor da faixa.
-    ///     format: Função que formata o valor exibido ao lado do título.
+    ///     format: Function that formats the value displayed beside the title.
     ///     slider: Recebe o controle deslizante criado.
     ///
     /// Returns:
-    ///     O cartão da linha.
+    ///     The row card.
     /// </summary>
     internal static Control SliderRow(
         string title,
@@ -92,8 +92,8 @@ internal static class SettingRowFactory
 
         var valueLabel = new Label
         {
-            // Lido do próprio controle: usar o mínimo da faixa deixava o rótulo
-            // mostrando "-10" com o cursor no centro até o primeiro arrasto.
+            // Read from the control itself: using the range minimum left the label
+            // showing "-10" with the thumb centered until the first drag.
             Text = format(capturedSlider.Value),
             AutoSize = true,
             UseMnemonic = false,
@@ -116,15 +116,15 @@ internal static class SettingRowFactory
     }
 
     /// <summary>
-    /// Cria uma linha com uma caixa de seleção suspensa.
+    /// Creates a row with a combo box.
     ///
     /// Args:
-    ///     title: Título da opção.
-    ///     hint: Descrição auxiliar, ou vazio.
-    ///     combo: Recebe a caixa de seleção criada.
+    ///     title: Option title.
+    ///     hint: Helper description, or empty.
+    ///     combo: Receives the created combo box.
     ///
     /// Returns:
-    ///     O cartão da linha.
+    ///     The row card.
     /// </summary>
     internal static Control ComboRow(string title, string hint, out ComboBox combo)
     {
@@ -140,15 +140,15 @@ internal static class SettingRowFactory
     }
 
     /// <summary>
-    /// Cria uma linha com uma caixa de texto de linha única.
+    /// Creates a row with a single-line text box.
     ///
     /// Args:
-    ///     title: Título da opção.
-    ///     hint: Descrição auxiliar, ou vazio.
+    ///     title: Option title.
+    ///     hint: Helper description, or empty.
     ///     textBox: Recebe a caixa de texto criada.
     ///
     /// Returns:
-    ///     O cartão da linha.
+    ///     The row card.
     /// </summary>
     internal static Control TextRow(string title, string hint, out TextBox textBox)
     {
@@ -164,16 +164,16 @@ internal static class SettingRowFactory
     }
 
     /// <summary>
-    /// Cria uma linha com uma caixa de texto de várias linhas ocupando a largura toda.
+    /// Creates a row with a multiline text box occupying the full width.
     ///
     /// Args:
-    ///     title: Título da opção.
-    ///     hint: Descrição auxiliar, ou vazio.
+    ///     title: Option title.
+    ///     hint: Helper description, or empty.
     ///     height: Altura da caixa de texto, em pixels.
     ///     textBox: Recebe a caixa de texto criada.
     ///
     /// Returns:
-    ///     O cartão da linha.
+    ///     The row card.
     /// </summary>
     internal static Control MultilineRow(string title, string hint, int height, out TextBox textBox)
     {
@@ -190,10 +190,10 @@ internal static class SettingRowFactory
     }
 
     /// <summary>
-    /// Cria um cartão de duas colunas: texto à esquerda, controle à direita.
+    /// Creates a two-column card: text on the left, control on the right.
     ///
     /// Returns:
-    ///     A grade do cartão, pronta para receber os controles.
+    ///     The card grid, ready to receive controls.
     /// </summary>
     private static TableLayoutPanel CreateSplitCard()
     {
@@ -205,13 +205,13 @@ internal static class SettingRowFactory
     }
 
     /// <summary>
-    /// Cria a grade base de um cartão.
+    /// Creates the base grid for a card.
     ///
     /// Args:
-    ///     columns: Número de colunas.
+    ///     columns: Number of columns.
     ///
     /// Returns:
-    ///     A grade, ocupando toda a largura disponível e crescendo em altura.
+    ///     The grid, occupying all available width and growing in height.
     /// </summary>
     private static TableLayoutPanel CreateCard(int columns) => new()
     {
@@ -226,11 +226,11 @@ internal static class SettingRowFactory
     };
 
     /// <summary>
-    /// Empilha título e dica em uma coluna, alinhada à esquerda da célula.
+    /// Stacks title and hint in a column, left-aligned in the cell.
     ///
     /// Args:
-    ///     title: Título da opção.
-    ///     hint: Descrição auxiliar; quando vazia, nenhuma linha extra é criada.
+    ///     title: Option title.
+    ///     hint: Helper description; when empty, no extra line is created.
     ///
     /// Returns:
     ///     Um painel com o texto empilhado.
@@ -256,7 +256,7 @@ internal static class SettingRowFactory
             {
                 Text = hint,
                 AutoSize = true,
-                // Sem isto, o "&" de textos como "Time & language" é interpretado
+                // Without this, "&" in text such as "Time & language" is interpreted
                 // como marcador de tecla de acesso e desaparece da tela.
                 UseMnemonic = false,
                 MaximumSize = new Size(HintMaximumWidth, 0),
@@ -270,13 +270,13 @@ internal static class SettingRowFactory
     }
 
     /// <summary>
-    /// Cria o rótulo de título de uma opção.
+    /// Creates an option title label.
     ///
     /// Args:
-    ///     title: Texto do título.
+    ///     title: Title text.
     ///
     /// Returns:
-    ///     Um rótulo estilizado, alinhado à esquerda e centrado verticalmente.
+    ///     A styled label, left-aligned and vertically centered.
     /// </summary>
     private static Label CreateTitleLabel(string title) => new()
     {

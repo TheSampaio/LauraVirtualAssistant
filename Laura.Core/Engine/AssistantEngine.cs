@@ -10,13 +10,13 @@ using Microsoft.Extensions.Logging;
 namespace Laura.Core.Engine;
 
 /// <summary>
-/// Orquestra o ciclo completo da assistente: escutar, entender, agir e responder.
+/// Orchestrates the assistant's full cycle: listen, understand, act, and answer.
 ///
-/// Todo o trabalho acontece em um único laço de consumo alimentado por uma fila.
+/// All work happens in a single consumer loop fed by a queue.
 /// Escolha deliberada: os eventos do reconhecedor chegam em threads do motor de
-/// áudio e a interface chama o motor pela thread de UI — enfileirar em vez de
-/// executar no chamador mantém as duas livres enquanto Laura ouve ou fala, e
-/// dispensa travas para proteger o estado, já que só o laço o modifica.
+/// audio and the interface calls the engine from the UI thread - enqueuing instead of
+/// running on the caller keeps both free while Laura listens or speaks, and
+/// avoids locks for protecting state, since only the loop modifies it.
 /// </summary>
 public sealed class AssistantEngine : IAssistantEngine
 {
@@ -49,18 +49,18 @@ public sealed class AssistantEngine : IAssistantEngine
     private int _state = (int)AssistantState.Stopped;
 
     /// <summary>
-    /// Inicializa o motor com suas dependências.
+    /// Initializes the engine with its dependencies.
     ///
     /// Args:
     ///     recognizer: Motor de reconhecimento de fala.
-    ///     synthesizer: Motor de síntese de voz.
+    ///     synthesizer: Speech synthesis engine.
     ///     dispatcher: Despachante de habilidades.
-    ///     settings: Configurações vigentes e suas notificações de mudança.
-    ///     localizer: Fonte dos textos no idioma ativo.
-    ///     shell: Controle da camada visual, usado para encerrar a aplicação.
-    ///     greetingComposer: Compositor da saudação de abertura.
+    ///     settings: Current settings and their change notifications.
+    ///     localizer: Source of text in the active language.
+    ///     shell: Visual layer control, used to shut down the application.
+    ///     greetingComposer: Opening greeting composer.
     ///     clock: Fonte de data e hora.
-    ///     logger: Destino dos registros de diagnóstico.
+    ///     logger: Destination for diagnostic logs.
     /// </summary>
     public AssistantEngine(
         ISpeechRecognizer recognizer,
@@ -116,8 +116,8 @@ public sealed class AssistantEngine : IAssistantEngine
         LauraSettings settings = _settings.Current;
         _localizer.SetCulture(settings.ResolveCulture());
 
-        // A saudação é enfileirada antes das configurações de propósito: a primeira
-        // coisa que Laura diz tem de ser um cumprimento, nunca um aviso técnico.
+        // The greeting is intentionally queued before settings: the first
+        // thing Laura says must be a greeting, never a technical warning.
         if (settings.GreetOnStartup)
         {
             Enqueue(new SpeechRequested(_greetingComposer.ComposeStartupBriefing()));
@@ -127,7 +127,7 @@ public sealed class AssistantEngine : IAssistantEngine
             completion => new SettingsApplied(settings) { Completion = completion },
             cancellationToken).ConfigureAwait(false);
 
-        _logger.LogInformation("Motor da assistente iniciado.");
+        _logger.LogInformation("Assistant engine started.");
     }
 
     /// <inheritdoc />
@@ -151,7 +151,7 @@ public sealed class AssistantEngine : IAssistantEngine
         }
         catch (OperationCanceledException)
         {
-            // O encerramento não deve travar por causa do laço de processamento.
+            // Shutdown must not hang because of the processing loop.
         }
 
         _worker = null;
@@ -163,7 +163,7 @@ public sealed class AssistantEngine : IAssistantEngine
         }
 
         SetState(AssistantState.Stopped);
-        _logger.LogInformation("Motor da assistente parado.");
+        _logger.LogInformation("Assistant engine stopped.");
     }
 
     /// <inheritdoc />
@@ -193,16 +193,16 @@ public sealed class AssistantEngine : IAssistantEngine
         _lifetime.Dispose();
     }
 
-    // === Laço de processamento ===
+    // === Processing Loop ===
 
     /// <summary>
-    /// Consome a fila de mensagens até o motor ser parado.
+    /// Consumes the message queue until the engine is stopped.
     ///
     /// Args:
-    ///     cancellationToken: Token que encerra o laço.
+    ///     cancellationToken: Token that ends the loop.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando o laço termina.
+    ///     A task completed when the loop ends.
     /// </summary>
     private async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -219,19 +219,19 @@ public sealed class AssistantEngine : IAssistantEngine
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "O laço de processamento da assistente terminou com falha.");
+            _logger.LogError(exception, "The assistant processing loop ended with a failure.");
         }
     }
 
     /// <summary>
-    /// Trata uma mensagem da fila, garantindo que quem espera por ela seja liberado.
+    /// Handles a queue message, ensuring anyone waiting for it is released.
     ///
     /// Args:
-    ///     message: Mensagem a tratar.
+    ///     message: Message to handle.
     ///     cancellationToken: Token que aborta o tratamento.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando a mensagem foi tratada.
+    ///     A task completed when the message has been handled.
     /// </summary>
     private async Task HandleAsync(EngineMessage message, CancellationToken cancellationToken)
     {
@@ -264,7 +264,7 @@ public sealed class AssistantEngine : IAssistantEngine
                     break;
 
                 default:
-                    _logger.LogWarning("Mensagem desconhecida na fila: {Message}.", message.GetType().Name);
+                    _logger.LogWarning("Unknown message in queue: {Message}.", message.GetType().Name);
                     break;
             }
         }
@@ -283,14 +283,14 @@ public sealed class AssistantEngine : IAssistantEngine
     }
 
     /// <summary>
-    /// Decide o que fazer com uma transcrição recebida do microfone.
+    /// Decides what to do with a transcription received from the microphone.
     ///
     /// Args:
-    ///     result: Transcrição e sua confiança.
+    ///     result: Transcription and its confidence.
     ///     cancellationToken: Token que aborta o tratamento.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando a transcrição foi processada.
+    ///     A task completed when the transcription has been processed.
     /// </summary>
     private async Task HandleSpeechHeardAsync(RecognitionResult result, CancellationToken cancellationToken)
     {
@@ -299,7 +299,7 @@ public sealed class AssistantEngine : IAssistantEngine
         if (result.Confidence < options.MinimumConfidence)
         {
             _logger.LogDebug(
-                "Transcrição descartada por confiança baixa ({Confidence:P0}): \"{Text}\".",
+                "Transcription discarded for low confidence ({Confidence:P0}): \"{Text}\".",
                 result.Confidence,
                 result.Text);
 
@@ -317,7 +317,7 @@ public sealed class AssistantEngine : IAssistantEngine
 
         if (State is AssistantState.ListeningForCommand)
         {
-            // Repetir o gatilho durante a escuta apenas renova a janela de espera.
+            // Repeating the trigger while listening only renews the waiting window.
             string command = wakeDetected ? remainder : text;
 
             if (command.Length == 0)
@@ -349,14 +349,14 @@ public sealed class AssistantEngine : IAssistantEngine
     }
 
     /// <summary>
-    /// Abre a janela em que Laura espera o comando após ser despertada.
+    /// Opens the window where Laura waits for the command after waking.
     ///
     /// Args:
     ///     speakAcknowledgement: <see langword="true"/> para responder "Sim?" antes de escutar.
-    ///     cancellationToken: Token que aborta a operação.
+    ///     cancellationToken: Token that aborts the operation.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando o modo de comando está ativo.
+    ///     A task completed when command mode is active.
     /// </summary>
     private async Task BeginListeningWindowAsync(bool speakAcknowledgement, CancellationToken cancellationToken)
     {
@@ -376,14 +376,14 @@ public sealed class AssistantEngine : IAssistantEngine
     }
 
     /// <summary>
-    /// Fecha a janela de escuta quando o usuário não disse nada a tempo.
+    /// Closes the listening window when the user did not say anything in time.
     ///
     /// Args:
-    ///     epoch: Identificador da janela que expirou.
-    ///     cancellationToken: Token que aborta a operação.
+    ///     epoch: Identifier of the expired window.
+    ///     cancellationToken: Token that aborts the operation.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando o estado voltou à espera do gatilho.
+    ///     A task completed when the state returned to waiting for the trigger.
     /// </summary>
     private async Task HandleListeningExpiredAsync(long epoch, CancellationToken cancellationToken)
     {
@@ -406,16 +406,16 @@ public sealed class AssistantEngine : IAssistantEngine
     }
 
     /// <summary>
-    /// Despacha um comando e fala a resposta.
+    /// Dispatches a command and speaks the response.
     ///
     /// Args:
-    ///     text: Texto do comando, já sem a palavra de ativação.
-    ///     confidence: Confiança do reconhecedor, de 0.0 a 1.0.
-    ///     source: Origem do comando.
-    ///     cancellationToken: Token que aborta a execução.
+    ///     text: Command text, already without the wake word.
+    ///     confidence: Recognizer confidence, from 0.0 to 1.0.
+    ///     source: Command source.
+    ///     cancellationToken: Token that aborts execution.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando a resposta terminou de ser falada.
+    ///     A task completed when the response has finished being spoken.
     /// </summary>
     private async Task ExecuteCommandAsync(
         string text,
@@ -485,7 +485,7 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <summary>
     /// Fala um texto, suspendendo a escuta enquanto isso.
     ///
-    /// Sem essa suspensão o reconhecedor transcreveria a própria voz de Laura e ela
+    /// Without this suspension the recognizer would transcribe Laura's own voice and she
     /// responderia a si mesma.
     ///
     /// Args:
@@ -493,7 +493,7 @@ public sealed class AssistantEngine : IAssistantEngine
     ///     cancellationToken: Token que interrompe a fala.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando a fala termina e a escuta é restaurada.
+    ///     A task completed when speech ends and listening is restored.
     /// </summary>
     private async Task SpeakInternalAsync(string text, CancellationToken cancellationToken)
     {
@@ -621,13 +621,13 @@ public sealed class AssistantEngine : IAssistantEngine
     }
 
     /// <summary>
-    /// Volta a escutar apenas a palavra de ativação, invalidando qualquer janela aberta.
+    /// Returns to listening only for the wake word, invalidating any open window.
     ///
     /// Args:
-    ///     cancellationToken: Token que aborta a operação.
+    ///     cancellationToken: Token that aborts the operation.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando o estado de repouso foi restaurado.
+    ///     A task completed when idle state has been restored.
     /// </summary>
     private async Task ReturnToIdleAsync(CancellationToken cancellationToken)
     {
@@ -650,15 +650,15 @@ public sealed class AssistantEngine : IAssistantEngine
     }
 
     /// <summary>
-    /// Troca o modo do reconhecedor quando ele está ativo.
+    /// Changes the recognizer mode when it is active.
     ///
     /// Args:
     ///     mode: Modo desejado.
     ///     cancellationToken: Token que aborta a troca.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando o modo foi aplicado, ou imediatamente
-    ///     quando não há reconhecedor ativo.
+    ///     A task completed when the mode has been applied, or immediately
+    ///     when there is no active recognizer.
     /// </summary>
     private Task SetRecognizerModeAsync(RecognitionMode mode, CancellationToken cancellationToken) =>
         _recognizerRunning
@@ -666,14 +666,14 @@ public sealed class AssistantEngine : IAssistantEngine
             : Task.CompletedTask;
 
     /// <summary>
-    /// Agenda o fim da janela de escuta.
+    /// Schedules the end of the listening window.
     ///
     /// O aviso volta pela fila em vez de agir direto, para que o estado continue
-    /// sendo alterado por uma única thread.
+    /// being changed by a single thread.
     ///
     /// Args:
-    ///     epoch: Identificador da janela agendada.
-    ///     timeout: Duração da janela.
+    ///     epoch: Identifier of the scheduled window.
+    ///     timeout: Window duration.
     /// </summary>
     private void ScheduleListeningTimeout(long epoch, TimeSpan timeout)
     {
@@ -685,7 +685,7 @@ public sealed class AssistantEngine : IAssistantEngine
     }
 
     /// <summary>
-    /// Publica um novo estado, ignorando repetições.
+    /// Publishes a new state, ignoring repeats.
     ///
     /// Args:
     ///     state: Estado a publicar.
@@ -703,10 +703,10 @@ public sealed class AssistantEngine : IAssistantEngine
     // === Entrada de mensagens ===
 
     /// <summary>
-    /// Enfileira uma mensagem, liberando quem a aguarda caso a fila já esteja fechada.
+    /// Enqueues a message, releasing anyone waiting if the queue is already closed.
     ///
     /// Args:
-    ///     message: Mensagem a enfileirar.
+    ///     message: Message to enqueue.
     /// </summary>
     private void Enqueue(EngineMessage message)
     {
@@ -717,14 +717,14 @@ public sealed class AssistantEngine : IAssistantEngine
     }
 
     /// <summary>
-    /// Enfileira uma mensagem e aguarda o laço processá-la.
+    /// Enqueues a message and waits for the loop to process it.
     ///
     /// Args:
-    ///     factory: Cria a mensagem já associada ao sinalizador de conclusão.
+    ///     factory: Creates the message already associated with the completion signal.
     ///     cancellationToken: Token que aborta a espera.
     ///
     /// Returns:
-    ///     Uma tarefa concluída quando a mensagem foi tratada.
+    ///     A task completed when the message has been handled.
     /// </summary>
     private Task EnqueueAndWaitAsync(
         Func<TaskCompletionSource, EngineMessage> factory,
@@ -737,23 +737,23 @@ public sealed class AssistantEngine : IAssistantEngine
     }
 
     /// <summary>
-    /// Repassa uma transcrição do reconhecedor para a fila.
+    /// Forwards a recognizer transcription to the queue.
     ///
-    /// Retorna de imediato: bloquear aqui seguraria a thread de áudio do motor de fala.
+    /// Returns immediately: blocking here would hold the speech engine audio thread.
     ///
     /// Args:
     ///     sender: Reconhecedor que emitiu o evento.
-    ///     result: Transcrição recebida.
+    ///     result: Received transcription.
     /// </summary>
     private void OnSpeechRecognized(object? sender, RecognitionResult result) =>
         Enqueue(new SpeechHeard(result));
 
     /// <summary>
-    /// Repassa uma mudança de configuração para a fila.
+    /// Forwards a settings change to the queue.
     ///
     /// Args:
-    ///     sender: Serviço de configurações.
-    ///     settings: Configurações já vigentes.
+    ///     sender: Settings service.
+    ///     settings: Already-current settings.
     /// </summary>
     private void OnSettingsChanged(object? sender, LauraSettings settings) =>
         Enqueue(new SettingsApplied(settings));
@@ -766,13 +766,13 @@ public sealed class AssistantEngine : IAssistantEngine
     private abstract record EngineMessage
     {
         /// <summary>
-        /// Obtém o sinalizador concluído após o tratamento, quando há quem aguarde
-        /// a mensagem. Mensagens disparadas e esquecidas o deixam nulo.
+        /// Gets the signal completed after handling, when someone is waiting for
+        /// the message. Fire-and-forget messages leave it null.
         /// </summary>
         public TaskCompletionSource? Completion { get; init; }
     }
 
-    /// <summary>Transcrição vinda do microfone.</summary>
+    /// <summary>Transcription from the microphone.</summary>
     private sealed record SpeechHeard(RecognitionResult Result) : EngineMessage;
 
     /// <summary>Comando enviado em texto pela interface.</summary>
@@ -781,9 +781,9 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <summary>Pedido de fala avulso.</summary>
     private sealed record SpeechRequested(string Text) : EngineMessage;
 
-    /// <summary>Aviso de que a janela de escuta terminou.</summary>
+    /// <summary>Notice that the listening window ended.</summary>
     private sealed record ListeningExpired(long Epoch) : EngineMessage;
 
-    /// <summary>Configurações a aplicar ao reconhecedor e ao idioma.</summary>
+    /// <summary>Settings to apply to the recognizer and language.</summary>
     private sealed record SettingsApplied(LauraSettings Settings) : EngineMessage;
 }

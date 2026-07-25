@@ -11,13 +11,13 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!--
-      CA1848: delegados de LoggerMessage rendem em serviços de alta vazão; aqui
-              custariam mais ruído do que desempenho.
-      CA1716: nomes reservados só atrapalhariam consumidores em outras linguagens
-              .NET, cenário que esta aplicação não tem.
+      CA1848: LoggerMessage delegates pay off in high-throughput services; here
+              they would cost more noise than performance.
+      CA1716: reserved names would only hinder consumers in other
+              .NET languages, a scenario this application does not have.
     -->
     <NoWarn>$(NoWarn);CA1848;CA1716</NoWarn>
-    <Description>Domínio, abstrações e regras da assistente Laura, livres de dependências de plataforma.</Description>
+    <Description>Domain, abstractions, and rules for the Laura assistant, free of platform dependencies.</Description>
   </PropertyGroup>
 
   <ItemGroup>

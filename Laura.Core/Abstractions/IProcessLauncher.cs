@@ -1,28 +1,28 @@
 namespace Laura.Core.Abstractions;
 
 /// <summary>
-/// Abre programas e endereços externos em nome da assistente.
+/// Opens programs and external addresses on behalf of the assistant.
 /// </summary>
 public interface IProcessLauncher
 {
     /// <summary>
-    /// Abre um endereço no aplicativo padrão do sistema.
+    /// Opens an address in the system default application.
     ///
     /// Args:
-    ///     uri: Endereço a abrir; aceita esquemas <c>http</c>, <c>https</c> e
+    ///     uri: Address to open; accepts <c>http</c>, <c>https</c>, and
     ///     protocolos registrados como <c>ms-settings:</c>.
     ///
     /// Returns:
-    ///     <see langword="true"/> quando o sistema aceitou abrir o endereço.
+    ///     <see langword="true"/> when the system accepted opening the address.
     /// </summary>
     bool TryOpen(Uri uri);
 
     /// <summary>
-    /// Inicia um executável.
+    /// Starts an executable.
     ///
     /// Args:
-    ///     fileName: Nome ou caminho do executável.
-    ///     arguments: Argumentos de linha de comando, ou <see langword="null"/>.
+    ///     fileName: Executable name or path.
+    ///     arguments: Command-line arguments, or <see langword="null"/>.
     ///
     /// Returns:
     ///     <see langword="true"/> quando o processo foi iniciado.

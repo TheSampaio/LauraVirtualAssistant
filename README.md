@@ -1,74 +1,75 @@
-# Laura — Assistente Virtual
+# Laura - Virtual Assistant
 
-Laura é uma assistente pessoal para Windows inspirada no Jarvis, em uma versão
-feminina. Ela mora na bandeja do sistema, atende por voz ao comando **"Ok, Laura"**
-ou **"Hey Laura"** e cuida de tarefas simples do dia a dia — dizer as horas e a data,
-pesquisar na web, abrir aplicativos, ajustar o volume e bloquear o computador.
+Laura is a personal assistant for Windows inspired by Jarvis, in a feminine version.
+She lives in the system tray, responds by voice to **"Ok, Laura"** or
+**"Hey Laura"**, and handles simple everyday tasks: telling the time and date,
+searching the web, opening applications, adjusting the volume, and locking the
+computer.
 
-A interface fica sempre escondida e aparece com **Alt + L**, servindo para
-trocar a voz, o idioma, o tom e as demais preferências. Toda a escuta e fala acontece
-fora da thread da interface, então a janela nunca trava enquanto Laura ouve ou responde.
+The interface stays hidden and appears with **Alt + L**, where you can change the
+voice, language, tone, and other preferences. All listening and speaking happens
+off the UI thread, so the window never freezes while Laura listens or answers.
 
-## Requisitos
+## Requirements
 
-- Windows 10 ou 11
-- [.NET 9 SDK](https://dotnet.microsoft.com/download) para compilar
-- Um microfone e o pacote de fala do idioma desejado
-  (Configurações do Windows › Hora e idioma › Fala) para os comandos de voz
+- Windows 10 or 11
+- [.NET 9 SDK](https://dotnet.microsoft.com/download) to build
+- A microphone and the speech pack for the desired language
+  (Windows Settings > Time & language > Speech) for voice commands
 
-Sem microfone ou sem reconhecedor instalado, Laura continua utilizável apenas pela
-janela de configurações.
+Without a microphone or an installed recognizer, Laura remains usable through the
+settings window only.
 
-## Como executar
+## How to Run
 
 ```powershell
 dotnet run --project Laura.App
 ```
 
-Ou use os scripts em `Build/`:
+Or use the scripts in `Build/`:
 
-- `Build/Run.bat` — compila e executa em modo de depuração
-- `Build/Publish.bat` — gera um `Laura.exe` autocontido em `_Output/Publish`
+- `Build/Run.bat` - builds and runs in debug mode
+- `Build/Publish.bat` - creates a self-contained `Laura.exe` in `_Output/Publish`
 
-## Arquitetura
+## Architecture
 
-A solução separa domínio, plataforma e apresentação para manter as regras da
-assistente independentes de Windows e de interface gráfica.
+The solution separates domain, platform, and presentation so the assistant's rules
+stay independent from Windows and the graphical interface.
 
-| Projeto | Responsabilidade |
+| Project | Responsibility |
 | --- | --- |
-| `Laura.Core` | Domínio puro: configurações, localização, habilidades e o motor da assistente. Sem dependências de plataforma. |
-| `Laura.Platform.Windows` | Adaptadores Windows: síntese e reconhecimento de fala (SAPI), controle de volume, inicialização automática. |
-| `Laura.App` | Aplicação de bandeja e janela de configurações em Windows Forms. |
-| `Laura.Core.Tests` | Testes de unidade do domínio. |
+| `Laura.Core` | Pure domain: settings, localization, skills, and the assistant engine. No platform dependencies. |
+| `Laura.Platform.Windows` | Windows adapters: speech synthesis and recognition (SAPI), volume control, automatic startup. |
+| `Laura.App` | Tray application and settings window in Windows Forms. |
+| `Laura.Core.Tests` | Domain unit tests. |
 
-O motor conversa com o mundo apenas por interfaces (`ISpeechSynthesizer`,
-`ISpeechRecognizer`, `ISkill`, `ISettingsService`, …), e a raiz de composição em
-[`ServiceConfiguration`](Laura.App/Composition/ServiceConfiguration.cs) liga cada
-abstração à sua implementação.
+The engine talks to the outside world only through interfaces (`ISpeechSynthesizer`,
+`ISpeechRecognizer`, `ISkill`, `ISettingsService`, ...), and the composition root in
+[`ServiceConfiguration`](Laura.App/Composition/ServiceConfiguration.cs) connects each
+abstraction to its implementation.
 
-### Habilidades
+### Skills
 
-Cada capacidade é uma implementação de `ISkill` que decide sozinha se um comando lhe
-pertence. Acrescentar uma capacidade nova é registrar mais uma habilidade, sem tocar
-no motor nem nas existentes. As frases que ativam cada habilidade vivem nos arquivos
-de idioma, não no código.
+Each capability is an `ISkill` implementation that decides whether a command belongs
+to it. Adding a new capability means registering one more skill without touching the
+engine or the existing skills. The phrases that trigger each skill live in language
+files, not in code.
 
-### Idiomas
+### Languages
 
-Os textos e gatilhos ficam em `Laura.Core/Localization/Locales/<cultura>.json`.
-Traduzir Laura ou adicionar uma forma de pedir algo é editar um arquivo de idioma.
-Já vêm português (Brasil) e inglês (EUA).
+Text and triggers live in `Laura.Core/Localization/Locales/<culture>.json`.
+Translating Laura or adding another way to ask for something means editing a language
+file. Portuguese (Brazil) and English (United States) are included.
 
-### Modo generativo (planejado)
+### Generative Mode (Planned)
 
-O motor já prevê um complemento opcional de IA generativa: comandos que nenhuma
-habilidade reconhece podem, no futuro, ser encaminhados a um modelo local como o
-[Ollama](https://ollama.com/) através da interface `IConversationEngine`. Hoje o
-registro padrão é inerte (`NullConversationEngine`) — **Laura funciona inteiramente
-offline**, e a IA generativa será apenas um modo extra a ligar nas configurações.
+The engine already anticipates an optional generative AI add-on: commands no skill
+recognizes may later be forwarded to a local model such as
+[Ollama](https://ollama.com/) through the `IConversationEngine` interface. Today the
+default registration is inert (`NullConversationEngine`) - **Laura works entirely
+offline**, and generative AI will only be an extra mode to enable in settings.
 
-## Testes
+## Tests
 
 ```powershell
 dotnet test
