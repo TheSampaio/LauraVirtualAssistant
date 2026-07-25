@@ -1,10 +1,16 @@
-# Directories
+# Diretórios de IDE
 .vs/
 .vscode/
-__pycache__/
-_Output/
+.idea/
 
-# Files
+# Saída de build
+_Output/
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+
+# Arquivos de usuário e temporários
 *.user
-*.spec
-*.pyc
+*.suo
+*.cache

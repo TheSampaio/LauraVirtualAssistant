@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- Matches Laura.Platform.Windows so the WinRT speech APIs flow through. -->
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <RootNamespace>Laura.App</RootNamespace>
+    <AssemblyName>Laura</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>..\Data\icon.ico</ApplicationIcon>
+    <!-- Exigido pelo gerador de LibraryImport usado na hotkey global e na moldura escura. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!--
+      WFO1000/CA1859: regras voltadas ao designer visual e à micro-otimização de
+      construtores de UI; esta interface é montada inteiramente em código.
+    -->
+    <NoWarn>$(NoWarn);CA1848;CA1716;WFO1000;CA1859</NoWarn>
+    <Description>Aplicação de bandeja e interface de configuração da assistente Laura.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Laura.Core\Laura.Core.csproj" />
+    <ProjectReference Include="..\Laura.Platform.Windows\Laura.Platform.Windows.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\Data\icon.ico" Link="Assets\icon.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

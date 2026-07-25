@@ -1,0 +1,170 @@
+{
+  "assistant.acknowledge": [ "Sim?", "Pois não?", "Estou ouvindo.", "Diga." ],
+  "assistant.notUnderstood": [
+    "Desculpe, não entendi.",
+    "Não peguei essa. Pode repetir?",
+    "Isso ainda está fora do meu alcance."
+  ],
+  "assistant.heardNothing": [
+    "Não ouvi nada. Continuo por aqui quando precisar.",
+    "Não veio nada. É só me chamar quando estiver pronto.",
+    "Vou continuar atenta — me chame de novo quando quiser."
+  ],
+  "assistant.settingsSaved": [
+    "Pronto, suas configurações foram salvas.",
+    "Tudo certo — salvei suas preferências.",
+    "Salvo. Está tudo atualizado.",
+    "Feito, alterações aplicadas."
+  ],
+  "assistant.recognitionUnavailable": "Não consegui acessar o microfone. Vou ficar disponível apenas pela janela de configurações.",
+  "assistant.skillFailed": "Tentei, mas algo deu errado por aqui.",
+
+  "greeting.morning": [ "Bom dia, {0}.", "Bom dia, {0}. Pronta quando você estiver." ],
+  "greeting.afternoon": [ "Boa tarde, {0}.", "Boa tarde, {0}. Em que posso ajudar?" ],
+  "greeting.evening": [ "Boa noite, {0}.", "Boa noite, {0}. Estou por aqui." ],
+  "greeting.summary": "Hoje é {0:dddd, d 'de' MMMM 'de' yyyy}, e são {0:HH:mm}.",
+  "greeting.hourlyChime": "Agora são {0:HH} horas.",
+  "greeting.midnight": "É meia-noite.",
+  "greeting.noon": "É meio-dia.",
+
+  "phrases.time": [
+    "que horas sao", "que horas e", "me diz as horas", "qual e a hora",
+    "tem horas", "que horas voce tem", "horas", "a hora"
+  ],
+  "skill.time.response": [ "São {0:HH:mm}.", "Agora são {0:HH:mm}." ],
+
+  "phrases.date": [
+    "que dia e hoje", "qual e a data", "que data e hoje", "data de hoje",
+    "qual a data de hoje", "que dia da semana e hoje", "em que dia estamos"
+  ],
+  "skill.date.response": "Hoje é {0:dddd, d 'de' MMMM 'de' yyyy}.",
+
+  "phrases.weather": [
+    "como esta o tempo", "como esta o clima", "qual a previsao do tempo",
+    "vai chover hoje", "esta calor la fora", "esta frio la fora",
+    "como esta o tempo hoje", "como esta o tempo agora", "tempo", "clima"
+  ],
+  "skill.weather.response": [
+    "Está {0} e {1} em {3}, com sensação de {2}.",
+    "Agora em {3} está {0}, {1}, e a sensação é de {2}."
+  ],
+  "skill.weather.unavailable": "Não consegui acessar o serviço de clima agora.",
+
+  "phrases.greeting": [ "bom dia", "boa tarde", "boa noite", "oi", "ola", "tudo bem" ],
+  "skill.greeting.response": [ "Olá, {0}.", "Oi, {0}. Tudo certo por aqui." ],
+
+  "phrases.help": [ "o que voce sabe fazer", "o que voce pode fazer", "me ajuda", "ajuda", "quais sao seus comandos" ],
+  "skill.help.response": "Eu digo as horas, a data e o clima, pesquiso na web, abro aplicativos, ajusto o volume, bloqueio o computador e abro minhas configurações. É só começar com Ok Laura.",
+
+  "phrases.farewell": [ "tchau laura", "ate logo", "obrigado laura", "pode descansar", "desligar laura" ],
+  "skill.farewell.response": [ "Até logo, {0}.", "Estarei por aqui se precisar." ],
+
+  "phrases.search": [ "pesquise por", "pesquisa por", "pesquise", "procure por", "procura por", "busque por", "pesquisar" ],
+  "skill.search.response": "Pesquisando por {0}.",
+  "skill.search.missingQuery": "O que você quer que eu pesquise?",
+
+  "phrases.launch": [ "abrir", "abra", "abre", "inicie", "iniciar", "executar" ],
+  "skill.launch.response": "Abrindo {0}.",
+  "skill.launch.notFound": "Não sei abrir {0}.",
+
+  "phrases.lock": [ "bloquear o computador", "bloqueie o computador", "bloquear computador", "trancar o computador" ],
+  "skill.lock.response": "Bloqueando o computador.",
+
+  "phrases.volumeUp": [ "aumentar o volume", "aumente o volume", "aumentar volume", "volume mais alto", "sobe o volume" ],
+  "phrases.volumeDown": [ "diminuir o volume", "diminua o volume", "abaixar o volume", "volume mais baixo", "abaixa o volume" ],
+  "phrases.volumeMute": [ "mudo", "silenciar", "sem som", "tirar o som", "mutar" ],
+  "skill.volume.response": [ "Pronto.", "Feito." ],
+
+  "phrases.settings": [ "abrir configuracoes", "abra as configuracoes", "suas configuracoes", "painel de configuracoes", "abrir painel" ],
+  "skill.settings.response": "Abrindo minhas configurações.",
+
+  "application.notepad": [ "bloco de notas", "notepad", "editor de texto" ],
+  "application.calculator": [ "calculadora", "calc" ],
+  "application.explorer": [ "explorador de arquivos", "explorador", "meus arquivos", "gerenciador de arquivos" ],
+  "application.taskManager": [ "gerenciador de tarefas", "task manager" ],
+  "application.paint": [ "paint" ],
+  "application.terminal": [ "terminal", "prompt de comando", "powershell" ],
+  "application.browser": [ "navegador", "internet", "browser" ],
+  "application.windowsSettings": [ "configuracoes do windows", "configuracoes do sistema", "painel de controle" ],
+
+  "ai.unavailable": "O modo generativo não respondeu agora.",
+
+  "ui.window.title": "Laura Virtual Assistant",
+  "ui.window.subtitle": "Ajuste como eu falo, escuto e me comporto.",
+  "ui.tab.general": "Geral",
+  "ui.tab.user": "Usuário",
+  "ui.tab.voice": "Voz",
+  "ui.tab.recognition": "Escuta",
+  "ui.tab.ai": "IA generativa",
+
+  "ui.voice.section": "Timbre",
+  "ui.voice.voice": "Voz",
+  "ui.voice.automatic": "Automática (recomendada)",
+  "ui.voice.voiceHint": "Vozes instaladas no Windows. Instale novas em Configurações do Windows › Hora e idioma › Fala.",
+  "ui.voice.rate": "Velocidade",
+  "ui.voice.pitch": "Tom",
+  "ui.voice.volume": "Volume",
+  "ui.voice.preview": "Testar voz",
+  "ui.voice.previewText": "Olá, eu sou a Laura. É assim que eu soo com estes ajustes.",
+
+  "ui.recognition.section": "Palavra de ativação",
+  "ui.recognition.microphone": "Microfone",
+  "ui.recognition.microphoneHint": "Qual dispositivo de entrada eu escuto. O padrão do sistema segue a escolha do Windows.",
+  "ui.recognition.noise": "Redução de ruído",
+  "ui.recognition.noiseHint": "Pede ao dispositivo de captura a supressão de ruído e o ganho automático embutidos.",
+  "ui.recognition.enabled": "Escutar pelo microfone",
+  "ui.recognition.enabledHint": "Desligado, eu continuo funcionando por esta janela.",
+  "ui.recognition.wakePhrases": "Frases de ativação",
+  "ui.recognition.wakePhrasesHint": "Uma por linha. Exemplo: Ok Laura",
+  "ui.recognition.confidence": "Confiança mínima",
+  "ui.recognition.confidenceHint": "Mais alto, menos ativações acidentais. Mais baixo, aceito fala mais baixa ou menos clara.",
+  "ui.recognition.timeout": "Tempo de escuta do comando",
+  "ui.recognition.seconds": "{0} s",
+  "ui.recognition.inlineCommand": "Aceitar o comando junto do gatilho",
+  "ui.recognition.inlineCommandHint": "Permite dizer tudo de uma vez: “Ok Laura, que horas são”.",
+
+  "ui.general.section": "Comportamento",
+  "ui.general.language": "Idioma",
+  "ui.general.languageHint": "Define o idioma em que eu falo e entendo comandos.",
+  "ui.general.greetOnStartup": "Cumprimentar ao iniciar",
+  "ui.general.announceHourly": "Anunciar as horas cheias",
+  "ui.general.startWithWindows": "Iniciar junto com o Windows",
+
+  "ui.user.section": "Sobre você",
+  "ui.user.nickname": "Como devo te chamar?",
+  "ui.user.nicknameHint": "Deixe em branco para usar o nome da sua conta do Windows ({0}).",
+
+  "ui.ai.section": "Modo generativo (opcional)",
+  "ui.ai.enabled": "Responder com IA generativa quando eu não reconhecer o comando",
+  "ui.ai.hint": "Recurso extra. Desligado, eu funciono totalmente offline.",
+  "ui.ai.endpoint": "Endereço do serviço",
+  "ui.ai.endpointHint": "Endereço do seu servidor Ollama local.",
+  "ui.ai.model": "Modelo",
+  "ui.ai.modelHint": "Modelos que o Ollama já baixou nesta máquina.",
+  "ui.ai.modelEmpty": "Nenhum modelo encontrado",
+  "ui.ai.persona": "Personalidade",
+  "ui.ai.personaHint": "A instrução de sistema que molda como eu respondo.",
+  "ui.ai.notConfigured": "O modo generativo vem desligado — eu funciono totalmente offline sem ele.",
+
+  "ui.actions.save": "Salvar",
+  "ui.actions.cancel": "Cancelar",
+  "ui.actions.restoreDefaults": "Restaurar padrões",
+  "ui.actions.close": "Fechar",
+
+  "ui.status.idle": "Aguardando “{0}”",
+  "ui.status.listening": "Ouvindo…",
+  "ui.status.thinking": "Processando…",
+  "ui.status.speaking": "Falando…",
+  "ui.status.disabled": "Escuta desligada",
+  "ui.status.stopped": "Parada",
+  "ui.status.unavailable": "Microfone indisponível",
+  "ui.status.unavailableHint": "Instale o pacote de fala do idioma em Configurações do Windows › Hora e idioma › Fala, e verifique o microfone.",
+  "ui.status.saved": "Configurações salvas.",
+  "ui.status.saveFailed": "Não consegui salvar as configurações.",
+
+  "ui.footer.hotkey": "Alt + L abre e fecha esta janela",
+  "ui.tray.open": "Abrir configurações",
+  "ui.tray.mute": "Pausar escuta",
+  "ui.tray.exit": "Encerrar Laura",
+  "ui.tray.tooltip": "Laura Virtual Assistant"
+}
