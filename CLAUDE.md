@@ -8,9 +8,8 @@ Laura is a personal assistant for Windows inspired by Jarvis, in a feminine vers
 She lives in the system tray, responds by voice ("Ok, Laura" / "Hey Laura"), and
 shows the settings window with **Alt + L**. Migrated from Python to **C# / .NET 9**.
 
-The default language is **English (en-US) with a feminine English voice**: Windows
-English voices and recognition sound much more natural than the Portuguese
-equivalents. It is only the default; the user can switch to pt-BR in the window.
+The only supported language is **English (en-US)**. Keep UI text, command
+phrases, recognition, and generative AI prompts aligned with English only.
 
 ## Commands
 
@@ -83,8 +82,8 @@ domain.
    inheriting from `PhraseSkillBase` when activated by a phrase list).
 2. Define `Priority`: **lower** values are evaluated first. Specific triggers need
    to precede generic ones (for example, "open settings" before "open").
-3. Activation phrases and responses go in the **language files**, not in code. Add
-   the key to `LocalizationKeys` and the text to each `Locales/<culture>.json`.
+3. Activation phrases and responses go in the **English language file**, not in
+   code. Add the key to `LocalizationKeys` and the text to `Locales/en-US.json`.
 4. Register it in `AddSkills` in `ServiceConfiguration`.
 5. A skill should not throw for normal flow (for example, missing app -> spoken
    response, not an exception). Unexpected failures are isolated by the dispatcher.
@@ -93,10 +92,10 @@ Never hard-code spoken text or fixed triggers in a skill.
 
 ## Localization
 
-- Text and triggers: `Laura.Core/Localization/Locales/<culture>.json`.
+- Text and triggers: `Laura.Core/Localization/Locales/en-US.json`.
 - A key may contain a single string or a list (random response variants / multiple
   triggers).
-- When adding a key, add it in **all** languages (currently `pt-BR` and `en-US`).
+- The app is English-only; do not add Portuguese catalogs or UI language switching.
 - Keys accessed by the domain must exist in `LocalizationKeys` (typos become compile
   errors).
 

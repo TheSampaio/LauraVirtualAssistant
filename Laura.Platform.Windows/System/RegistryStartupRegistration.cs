@@ -20,7 +20,7 @@ public sealed class RegistryStartupRegistration : IStartupRegistration
     private readonly ILogger<RegistryStartupRegistration> _logger;
 
     /// <summary>
-    /// Inicializa o registro.
+    /// Initializes the registry registration.
     ///
     /// Args:
     ///     logger: Destination for diagnostic logs.

@@ -11,7 +11,7 @@ namespace Laura.App.Shell;
 
 /// <summary>
 /// Application execution context: keeps Laura alive in the tray without a window
-/// principal aberta.
+/// main window open.
 ///
 /// Replaces the original prototype's <c>while</c> loop with an event-driven model
 /// of tray, hotkey, and engine messages, which is what
@@ -22,7 +22,7 @@ public sealed class LauraApplicationContext : ApplicationContext
     /// <summary>Key that, together with Alt, opens and closes the settings window.</summary>
     public const Keys ToggleKey = Keys.L;
 
-    /// <summary>Modificador da tecla de atalho global.</summary>
+    /// <summary>Global hotkey modifier.</summary>
     public const HotkeyModifiers ToggleModifiers = HotkeyModifiers.Alt | HotkeyModifiers.NoRepeat;
 
     private readonly IServiceProvider _services;
@@ -190,7 +190,7 @@ public sealed class LauraApplicationContext : ApplicationContext
     private void OnSettingsChanged(object? sender, LauraSettings settings) =>
         _trayIcon.SetPaused(!settings.Recognition.Enabled);
 
-    // === Encerramento ===
+    // === Shutdown ===
 
     /// <summary>
     /// Shuts Laura down cleanly: stops services and releases resources.

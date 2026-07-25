@@ -9,7 +9,7 @@ namespace Laura.App.Controls;
 ///
 /// Windows Forms text boxes and combo boxes draw their own border with
 /// system colors, which appear bright over the dark interface. The way out is
-/// remover a borda nativa e apoiar o campo sobre um painel com a cor de campo,
+/// removing the native border and placing the field over a themed panel,
 /// letting contrast with the surface define the editable area.
 /// </summary>
 internal static class InputFactory
@@ -21,11 +21,11 @@ internal static class InputFactory
     /// Creates a single-line text box over a themed panel.
     ///
     /// Args:
-    ///     width: Largura total do campo.
-    ///     textBox: Recebe a caixa de texto criada.
+    ///     width: Total field width.
+    ///     textBox: Receives the created text box.
     ///
     /// Returns:
-    ///     O painel que embala a caixa de texto.
+    ///     The panel wrapping the text box.
     /// </summary>
     internal static Control CreateTextBox(int width, out TextBox textBox)
     {
@@ -37,8 +37,8 @@ internal static class InputFactory
     /// Creates a multiline text box over a themed panel.
     ///
     /// Args:
-    ///     height: Altura total do campo.
-    ///     textBox: Recebe a caixa de texto criada.
+    ///     height: Total field height.
+    ///     textBox: Receives the created text box.
     ///
     /// Returns:
     ///     The panel wrapping the text box, occupying the available width.
@@ -48,7 +48,7 @@ internal static class InputFactory
         textBox = NewTextBox(multiline: true);
         textBox.ScrollBars = ScrollBars.Vertical;
 
-        Panel wrapper = WrapField(textBox, width: 0, height);
+        RoundedPanel wrapper = WrapField(textBox, width: 0, height);
         wrapper.Dock = DockStyle.Fill;
         wrapper.Height = height;
 
@@ -59,7 +59,7 @@ internal static class InputFactory
     /// Creates a themed combo box.
     ///
     /// Args:
-    ///     width: Largura do campo.
+    ///     width: Field width.
     ///
     /// Returns:
     ///     The combo box ready to receive items.
@@ -71,13 +71,13 @@ internal static class InputFactory
     };
 
     /// <summary>
-    /// Cria uma caixa de texto sem borda nativa.
+    /// Creates a text box without its native border.
     ///
     /// Args:
     ///     multiline: <see langword="true"/> to accept multiple lines.
     ///
     /// Returns:
-    ///     A caixa de texto configurada.
+    ///     The configured text box.
     /// </summary>
     private static TextBox NewTextBox(bool multiline) => new()
     {
@@ -93,18 +93,19 @@ internal static class InputFactory
     /// Places an input control on a panel with the field color.
     ///
     /// Args:
-    ///     input: Controle a embalar.
-    ///     width: Largura do painel; zero deixa a largura a cargo do layout.
-    ///     height: Altura do painel.
+    ///     input: Control to wrap.
+    ///     width: Panel width; zero leaves the width to the layout.
+    ///     height: Panel height.
     ///
     /// Returns:
-    ///     O painel resultante.
+    ///     The resulting panel.
     /// </summary>
-    private static Panel WrapField(Control input, int width, int height)
+    private static RoundedPanel WrapField(Control input, int width, int height)
     {
-        var wrapper = new Panel
+        var wrapper = new RoundedPanel
         {
             BackColor = Palette.Field,
+            CornerRadius = 8,
             Padding = new Padding(FieldPadding, FieldPadding - 1, FieldPadding, FieldPadding - 1),
             Height = height,
         };

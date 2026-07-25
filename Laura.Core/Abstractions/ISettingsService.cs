@@ -5,7 +5,7 @@ namespace Laura.Core.Abstractions;
 /// <summary>
 /// Single access point for in-memory settings.
 ///
-/// Publica <see cref="Changed"/> para que motor de fala, escuta e interface reajam
+/// Publishes <see cref="Changed"/> so the speech engine, listener, and interface react
 /// immediately to a change - changing the voice or pitch should not require restarting Laura.
 /// </summary>
 public interface ISettingsService
@@ -24,7 +24,7 @@ public interface ISettingsService
     /// Loads settings from storage and publishes them.
     ///
     /// Args:
-    ///     cancellationToken: Token que aborta a carga.
+    ///     cancellationToken: Token that aborts loading.
     ///
     /// Returns:
     ///     The loaded settings.

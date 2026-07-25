@@ -20,6 +20,7 @@ public sealed class WinRtSpeechSynthesizer : ISpeechSynthesizer
 {
     private const double RatePerStep = 0.09;
     private const double PitchPerStep = 0.06;
+    private const string PreferredEnglishVoice = "Aria";
 
     private readonly SpeechSynthesizer _synthesizer = new();
     private readonly SemaphoreSlim _speechGate = new(1, 1);
@@ -49,11 +50,16 @@ public sealed class WinRtSpeechSynthesizer : ISpeechSynthesizer
     {
         try
         {
-            return [.. SpeechSynthesizer.AllVoices.Select(voice => new VoiceDescriptor(
-                voice.Id,
-                BuildDisplayName(voice),
-                voice.Language,
-                voice.Gender == VoiceGender.Female))];
+            return [.. SpeechSynthesizer.AllVoices
+                .Where(IsSelectableNaturalVoice)
+                .OrderBy(PreferredVoiceSortKey)
+                .ThenBy(static voice => voice.Language, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static voice => voice.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .Select(voice => new VoiceDescriptor(
+                    voice.Id,
+                    BuildDisplayName(voice),
+                    voice.Language,
+                    voice.Gender == VoiceGender.Female))];
         }
         catch (Exception exception) when (exception is InvalidOperationException or NotSupportedException)
         {
@@ -250,15 +256,50 @@ public sealed class WinRtSpeechSynthesizer : ISpeechSynthesizer
     {
         IReadOnlyList<VoiceInformation> voices = SpeechSynthesizer.AllVoices;
         string language = cultureName.Split('-')[0];
+        const string preferredName = PreferredEnglishVoice;
 
         bool MatchesLanguage(VoiceInformation voice) =>
             voice.Language.StartsWith(language, StringComparison.OrdinalIgnoreCase);
 
         VoiceInformation? preferred =
-            voices.FirstOrDefault(voice => MatchesLanguage(voice) && voice.Gender == VoiceGender.Female)
+            voices.FirstOrDefault(voice => MatchesLanguage(voice)
+                && IsSelectableNaturalVoice(voice)
+                && ContainsVoiceName(voice, preferredName))
+            ?? voices.FirstOrDefault(voice => MatchesLanguage(voice)
+                && IsSelectableNaturalVoice(voice)
+                && voice.Gender == VoiceGender.Female)
+            ?? voices.FirstOrDefault(voice => MatchesLanguage(voice) && IsSelectableNaturalVoice(voice))
+            ?? voices.FirstOrDefault(voice => MatchesLanguage(voice) && voice.Gender == VoiceGender.Female)
             ?? voices.FirstOrDefault(MatchesLanguage);
 
         return preferred?.Id;
+    }
+
+    private static bool IsSelectableNaturalVoice(VoiceInformation voice)
+    {
+        string searchable = $"{voice.DisplayName} {voice.Id}";
+
+        return searchable.Contains("Microsoft", StringComparison.OrdinalIgnoreCase)
+            && (searchable.Contains("Natural", StringComparison.OrdinalIgnoreCase)
+                || searchable.Contains("Online", StringComparison.OrdinalIgnoreCase)
+                || searchable.Contains("Neural", StringComparison.OrdinalIgnoreCase)
+                || ContainsVoiceName(voice, PreferredEnglishVoice));
+    }
+
+    private static int PreferredVoiceSortKey(VoiceInformation voice)
+    {
+        if (ContainsVoiceName(voice, PreferredEnglishVoice))
+        {
+            return 0;
+        }
+
+        return 1;
+    }
+
+    private static bool ContainsVoiceName(VoiceInformation voice, string name)
+    {
+        string searchable = $"{voice.DisplayName} {voice.Id}";
+        return searchable.Contains(name, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

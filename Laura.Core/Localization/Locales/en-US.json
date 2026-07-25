@@ -18,6 +18,8 @@
   ],
   "assistant.recognitionUnavailable": "I couldn't reach the microphone. I'll stay available through the settings window.",
   "assistant.skillFailed": "I tried, but something went wrong on my side.",
+  "assistant.thinking": [ "Thinking.", "Pondering.", "One moment.", "Working on it." ],
+  "assistant.conversationClosed": [ "Understood.", "All right.", "Very well." ],
 
   "greeting.morning": [ "Good morning, {0}.", "Good morning, {0}. Ready when you are." ],
   "greeting.afternoon": [ "Good afternoon, {0}.", "Good afternoon, {0}. How can I help?" ],
@@ -60,6 +62,14 @@
   "phrases.farewell": [ "bye laura", "goodbye", "thanks laura", "that s all", "shut down laura" ],
   "skill.farewell.response": [ "See you, {0}.", "I'll be here if you need me." ],
 
+  "phrases.cancel": [
+    "never mind", "nothing", "nothing else", "forget it", "leave it",
+    "that is all", "thats all", "that s all", "we are done", "stop listening",
+    "stop", "stop talking", "stop speaking", "be quiet", "silence",
+    "cancel", "cancel that", "stand by", "go idle", "go back to sleep",
+    "enough", "that will do"
+  ],
+
   "phrases.search": [ "search for", "search", "look up", "google", "find" ],
   "skill.search.response": "Searching for {0}.",
   "skill.search.missingQuery": "What would you like me to search for?",
@@ -93,15 +103,22 @@
   "ui.window.title": "Laura Virtual Assistant",
   "ui.window.subtitle": "Tune how I speak, listen and behave.",
   "ui.tab.general": "General",
+  "ui.tab.chat": "Chat",
   "ui.tab.user": "User",
   "ui.tab.voice": "Voice",
   "ui.tab.recognition": "Listening",
   "ui.tab.ai": "Generative AI",
 
+  "ui.chat.section": "Conversation",
+  "ui.chat.empty": "The conversation appears here as you speak or type.",
+  "ui.chat.input": "Write to Laura",
+  "ui.chat.send": "Send",
+  "ui.chat.stop": "Stop speech",
+
   "ui.voice.section": "Timbre",
   "ui.voice.voice": "Voice",
   "ui.voice.automatic": "Automatic (recommended)",
-  "ui.voice.voiceHint": "Voices installed in Windows. Add more under Windows Settings › Time & language › Speech.",
+  "ui.voice.voiceHint": "Only Microsoft Natural voices are shown. Install Microsoft Aria or Microsoft Francisca under Windows Settings > Time & language > Speech.",
   "ui.voice.rate": "Rate",
   "ui.voice.pitch": "Pitch",
   "ui.voice.volume": "Volume",
@@ -125,8 +142,6 @@
   "ui.recognition.inlineCommandHint": "Lets you say it all at once: “Hey Laura, what time is it”.",
 
   "ui.general.section": "Behaviour",
-  "ui.general.language": "Language",
-  "ui.general.languageHint": "Sets the language I speak and understand commands in.",
   "ui.general.greetOnStartup": "Greet me on startup",
   "ui.general.announceHourly": "Announce every full hour",
   "ui.general.startWithWindows": "Start with Windows",

@@ -133,10 +133,11 @@ public sealed class SettingsEditModel
     public string GenerativeAiPersona { get; set; }
 
     /// <summary>
-    /// Lists the voices available for the selected culture.
+    /// Lists the natural voices available to the application.
     ///
-    /// Filtering by language avoids offering, say, Japanese voices while Laura is
-    /// configured in English.
+    /// Voices matching the selected language appear first, but the remaining natural
+    /// voices stay selectable so installed defaults like Aria and Francisca are not
+    /// hidden while the user is changing languages.
     ///
     /// Returns:
     ///     The voices matching the current culture, or all of them when none matches.
@@ -146,10 +147,16 @@ public sealed class SettingsEditModel
         IReadOnlyList<VoiceDescriptor> voices = _synthesizer.GetAvailableVoices();
         string language = new CultureInfo(Culture).TwoLetterISOLanguageName;
 
-        List<VoiceDescriptor> matching = [.. voices.Where(voice =>
-            voice.Culture.StartsWith(language, StringComparison.OrdinalIgnoreCase))];
+        List<VoiceDescriptor> matching =
+        [
+            .. voices.Where(voice => voice.Culture.StartsWith(language, StringComparison.OrdinalIgnoreCase)),
+        ];
 
-        return matching.Count > 0 ? matching : voices;
+        return
+        [
+            .. matching.Concat(voices.Where(voice => !matching.Any(match =>
+                string.Equals(match.Name, voice.Name, StringComparison.Ordinal)))),
+        ];
     }
 
     /// <summary>

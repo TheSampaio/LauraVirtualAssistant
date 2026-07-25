@@ -18,7 +18,7 @@ public interface IStartupRegistration
     ///
     /// Args:
     ///     enabled: <see langword="true"/> para registrar, <see langword="false"/>
-    ///     para remover.
+    ///     to remove.
     /// </summary>
     void SetEnabled(bool enabled);
 }

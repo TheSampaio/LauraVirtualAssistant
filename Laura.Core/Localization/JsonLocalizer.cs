@@ -32,7 +32,7 @@ public sealed class JsonLocalizer : ILocalizer
     /// Initializes the localizer by loading every language file in the folder.
     ///
     /// Args:
-    ///     localesDirectory: Pasta com os arquivos <c>&lt;cultura&gt;.json</c>.
+    ///     localesDirectory: Folder containing the <c>&lt;culture&gt;.json</c> files.
     ///     logger: Destination for diagnostic logs.
     /// </summary>
     public JsonLocalizer(string localesDirectory, ILogger<JsonLocalizer> logger)
@@ -91,7 +91,7 @@ public sealed class JsonLocalizer : ILocalizer
 
         if (variants.Count == 0)
         {
-            _logger.LogWarning("Texto ausente para a chave {Key} em {Culture}.", key, Culture.Name);
+            _logger.LogWarning("Missing text for key {Key} in {Culture}.", key, Culture.Name);
             return $"[{key}]";
         }
 
@@ -134,11 +134,11 @@ public sealed class JsonLocalizer : ILocalizer
     /// <summary>
     /// Chooses the supported culture closest to the requested one.
     ///
-    /// Tries an exact match, then any culture with the same language
-    /// (pt-PT atende um pedido de pt-BR) e, por fim, a cultura de recurso.
+    /// Tries an exact match, then any culture with the same language and,
+    /// finally, the resource culture.
     ///
     /// Args:
-    ///     requested: Cultura solicitada.
+    ///     requested: Requested culture.
     ///
     /// Returns:
     ///     A culture for which a catalog is loaded.
@@ -172,7 +172,7 @@ public sealed class JsonLocalizer : ILocalizer
     /// Reads every language file from the given folder.
     ///
     /// Args:
-    ///     directory: Pasta com os arquivos <c>&lt;cultura&gt;.json</c>.
+    ///     directory: Folder containing the <c>&lt;culture&gt;.json</c> files.
     ///     logger: Destination for diagnostic logs.
     ///
     /// Returns:

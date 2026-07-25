@@ -19,5 +19,5 @@ public sealed class FailingSkill : ISkill
 
     /// <inheritdoc />
     public Task<SkillResponse> ExecuteAsync(SkillRequest request, CancellationToken cancellationToken = default) =>
-        throw new InvalidOperationException("Falha proposital.");
+        throw new InvalidOperationException("Intentional failure.");
 }

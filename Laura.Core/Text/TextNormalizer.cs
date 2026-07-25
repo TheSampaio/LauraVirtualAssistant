@@ -19,7 +19,7 @@ public static class TextNormalizer
     /// drops punctuation, and collapses consecutive whitespace.
     ///
     /// Args:
-    ///     text: Texto bruto transcrito pelo reconhecedor. Pode ser nulo ou vazio.
+    ///     text: Raw text transcribed by the recognizer. May be null or empty.
     ///
     /// Returns:
     ///     The canonical text, or an empty string when the input contains

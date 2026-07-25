@@ -6,7 +6,7 @@ using Laura.App.Theming;
 namespace Laura.App.Controls;
 
 /// <summary>
-/// Controle deslizante desenhado do zero, para velocidade, tom e volume da voz.
+/// Slider drawn from scratch for voice rate, pitch, and volume.
 ///
 /// The standard <see cref="TrackBar"/> does not accept theme colors. The background is deliberately opaque:
 /// transparent backgrounds in Windows Forms are emulated by repainting the parent on every

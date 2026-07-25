@@ -31,7 +31,7 @@ public interface ISkill
     /// registered skill until one accepts.
     ///
     /// Args:
-    ///     request: Comando a avaliar.
+    ///     request: Command to evaluate.
     ///
     /// Returns:
     ///     <see langword="true"/> when the skill knows how to handle the command.

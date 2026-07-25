@@ -12,7 +12,7 @@ public sealed class StubLocalizer : ILocalizer
     public event EventHandler<CultureInfo>? CultureChanged;
 
     /// <inheritdoc />
-    public CultureInfo Culture { get; } = CultureInfo.GetCultureInfo("pt-BR");
+    public CultureInfo Culture { get; } = CultureInfo.GetCultureInfo("en-US");
 
     /// <inheritdoc />
     public IReadOnlyList<CultureInfo> AvailableCultures => [Culture];

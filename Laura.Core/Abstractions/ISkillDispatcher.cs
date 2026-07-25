@@ -11,12 +11,24 @@ public interface ISkillDispatcher
     /// Finds the skill able to handle the command and runs it.
     ///
     /// Args:
-    ///     request: Comando recebido.
-    ///     cancellationToken: Token que aborta o despacho.
+    ///     request: Command received.
+    ///     cancellationToken: Token that aborts dispatch.
     ///
     /// Returns:
     ///     The chosen skill response, or <see cref="SkillResponse.NotHandled"/>
     ///     when none recognizes the command.
     /// </summary>
     Task<SkillResponse> DispatchAsync(SkillRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Checks whether dispatch would fall through to the generative engine.
+    ///
+    /// Args:
+    ///     request: Command received.
+    ///
+    /// Returns:
+    ///     <see langword="true"/> when no local skill accepts the command and the
+    ///     generative engine is configured.
+    /// </summary>
+    bool CanUseGenerativeFallback(SkillRequest request);
 }

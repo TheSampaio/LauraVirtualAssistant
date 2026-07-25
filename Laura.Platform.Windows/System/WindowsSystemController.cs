@@ -12,7 +12,7 @@ public sealed class WindowsSystemController : ISystemController
     private readonly ILogger<WindowsSystemController> _logger;
 
     /// <summary>
-    /// Inicializa o controlador.
+    /// Initializes the controller.
     ///
     /// Args:
     ///     logger: Destination for diagnostic logs.

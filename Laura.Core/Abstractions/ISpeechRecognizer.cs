@@ -4,7 +4,7 @@ using Laura.Core.Speech;
 namespace Laura.Core.Abstractions;
 
 /// <summary>
-/// Motor de reconhecimento de fala (speech-to-text).
+/// Speech recognition engine (speech-to-text).
 ///
 /// The implementation listens on its own thread and publishes transcriptions through an event,
 /// so neither the assistant engine nor the interface blocks while Laura listens.
@@ -15,7 +15,7 @@ public interface ISpeechRecognizer : IAsyncDisposable
     /// Occurs when the engine produces a transcription.
     ///
     /// The event is raised on a background thread; subscribers that touch the
-    /// interface precisam marshalar para a thread de UI.
+    /// interface must marshal to the UI thread.
     /// </summary>
     event EventHandler<RecognitionResult>? Recognized;
 
@@ -28,7 +28,7 @@ public interface ISpeechRecognizer : IAsyncDisposable
     /// Gets a value indicating whether the engine could be initialized on this machine.
     ///
     /// It is <see langword="false"/> when there is no microphone or no recognizer
-    /// instalado; nesse caso Laura opera apenas por interface, sem voz.
+    /// installed; in that case Laura operates only through the interface, without voice.
     /// </summary>
     bool IsAvailable { get; }
 
@@ -48,7 +48,7 @@ public interface ISpeechRecognizer : IAsyncDisposable
     /// Stops listening and releases the audio device.
     ///
     /// Args:
-    ///     cancellationToken: Token que aborta a parada.
+    ///     cancellationToken: Token that aborts shutdown.
     ///
     /// Returns:
     ///     A task completed when the engine has stopped listening.
@@ -59,8 +59,8 @@ public interface ISpeechRecognizer : IAsyncDisposable
     /// Switches the listening mode by changing the loaded grammar.
     ///
     /// Args:
-    ///     mode: Modo desejado.
-    ///     cancellationToken: Token que aborta a troca.
+    ///     mode: Desired mode.
+    ///     cancellationToken: Token that aborts the switch.
     ///
     /// Returns:
     ///     A task completed when the new mode is active.

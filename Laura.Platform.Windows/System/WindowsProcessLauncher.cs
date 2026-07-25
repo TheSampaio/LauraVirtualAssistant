@@ -16,7 +16,7 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
     private readonly ILogger<WindowsProcessLauncher> _logger;
 
     /// <summary>
-    /// Inicializa o executor.
+    /// Initializes the launcher.
     ///
     /// Args:
     ///     logger: Destination for diagnostic logs.

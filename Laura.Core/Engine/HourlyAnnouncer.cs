@@ -21,13 +21,13 @@ public sealed class HourlyAnnouncer : IAsyncDisposable
     private Task? _worker;
 
     /// <summary>
-    /// Inicializa o anunciador.
+    /// Initializes the announcer.
     ///
     /// Args:
     ///     engine: Engine used to speak the announcement.
     ///     settings: Settings checked at each hour rollover.
     ///     composer: Announcement text composer.
-    ///     clock: Fonte da hora atual.
+    ///     clock: Source of the current time.
     ///     logger: Destination for diagnostic logs.
     /// </summary>
     public HourlyAnnouncer(
@@ -51,7 +51,7 @@ public sealed class HourlyAnnouncer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Passa a acompanhar as viradas de hora.
+    /// Starts monitoring full-hour rollovers.
     /// </summary>
     public void Start() => _worker ??= Task.Run(() => RunAsync(_lifetime.Token), CancellationToken.None);
 
@@ -68,7 +68,7 @@ public sealed class HourlyAnnouncer : IAsyncDisposable
             }
             catch (OperationCanceledException)
             {
-                // Encerramento normal.
+                // Normal shutdown.
             }
 
             _worker = null;
@@ -84,7 +84,7 @@ public sealed class HourlyAnnouncer : IAsyncDisposable
     /// disabling the announcement takes effect without restarting Laura.
     ///
     /// Args:
-    ///     cancellationToken: Token que encerra o acompanhamento.
+    ///     cancellationToken: Token that ends monitoring.
     ///
     /// Returns:
     ///     A task completed when monitoring ends.
@@ -112,7 +112,7 @@ public sealed class HourlyAnnouncer : IAsyncDisposable
             }
             catch (Exception exception)
             {
-                _logger.LogError(exception, "Falha ao anunciar a hora cheia.");
+                _logger.LogError(exception, "Failed to announce the full hour.");
             }
         }
     }

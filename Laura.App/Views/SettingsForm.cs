@@ -7,6 +7,7 @@ using Laura.App.Interop;
 using Laura.App.Theming;
 using Laura.Core.Abstractions;
 using Laura.Core.Configuration;
+using Laura.Core.Conversation;
 using Laura.Core.Engine;
 using Laura.Core.Localization;
 using Laura.Core.Speech;
@@ -45,12 +46,17 @@ public sealed class SettingsForm : Form
     private string _builtCulture = string.Empty;
     private Label _statusLabel = null!;
     private Label _hintLabel = null!;
+    private Panel _chatViewport = null!;
+    private FlowLayoutPanel _chatList = null!;
+    private Label _chatEmptyLabel = null!;
+    private TextBox _chatInputBox = null!;
+    private Panel _chatScrollTrack = null!;
+    private Panel _chatScrollThumb = null!;
     private CancellationTokenSource? _previewCts;
     private bool _closingToTray = true;
 
     // Controls whose values are read on save.
     private TextBox _nicknameBox = null!;
-    private ComboBox _cultureCombo = null!;
     private ToggleSwitch _greetToggle = null!;
     private ToggleSwitch _hourlyToggle = null!;
     private ToggleSwitch _startupToggle = null!;
@@ -125,6 +131,7 @@ public sealed class SettingsForm : Form
         BuildInterface();
 
         _engine.StateChanged += OnEngineStateChanged;
+        _engine.ConversationMessageReceived += OnConversationMessageReceived;
     }
 
     /// <summary>
@@ -193,11 +200,25 @@ public sealed class SettingsForm : Form
     }
 
     /// <inheritdoc />
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        base.OnVisibleChanged(e);
+
+        if (!IsHandleCreated || !_closingToTray)
+        {
+            return;
+        }
+
+        _ = _engine.SetForegroundListeningAsync(Visible);
+    }
+
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
             _engine.StateChanged -= OnEngineStateChanged;
+            _engine.ConversationMessageReceived -= OnConversationMessageReceived;
             _toolTip.Dispose();
             _previewCts?.Dispose();
         }
@@ -277,7 +298,7 @@ public sealed class SettingsForm : Form
 
         _builtCulture = _localizer.Culture.Name;
         LoadModelIntoControls();
-        SelectSection(_localizer.Get("ui.tab.general"));
+        SelectSection(_localizer.Get("ui.tab.chat"));
     }
 
     /// <summary>
@@ -323,7 +344,8 @@ public sealed class SettingsForm : Form
             Margin = new Padding(4, 2, 0, Palette.Unit * 2),
         });
 
-        // General comes first, then the personal touches, then the technical panels.
+        // Conversation comes first because it is the primary interaction surface.
+        AddNavButton(navStack, _localizer.Get("ui.tab.chat"), "💬");
         AddNavButton(navStack, _localizer.Get("ui.tab.general"), "⚙");
         AddNavButton(navStack, _localizer.Get("ui.tab.user"), "\U0001F464");
         AddNavButton(navStack, _localizer.Get("ui.tab.voice"), "\U0001F5E3");
@@ -377,6 +399,7 @@ public sealed class SettingsForm : Form
 
         var host = new Panel { Dock = DockStyle.Fill, BackColor = Palette.Background };
         host.Controls.Add(BuildGeneralSection());
+        host.Controls.Add(BuildChatSection());
         host.Controls.Add(BuildUserSection());
         host.Controls.Add(BuildVoiceSection());
         host.Controls.Add(BuildRecognitionSection());
@@ -454,9 +477,14 @@ public sealed class SettingsForm : Form
         var restoreButton = new FlatButton { Text = _localizer.Get("ui.actions.restoreDefaults"), IsPrimary = false };
         restoreButton.Click += (_, _) => RestoreDefaults();
 
+        var stopButton = new FlatButton { Text = "■", IsPrimary = false };
+        _toolTip.SetToolTip(stopButton, _localizer.Get("ui.chat.stop"));
+        stopButton.Click += (_, _) => _engine.StopSpeaking();
+
         var saveButton = new FlatButton { Text = _localizer.Get("ui.actions.save"), IsPrimary = true };
         saveButton.Click += async (_, _) => await SaveAsync().ConfigureAwait(true);
 
+        actions.Controls.Add(stopButton);
         actions.Controls.Add(restoreButton);
         actions.Controls.Add(saveButton);
 
@@ -480,15 +508,156 @@ public sealed class SettingsForm : Form
 
         AddRow(stack, SettingRowFactory.Heading(Text_("ui.general.section")));
 
-        AddRow(stack, SettingRowFactory.ComboRow(
-            Text_("ui.general.language"), Text_("ui.general.languageHint"), out _cultureCombo));
-        Tip(_cultureCombo, "ui.general.languageHint");
-
         AddRow(stack, SettingRowFactory.Toggle(Text_("ui.general.greetOnStartup"), string.Empty, out _greetToggle));
         AddRow(stack, SettingRowFactory.Toggle(Text_("ui.general.announceHourly"), string.Empty, out _hourlyToggle));
         AddRow(stack, SettingRowFactory.Toggle(Text_("ui.general.startWithWindows"), string.Empty, out _startupToggle));
 
-        _cultureCombo.SelectedIndexChanged += (_, _) => OnCultureSelectionChanged();
+        return page;
+    }
+
+    /// <summary>
+    /// Builds the chat section.
+    ///
+    /// Returns:
+    ///     The section panel.
+    /// </summary>
+    private Panel BuildChatSection()
+    {
+        var page = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Palette.Background,
+            Visible = false,
+            Padding = new Padding(Palette.Unit * 2, 0, Palette.Unit, 0),
+        };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            BackColor = Palette.Background,
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        layout.Controls.Add(SettingRowFactory.Heading(Text_("ui.chat.section")), 0, 0);
+
+        var chatHost = new RoundedPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Palette.Surface,
+            CornerRadius = 12,
+            Padding = new Padding(Palette.Unit * 2),
+            Margin = new Padding(0, 0, 0, Palette.Unit),
+        };
+
+        var chatGrid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = Palette.Surface,
+        };
+        chatGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        chatGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 10));
+
+        _chatViewport = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Palette.Surface,
+        };
+        _chatViewport.MouseWheel += (_, args) => ScrollChatBy(-args.Delta / 3);
+        _chatViewport.Resize += (_, _) => LayoutChatMessages();
+
+        _chatList = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            BackColor = Palette.Surface,
+            Location = Point.Empty,
+            Width = 1,
+        };
+        _chatList.MouseWheel += (_, args) => ScrollChatBy(-args.Delta / 3);
+        _chatList.ControlAdded += (_, _) => UpdateChatScroll();
+        _chatList.ControlRemoved += (_, _) => UpdateChatScroll();
+
+        _chatEmptyLabel = new Label
+        {
+            Text = Text_("ui.chat.empty"),
+            AutoSize = true,
+            UseMnemonic = false,
+            ForeColor = Palette.TextSecondary,
+            Font = FontFactory.Create(9f),
+            Margin = new Padding(0),
+        };
+
+        _chatList.Controls.Add(_chatEmptyLabel);
+        _chatViewport.Controls.Add(_chatList);
+
+        _chatScrollTrack = new RoundedPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Palette.ScrollTrack,
+            CornerRadius = 4,
+            Margin = new Padding(3, 0, 0, 0),
+        };
+
+        _chatScrollThumb = new RoundedPanel
+        {
+            Width = 6,
+            Height = 40,
+            BackColor = Palette.ScrollThumb,
+            CornerRadius = 4,
+            Cursor = Cursors.Hand,
+            Left = 2,
+        };
+        _chatScrollTrack.Controls.Add(_chatScrollThumb);
+        _chatScrollTrack.Resize += (_, _) => UpdateChatScroll();
+        _chatScrollTrack.MouseDown += (_, args) => JumpChatScroll(args.Y);
+        _chatScrollThumb.MouseDown += (_, args) => BeginChatThumbDrag(args.Y);
+
+        chatGrid.Controls.Add(_chatViewport, 0, 0);
+        chatGrid.Controls.Add(_chatScrollTrack, 1, 0);
+        chatHost.Controls.Add(chatGrid);
+        layout.Controls.Add(chatHost, 0, 1);
+
+        var inputRow = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Palette.Background,
+        };
+        inputRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        inputRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        Control inputPanel = InputFactory.CreateTextBox(0, out _chatInputBox);
+        inputPanel.Dock = DockStyle.Fill;
+        _chatInputBox.PlaceholderText = Text_("ui.chat.input");
+        _chatInputBox.KeyDown += async (_, args) =>
+        {
+            if (args.KeyCode is Keys.Enter && !args.Shift)
+            {
+                args.SuppressKeyPress = true;
+                await SendChatInputAsync().ConfigureAwait(true);
+            }
+        };
+
+        var sendButton = new FlatButton { Text = Text_("ui.chat.send"), IsPrimary = true };
+        sendButton.Click += async (_, _) => await SendChatInputAsync().ConfigureAwait(true);
+
+        inputRow.Controls.Add(inputPanel, 0, 0);
+        inputRow.Controls.Add(sendButton, 1, 0);
+
+        layout.Controls.Add(inputRow, 0, 2);
+        page.Controls.Add(layout);
+        _sections[_localizer.Get("ui.tab.chat")] = page;
+        ReplayChatHistory();
 
         return page;
     }
@@ -712,22 +881,6 @@ public sealed class SettingsForm : Form
     }
 
     /// <summary>
-    /// Repopulates the voice list when the chosen language changes.
-    /// </summary>
-    private void OnCultureSelectionChanged()
-    {
-        if (_cultureCombo.SelectedItem is not ComboItem { Value: { } culture }
-            || string.Equals(culture, _model.Culture, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        _model.Culture = culture;
-        _model.VoiceName = null;
-        PopulateVoiceCombo();
-    }
-
-    /// <summary>
     /// Plays a sample phrase with the timbre being edited.
     ///
     /// The preview uses the synthesizer directly, not the engine, so it reflects the
@@ -828,6 +981,273 @@ public sealed class SettingsForm : Form
         _dispatcher.Post(() => UpdateEngineStatus(state));
 
     /// <summary>
+    /// Marshals a conversation message onto the UI thread.
+    ///
+    /// Args:
+    ///     sender: The assistant engine.
+    ///     message: Message to display.
+    /// </summary>
+    private void OnConversationMessageReceived(object? sender, ConversationMessage message) =>
+        _dispatcher.Post(() => AppendChatMessage(message));
+
+    /// <summary>
+    /// Sends the typed chat input to the assistant.
+    ///
+    /// Returns:
+    ///     A task completed when the command has been processed.
+    /// </summary>
+    private async Task SendChatInputAsync()
+    {
+        string text = _chatInputBox.Text.Trim();
+
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        _chatInputBox.Clear();
+        await _engine.SubmitCommandAsync(text).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Adds a message bubble to the chat section.
+    ///
+    /// Args:
+    ///     message: Message to show.
+    /// </summary>
+    private void AppendChatMessage(ConversationMessage message)
+    {
+        if (IsDisposed || _chatList is null)
+        {
+            return;
+        }
+
+        if (_chatEmptyLabel.Parent is not null)
+        {
+            _chatList.Controls.Remove(_chatEmptyLabel);
+        }
+
+        bool fromAssistant = message.Source is ConversationMessageSource.Assistant;
+        var row = new Panel
+        {
+            Width = Math.Max(1, _chatViewport.ClientSize.Width),
+            BackColor = Palette.Surface,
+            Margin = new Padding(0, 0, 0, Palette.Unit),
+            Tag = fromAssistant,
+        };
+
+        var bubble = new RoundedPanel
+        {
+            AutoSize = false,
+            BackColor = fromAssistant ? Palette.Accent : Palette.Field,
+            CornerRadius = 12,
+            Margin = new Padding(0),
+        };
+
+        var text = new Label
+        {
+            Text = message.Text,
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            UseMnemonic = false,
+            MaximumSize = new Size(Math.Max(220, _chatViewport.ClientSize.Width - Palette.Unit * 12), 0),
+            ForeColor = Palette.TextPrimary,
+            BackColor = Color.Transparent,
+            Padding = new Padding(Palette.Unit * 2, Palette.Unit, Palette.Unit * 2, Palette.Unit),
+            Margin = new Padding(0),
+            Font = FontFactory.Create(9.25f),
+        };
+
+        bubble.Controls.Add(text);
+        row.Controls.Add(bubble);
+        LayoutChatRow(row);
+        _chatList.Controls.Add(row);
+        SetChatScrollOffset(GetMaxChatScrollOffset());
+    }
+
+    /// <summary>
+    /// Rebuilds the chat surface from the engine history after the UI is recreated.
+    /// </summary>
+    private void ReplayChatHistory()
+    {
+        if (IsDisposed || _chatList is null || _chatEmptyLabel is null)
+        {
+            return;
+        }
+
+        _chatList.Controls.Clear();
+        _chatList.Controls.Add(_chatEmptyLabel);
+
+        foreach (ConversationMessage message in _engine.ConversationHistory)
+        {
+            AppendChatMessage(message);
+        }
+    }
+
+    private void LayoutChatMessages()
+    {
+        if (_chatList is null || _chatViewport is null)
+        {
+            return;
+        }
+
+        _chatList.Width = Math.Max(1, _chatViewport.ClientSize.Width);
+
+        foreach (Control control in _chatList.Controls)
+        {
+            if (control is Panel row)
+            {
+                LayoutChatRow(row);
+            }
+        }
+
+        UpdateChatScroll();
+    }
+
+    private void LayoutChatRow(Panel row)
+    {
+        if (_chatViewport is null || row.Controls.Count == 0 || row.Controls[0] is not Panel bubble)
+        {
+            return;
+        }
+
+        if (bubble.Controls.Count == 0 || bubble.Controls[0] is not Label text)
+        {
+            return;
+        }
+
+        bool fromAssistant = row.Tag is true;
+        int rowWidth = Math.Max(1, _chatViewport.ClientSize.Width);
+        int maxBubbleWidth = Math.Max(220, rowWidth - Palette.Unit * 12);
+
+        row.Width = rowWidth;
+        text.MaximumSize = new Size(maxBubbleWidth, 0);
+        Size preferred = text.GetPreferredSize(new Size(maxBubbleWidth, 0));
+        bubble.Size = preferred;
+        bubble.Location = fromAssistant
+            ? new Point(Palette.Unit, 0)
+            : new Point(Math.Max(Palette.Unit, rowWidth - preferred.Width - Palette.Unit), 0);
+        row.Height = preferred.Height;
+    }
+
+    private void ScrollChatBy(int delta) => SetChatScrollOffset(GetChatScrollOffset() + delta);
+
+    private void SetChatScrollOffset(int offset)
+    {
+        if (_chatList is null)
+        {
+            return;
+        }
+
+        int clamped = Math.Clamp(offset, 0, GetMaxChatScrollOffset());
+        _chatList.Top = -clamped;
+        UpdateChatScrollThumb(clamped);
+    }
+
+    private int GetChatScrollOffset() => _chatList is null ? 0 : Math.Max(0, -_chatList.Top);
+
+    private int GetMaxChatScrollOffset()
+    {
+        if (_chatList is null || _chatViewport is null)
+        {
+            return 0;
+        }
+
+        return Math.Max(0, _chatList.Height - _chatViewport.ClientSize.Height);
+    }
+
+    private void UpdateChatScroll()
+    {
+        LayoutChatMessagesCore();
+        SetChatScrollOffset(GetChatScrollOffset());
+    }
+
+    private void LayoutChatMessagesCore()
+    {
+        if (_chatList is null || _chatViewport is null)
+        {
+            return;
+        }
+
+        _chatList.Width = Math.Max(1, _chatViewport.ClientSize.Width);
+    }
+
+    private void UpdateChatScrollThumb(int offset)
+    {
+        if (_chatScrollTrack is null || _chatScrollThumb is null || _chatViewport is null || _chatList is null)
+        {
+            return;
+        }
+
+        int maxOffset = GetMaxChatScrollOffset();
+        _chatScrollTrack.Visible = maxOffset > 0;
+
+        if (maxOffset == 0)
+        {
+            _chatScrollThumb.Top = 0;
+            _chatScrollThumb.Height = Math.Max(32, _chatScrollTrack.ClientSize.Height);
+            return;
+        }
+
+        int trackHeight = Math.Max(1, _chatScrollTrack.ClientSize.Height);
+        int thumbHeight = Math.Clamp(
+            _chatViewport.ClientSize.Height * trackHeight / Math.Max(_chatList.Height, 1),
+            36,
+            trackHeight);
+        int travel = Math.Max(1, trackHeight - thumbHeight);
+
+        _chatScrollThumb.Height = thumbHeight;
+        _chatScrollThumb.Top = Math.Clamp(offset * travel / maxOffset, 0, travel);
+    }
+
+    private void JumpChatScroll(int y)
+    {
+        if (_chatScrollThumb is null)
+        {
+            return;
+        }
+
+        int target = y < _chatScrollThumb.Top
+            ? GetChatScrollOffset() - _chatViewport.ClientSize.Height
+            : GetChatScrollOffset() + _chatViewport.ClientSize.Height;
+
+        SetChatScrollOffset(target);
+    }
+
+    private void BeginChatThumbDrag(int startY)
+    {
+        if (_chatScrollThumb is null || _chatScrollTrack is null)
+        {
+            return;
+        }
+
+        int startScreenY = Cursor.Position.Y;
+        int startOffset = GetChatScrollOffset();
+
+        MouseEventHandler? move = null;
+        MouseEventHandler? up = null;
+
+        move = (_, _) =>
+        {
+            int maxOffset = GetMaxChatScrollOffset();
+            int travel = Math.Max(1, _chatScrollTrack.ClientSize.Height - _chatScrollThumb.Height);
+            int delta = Cursor.Position.Y - startScreenY;
+            SetChatScrollOffset(startOffset + (delta * maxOffset / travel));
+        };
+
+        up = (_, _) =>
+        {
+            _chatScrollThumb.Capture = false;
+            _chatScrollThumb.MouseMove -= move;
+            _chatScrollThumb.MouseUp -= up;
+        };
+
+        _chatScrollThumb.Capture = true;
+        _chatScrollThumb.MouseMove += move;
+        _chatScrollThumb.MouseUp += up;
+    }
+
+    /// <summary>
     /// Reflects the assistant state in the footer.
     ///
     /// This is where a microphone failure becomes visible: instead of being announced
@@ -901,7 +1321,6 @@ public sealed class SettingsForm : Form
     /// </summary>
     private void LoadModelIntoControls()
     {
-        PopulateCultureCombo();
         PopulateVoiceCombo();
         PopulateMicrophoneCombo();
         PopulateModelCombo();
@@ -933,10 +1352,7 @@ public sealed class SettingsForm : Form
     /// </summary>
     private void CommitControlsToModel()
     {
-        if (_cultureCombo.SelectedItem is ComboItem { Value: { } culture })
-        {
-            _model.Culture = culture;
-        }
+        _model.Culture = LauraSettings.DefaultCulture;
 
         _model.UserNickname = _nicknameBox.Text.Trim();
 
@@ -961,30 +1377,6 @@ public sealed class SettingsForm : Form
         _model.GenerativeAiEndpoint = _endpointBox.Text.Trim();
         _model.GenerativeAiModel = (_modelCombo.SelectedItem as ComboItem)?.Value ?? string.Empty;
         _model.GenerativeAiPersona = _personaBox.Text.Trim();
-    }
-
-    /// <summary>
-    /// Fills the language combo with the available cultures.
-    /// </summary>
-    private void PopulateCultureCombo()
-    {
-        _cultureCombo.Items.Clear();
-        _cultureCombo.SelectedIndex = -1;
-
-        foreach (CultureInfo culture in _model.GetSelectableCultures())
-        {
-            int index = _cultureCombo.Items.Add(new ComboItem(FormatCultureName(culture), culture.Name));
-
-            if (string.Equals(culture.Name, _model.Culture, StringComparison.OrdinalIgnoreCase))
-            {
-                _cultureCombo.SelectedIndex = index;
-            }
-        }
-
-        if (_cultureCombo.SelectedIndex < 0 && _cultureCombo.Items.Count > 0)
-        {
-            _cultureCombo.SelectedIndex = 0;
-        }
     }
 
     /// <summary>
@@ -1108,7 +1500,4 @@ public sealed class SettingsForm : Form
     /// <summary>Formats a duration in seconds using the active translation.</summary>
     private string FormatSeconds(int value) => _localizer.Get("ui.recognition.seconds", value);
 
-    /// <summary>Composes a culture's display name, such as "Portuguese (Brazil)".</summary>
-    private static string FormatCultureName(CultureInfo culture) =>
-        CultureInfo.CurrentCulture.TextInfo.ToTitleCase(culture.NativeName);
 }

@@ -65,10 +65,16 @@ public sealed class OllamaConversationEngine : IConversationEngine
             using var httpClient = new HttpClient { BaseAddress = endpoint, Timeout = options.Timeout };
             using var client = new OllamaApiClient(httpClient);
 
+            string prompt =
+                $"User display name: {turn.UserDisplayName}\n" +
+                $"Response language: {turn.Culture}\n" +
+                "Reply for voice playback, concise and direct.\n\n" +
+                $"User: {turn.Prompt}";
+
             var request = new GenerateRequest
             {
                 Model = options.Model,
-                Prompt = turn.Prompt,
+                Prompt = prompt,
                 System = options.Persona,
                 Stream = true,
             };
