@@ -109,7 +109,7 @@ public sealed class ToggleSwitch : Control
     }
 
     /// <summary>
-    /// Cria o contorno arredondado do trilho.
+    /// Creates the rounded track outline.
     ///
     /// Args:
     ///     bounds: Track rectangle.

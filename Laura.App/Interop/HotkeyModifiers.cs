@@ -1,14 +1,14 @@
 namespace Laura.App.Interop;
 
 /// <summary>
-/// Teclas modificadoras aceitas por uma tecla de atalho global.
+/// Modifier keys accepted by a global hotkey.
 ///
-/// Os valores espelham as constantes <c>MOD_*</c> da API do Windows.
+/// The values mirror the Windows API <c>MOD_*</c> constants.
 /// </summary>
 [Flags]
 public enum HotkeyModifiers : uint
 {
-    /// <summary>Nenhum modificador.</summary>
+    /// <summary>No modifier.</summary>
     None = 0x0000,
 
     /// <summary>Alt key.</summary>

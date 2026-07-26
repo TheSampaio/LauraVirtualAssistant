@@ -49,14 +49,14 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
     }
 
     /// <summary>
-    /// Inicia um processo capturando as falhas esperadas.
+    /// Starts a process while catching expected failures.
     ///
     /// Args:
     ///     startInfo: Description of the process to start.
     ///     target: Target description, used only in diagnostic logging.
     ///
     /// Returns:
-    ///     <see langword="true"/> quando o processo foi iniciado.
+    ///     <see langword="true"/> when the process was started.
     /// </summary>
     private bool TryStartProcess(ProcessStartInfo startInfo, string target)
     {

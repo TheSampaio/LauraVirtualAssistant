@@ -49,9 +49,9 @@ public sealed class RegistryStartupRegistration : IStartupRegistration
     /// <inheritdoc />
     public void SetEnabled(bool enabled)
     {
-        string? executablePath = Environment.ProcessPath;
+        string executablePath = GetExecutablePath();
 
-        if (executablePath is null)
+        if (string.IsNullOrWhiteSpace(executablePath))
         {
             _logger.LogWarning("Executable path unavailable; automatic startup was skipped.");
             return;

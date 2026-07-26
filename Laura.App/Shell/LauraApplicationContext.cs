@@ -14,8 +14,8 @@ namespace Laura.App.Shell;
 /// main window open.
 ///
 /// Replaces the original prototype's <c>while</c> loop with an event-driven model
-/// of tray, hotkey, and engine messages, which is what
-/// allows the interface to never freeze while Laura listens or speaks.
+/// of tray, hotkey, and engine messages, which is what allows the interface to
+/// never freeze while Laura speaks or waits for a model.
 /// </summary>
 public sealed class LauraApplicationContext : ApplicationContext
 {
@@ -29,7 +29,6 @@ public sealed class LauraApplicationContext : ApplicationContext
     private readonly WinFormsShellController _shellController;
     private readonly IAssistantEngine _engine;
     private readonly HourlyAnnouncer _hourlyAnnouncer;
-    private readonly ISettingsService _settingsService;
     private readonly ILocalizer _localizer;
     private readonly ILogger<LauraApplicationContext> _logger;
 
@@ -53,17 +52,13 @@ public sealed class LauraApplicationContext : ApplicationContext
         _shellController = services.GetRequiredService<WinFormsShellController>();
         _engine = services.GetRequiredService<IAssistantEngine>();
         _hourlyAnnouncer = services.GetRequiredService<HourlyAnnouncer>();
-        _settingsService = services.GetRequiredService<ISettingsService>();
         _localizer = services.GetRequiredService<ILocalizer>();
         _logger = services.GetRequiredService<ILogger<LauraApplicationContext>>();
 
-        _trayIcon = new TrayIcon(_localizer, ShowSettings, TogglePause, ExitApplication);
+        _trayIcon = new TrayIcon(_localizer, ShowSettings, ExitApplication);
         _hotkey = RegisterToggleHotkey();
 
         _shellController.Bind(ShowSettings, ToggleSettings, ExitApplication);
-        _settingsService.Changed += OnSettingsChanged;
-        _trayIcon.SetPaused(!_settingsService.Current.Recognition.Enabled);
-
         _ = StartServicesAsync();
     }
 
@@ -93,7 +88,7 @@ public sealed class LauraApplicationContext : ApplicationContext
     ///
     /// The window is built here, with the application already idle, not on the first
     /// Alt + L: building it on demand would make the shortcut feel frozen while the
-    /// Windows enumera as vozes instaladas.
+    /// Windows speech service enumerates the installed voices.
     ///
     /// Returns:
     ///     A task completed when the services have started.
@@ -145,51 +140,6 @@ public sealed class LauraApplicationContext : ApplicationContext
     /// </summary>
     private SettingsForm EnsureSettingsForm() => _settingsForm ??= _services.GetRequiredService<SettingsForm>();
 
-    /// <summary>
-    /// Turns voice listening on or off from the tray.
-    /// </summary>
-    private void TogglePause()
-    {
-        LauraSettings current = _settingsService.Current;
-        LauraSettings updated = current with
-        {
-            Recognition = current.Recognition with { Enabled = !current.Recognition.Enabled },
-        };
-
-        _ = UpdateSettingsAsync(updated);
-    }
-
-    /// <summary>
-    /// Persists a settings change made outside the window.
-    ///
-    /// Args:
-    ///     settings: Settings to apply.
-    ///
-    /// Returns:
-    ///     A task completed when the change has been persisted.
-    /// </summary>
-    private async Task UpdateSettingsAsync(LauraSettings settings)
-    {
-        try
-        {
-            await _settingsService.UpdateAsync(settings).ConfigureAwait(true);
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Failed to update settings from the tray.");
-        }
-    }
-
-    /// <summary>
-    /// Reacts to settings changes by updating the visible tray state.
-    ///
-    /// Args:
-    ///     sender: Settings service.
-    ///     settings: Already-current settings.
-    /// </summary>
-    private void OnSettingsChanged(object? sender, LauraSettings settings) =>
-        _trayIcon.SetPaused(!settings.Recognition.Enabled);
-
     // === Shutdown ===
 
     /// <summary>
@@ -234,8 +184,6 @@ public sealed class LauraApplicationContext : ApplicationContext
     {
         if (disposing)
         {
-            _settingsService.Changed -= OnSettingsChanged;
-
             _hotkey?.Dispose();
             _trayIcon.Dispose();
             _settingsForm?.CloseToExit();

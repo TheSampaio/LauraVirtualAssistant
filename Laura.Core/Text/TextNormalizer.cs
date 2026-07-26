@@ -4,11 +4,10 @@ using System.Text;
 namespace Laura.Core.Text;
 
 /// <summary>
-/// Normalizes spoken text for comparisons tolerant of accents, casing, and punctuation.
+/// Normalizes command text for comparisons tolerant of accents, casing, and punctuation.
 ///
-/// The speech recognizer returns transcriptions with variations irrelevant to
-/// command matching ("Ok, Laura!" and "ok laura" are the same intent). Every
-/// phrase comparison in the domain goes through here to operate on one canonical form.
+/// User input may include variations irrelevant to command matching. Every phrase
+/// comparison in the domain goes through here to operate on one canonical form.
 /// </summary>
 public static class TextNormalizer
 {
@@ -19,11 +18,11 @@ public static class TextNormalizer
     /// drops punctuation, and collapses consecutive whitespace.
     ///
     /// Args:
-    ///     text: Raw text transcribed by the recognizer. May be null or empty.
+    ///     text: Raw text from the user. May be null or empty.
     ///
     /// Returns:
     ///     The canonical text, or an empty string when the input contains
-    ///     nenhum caractere significativo.
+    ///     no meaningful characters.
     /// </summary>
     public static string Normalize(string? text)
     {
@@ -72,7 +71,7 @@ public static class TextNormalizer
     ///     phrase: Already-normalized phrase to search for.
     ///
     /// Returns:
-    ///     <see langword="true"/> quando a frase aparece delimitada por fronteiras
+    ///     <see langword="true"/> when the phrase appears delimited by word
     ///     boundaries; otherwise, <see langword="false"/>.
     /// </summary>
     public static bool ContainsPhrase(string text, string phrase)
@@ -104,8 +103,7 @@ public static class TextNormalizer
     /// <summary>
     /// Removes the first occurrence of the phrase and returns the remaining text.
     ///
-    /// Used to separate the trigger from the command content, as in
-    /// "ok laura what time is it" where the trigger must be discarded.
+    /// Used to separate a trigger from the command content.
     ///
     /// Args:
     ///     text: Already-normalized text.

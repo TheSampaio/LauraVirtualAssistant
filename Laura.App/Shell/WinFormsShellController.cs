@@ -5,7 +5,7 @@ namespace Laura.App.Shell;
 
 /// <summary>
 /// Implementation of <see cref="IShellController"/> that forwards domain requests
-/// para a camada Windows Forms, sempre na thread da interface.
+/// to the Windows Forms layer, always on the UI thread.
 ///
 /// Concrete actions are provided by the presentation layer in
 /// <see cref="Bind"/>, which keeps the domain unaware of Windows Forms while
@@ -23,7 +23,7 @@ public sealed class WinFormsShellController : IShellController
     /// Initializes the controller.
     ///
     /// Args:
-    ///     dispatcher: Executor que garante a thread da interface.
+    ///     dispatcher: Executor that guarantees the UI thread.
     /// </summary>
     public WinFormsShellController(IUiDispatcher dispatcher)
     {

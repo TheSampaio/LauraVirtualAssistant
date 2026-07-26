@@ -4,7 +4,7 @@ using System.Text;
 namespace Laura.Core.Configuration;
 
 /// <summary>
-/// Leitor e escritor de arquivos INI.
+/// INI file reader and writer.
 ///
 /// The format was chosen because it is readable and editable by hand with no tools -
 /// opening the file in Notepad and correcting a value is part of the expected flow.
@@ -76,7 +76,7 @@ public sealed class IniDocument
     /// Args:
     ///     section: Section name.
     ///     key: Key name.
-    ///     value: Valor a gravar.
+    ///     value: Value to write.
     /// </summary>
     public void Set(string section, string key, string value)
     {
@@ -98,7 +98,7 @@ public sealed class IniDocument
     /// Args:
     ///     section: Section name.
     ///     key: Key name.
-    ///     value: Valor a gravar.
+    ///     value: Value to write.
     /// </summary>
     public void SetBoolean(string section, string key, bool value) =>
         Set(section, key, value ? "true" : "false");
@@ -109,7 +109,7 @@ public sealed class IniDocument
     /// Args:
     ///     section: Section name.
     ///     key: Key name.
-    ///     value: Valor a gravar.
+    ///     value: Value to write.
     /// </summary>
     public void SetNumber(string section, string key, double value) =>
         Set(section, key, value.ToString("0.####", CultureInfo.InvariantCulture));
@@ -120,7 +120,7 @@ public sealed class IniDocument
     /// Args:
     ///     section: Section name.
     ///     key: Key name.
-    ///     values: Itens a gravar.
+    ///     values: Items to write.
     /// </summary>
     public void SetList(string section, string key, IEnumerable<string> values) =>
         Set(section, key, string.Join(" | ", values));
@@ -134,7 +134,7 @@ public sealed class IniDocument
     ///     fallback: Value returned when the key does not exist.
     ///
     /// Returns:
-    ///     O valor gravado, ou o valor de recuo.
+    ///     The stored value, or the fallback value.
     /// </summary>
     public string GetString(string section, string key, string fallback) =>
         _sections.TryGetValue(section, out Dictionary<string, string>? entries)
@@ -152,7 +152,7 @@ public sealed class IniDocument
     ///     fallback: Value returned when the key is missing or invalid.
     ///
     /// Returns:
-    ///     O booleano lido, ou o valor de recuo.
+    ///     The parsed boolean, or the fallback value.
     /// </summary>
     public bool GetBoolean(string section, string key, bool fallback) =>
         bool.TryParse(GetString(section, key, string.Empty), out bool value) ? value : fallback;
@@ -166,7 +166,7 @@ public sealed class IniDocument
     ///     fallback: Value returned when the key is missing or invalid.
     ///
     /// Returns:
-    ///     O inteiro lido, ou o valor de recuo.
+    ///     The parsed integer, or the fallback value.
     /// </summary>
     public int GetInt32(string section, string key, int fallback) =>
         int.TryParse(
@@ -206,7 +206,7 @@ public sealed class IniDocument
     ///     fallback: List returned when the key is missing or empty.
     ///
     /// Returns:
-    ///     Os itens lidos, ou a lista de recuo.
+    ///     The parsed items, or the fallback list.
     /// </summary>
     public IReadOnlyList<string> GetList(string section, string key, IReadOnlyList<string> fallback)
     {
@@ -222,7 +222,7 @@ public sealed class IniDocument
     }
 
     /// <summary>
-    /// Serializa o documento no formato INI.
+    /// Serializes the document in INI format.
     ///
     /// Args:
     ///     header: Optional comment inserted at the top of the file.

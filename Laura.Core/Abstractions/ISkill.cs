@@ -3,11 +3,11 @@ using Laura.Core.Skills;
 namespace Laura.Core.Abstractions;
 
 /// <summary>
-/// Uma capacidade isolada de Laura, como dizer as horas ou open um aplicativo.
+/// An isolated Laura capability, such as telling the time or opening an application.
 ///
 /// Each skill decides on its own whether a command belongs to it and only executes that;
 /// adding a new capability means registering one more implementation, without touching
-/// no motor nem nas habilidades existentes.
+/// the engine or the existing skills.
 /// </summary>
 public interface ISkill
 {
@@ -46,7 +46,7 @@ public interface ISkill
     ///     cancellationToken: Token that aborts execution.
     ///
     /// Returns:
-    ///     A answer a falar, ou <see cref="SkillResponse.NotHandled"/> quando a
+    ///     An answer to speak, or <see cref="SkillResponse.NotHandled"/> when the
     ///     skill gives up after inspecting the command more deeply.
     /// </summary>
     Task<SkillResponse> ExecuteAsync(SkillRequest request, CancellationToken cancellationToken = default);

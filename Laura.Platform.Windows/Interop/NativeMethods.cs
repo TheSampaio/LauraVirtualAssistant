@@ -23,14 +23,14 @@ internal static partial class NativeMethods
     /// Locks the workstation, like the Windows + L combination.
     ///
     /// Returns:
-    ///     <see langword="true"/> quando o pedido de bloqueio foi aceito.
+    ///     <see langword="true"/> when the lock request was accepted.
     /// </summary>
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool LockWorkStation();
 
     /// <summary>
-    /// Sintetiza um evento de teclado.
+    /// Synthesizes a keyboard event.
     ///
     /// This is how multimedia volume keys are triggered without involving COM or the
     /// audio mixer: the Windows shell already handles these codes.
@@ -38,8 +38,8 @@ internal static partial class NativeMethods
     /// Args:
     ///     virtualKey: Virtual key code.
     ///     scanCode: Hardware scan code; zero is accepted.
-    ///     flags: Sinalizadores do evento, como <see cref="KeyEventKeyUp"/>.
-    ///     extraInfo: Valor adicional associado ao evento.
+    ///     flags: Event flags, such as <see cref="KeyEventKeyUp"/>.
+    ///     extraInfo: Additional value associated with the event.
     /// </summary>
     [LibraryImport("user32.dll", EntryPoint = "keybd_event")]
     internal static partial void SendKeyboardEvent(byte virtualKey, byte scanCode, uint flags, nuint extraInfo);

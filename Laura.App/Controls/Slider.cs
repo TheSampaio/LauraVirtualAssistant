@@ -209,10 +209,10 @@ public sealed class Slider : Control
     }
 
     /// <summary>
-    /// Converte uma coordenada horizontal no valor correspondente da faixa.
+    /// Converts a horizontal coordinate to the corresponding range value.
     ///
     /// Args:
-    ///     x: Coordenada em pixels dentro do controle.
+    ///     x: Pixel coordinate within the control.
     ///
     /// Returns:
     ///     The range value closest to the position.

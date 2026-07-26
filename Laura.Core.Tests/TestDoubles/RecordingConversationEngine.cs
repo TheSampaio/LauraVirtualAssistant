@@ -14,8 +14,8 @@ public sealed class RecordingConversationEngine : IConversationEngine
     /// Creates the test engine.
     ///
     /// Args:
-    ///     isAvailable: Valor devolvido por <see cref="IsAvailable"/>.
-    ///     answer: Resposta devolvida por <see cref="AskAsync"/>.
+    ///     isAvailable: Value returned by <see cref="IsAvailable"/>.
+    ///     answer: Answer returned by <see cref="AskAsync"/>.
     /// </summary>
     public RecordingConversationEngine(bool isAvailable, string? answer)
     {

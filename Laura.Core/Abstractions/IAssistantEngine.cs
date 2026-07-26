@@ -4,7 +4,7 @@ using Laura.Core.Conversation;
 namespace Laura.Core.Abstractions;
 
 /// <summary>
-/// Assistant engine: orchestrates listening, skill dispatch, and speech.
+/// Assistant engine: orchestrates chat commands, skill dispatch, and speech.
 /// </summary>
 public interface IAssistantEngine : IAsyncDisposable
 {
@@ -33,7 +33,7 @@ public interface IAssistantEngine : IAsyncDisposable
     IReadOnlyList<ConversationMessage> ConversationHistory { get; }
 
     /// <summary>
-    /// Starts the engine: loads listening and speaks the opening greeting.
+    /// Starts the engine and speaks the opening greeting.
     ///
     /// Args:
     ///     cancellationToken: Token that aborts startup.
@@ -45,7 +45,7 @@ public interface IAssistantEngine : IAsyncDisposable
     Task StartAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Stops listening and command processing.
+    /// Stops command processing.
     ///
     /// Args:
     ///     cancellationToken: Token that aborts shutdown.
@@ -56,9 +56,7 @@ public interface IAssistantEngine : IAsyncDisposable
     Task StopAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Sends a text command as if it had been dictated.
-    ///
-    /// Used by the interface and tests; does not require a wake word.
+    /// Sends a text command from the chat interface.
     ///
     /// Args:
     ///     text: Command to execute.
@@ -68,18 +66,6 @@ public interface IAssistantEngine : IAsyncDisposable
     ///     A task completed when the command has finished processing.
     /// </summary>
     Task SubmitCommandAsync(string text, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Keeps the recognizer in command mode while an interactive UI surface is open.
-    ///
-    /// Args:
-    ///     enabled: <see langword="true"/> to listen without the wake word.
-    ///     cancellationToken: Token that aborts the mode change.
-    ///
-    /// Returns:
-    ///     A task completed when the mode has been applied.
-    /// </summary>
-    Task SetForegroundListeningAsync(bool enabled, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Makes Laura speak text while respecting the configured voice profile.
@@ -94,7 +80,7 @@ public interface IAssistantEngine : IAsyncDisposable
     Task SpeakAsync(string text, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Immediately stops speech and active command listening, returning to wake-word mode.
+    /// Immediately stops speech.
     /// </summary>
     void StopSpeaking();
 }

@@ -16,7 +16,7 @@ public sealed class SkillDispatcherTests
         text,
         CultureInfo.GetCultureInfo("en-US"),
         DateTimeOffset.Now,
-        SkillRequestSource.Voice);
+        SkillRequestSource.Text);
 
     private static SkillDispatcher CreateDispatcher(
         IEnumerable<FakeSkill> skills,

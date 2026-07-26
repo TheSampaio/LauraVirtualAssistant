@@ -9,7 +9,7 @@ public interface IStartupRegistration
     /// Reports whether the application is registered to start with the system.
     ///
     /// Returns:
-    ///     <see langword="true"/> quando o registro existe.
+    ///     <see langword="true"/> when the registration exists.
     /// </summary>
     bool IsEnabled();
 
@@ -17,7 +17,7 @@ public interface IStartupRegistration
     /// Creates or removes the automatic startup entry.
     ///
     /// Args:
-    ///     enabled: <see langword="true"/> para registrar, <see langword="false"/>
+    ///     enabled: <see langword="true"/> to register, <see langword="false"/>
     ///     to remove.
     /// </summary>
     void SetEnabled(bool enabled);

@@ -9,29 +9,17 @@ public static class LocalizationKeys
     /// <summary>Messages spoken by the engine itself, outside any skill.</summary>
     public static class Assistant
     {
-        /// <summary>Short acknowledgement right after the wake word.</summary>
-        public const string Acknowledge = "assistant.acknowledge";
-
         /// <summary>Response when no skill recognizes the command.</summary>
         public const string NotUnderstood = "assistant.notUnderstood";
 
-        /// <summary>Notice that voice listening could not be started.</summary>
-        public const string RecognitionUnavailable = "assistant.recognitionUnavailable";
-
         /// <summary>Notice that a skill failed while running.</summary>
         public const string SkillFailed = "assistant.skillFailed";
-
-        /// <summary>Prompt spoken when the command window opened but nothing was heard.</summary>
-        public const string HeardNothing = "assistant.heardNothing";
 
         /// <summary>Spoken confirmation that settings were saved.</summary>
         public const string SettingsSaved = "assistant.settingsSaved";
 
         /// <summary>Short filler while the generative model is thinking.</summary>
         public const string Thinking = "assistant.thinking";
-
-        /// <summary>Confirmation that the command listening window was closed.</summary>
-        public const string ConversationClosed = "assistant.conversationClosed";
     }
 
     /// <summary>Opening greeting and full-hour announcement.</summary>
@@ -143,8 +131,6 @@ public static class LocalizationKeys
         /// <summary>Confirmation of opening the settings window.</summary>
         public const string SettingsResponse = "skill.settings.response";
 
-        /// <summary>Triggers that close the current command-listening window.</summary>
-        public const string CancelPhrases = "phrases.cancel";
     }
 
     /// <summary>Friendly names for the applications Laura can open.</summary>

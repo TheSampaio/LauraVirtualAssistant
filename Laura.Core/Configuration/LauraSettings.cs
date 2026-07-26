@@ -36,9 +36,6 @@ public sealed record LauraSettings
     /// <summary>Gets the voice timbre.</summary>
     public VoiceProfile Voice { get; init; } = VoiceProfile.Default;
 
-    /// <summary>Gets the voice-listening parameters.</summary>
-    public RecognitionOptions Recognition { get; init; } = RecognitionOptions.Default;
-
     /// <summary>Gets the optional generative-mode configuration.</summary>
     public GenerativeAiOptions GenerativeAi { get; init; } = GenerativeAiOptions.Default;
 
@@ -83,7 +80,6 @@ public sealed record LauraSettings
             Culture = DefaultCulture,
             UserNickname = UserNickname.Trim(),
             Voice = Voice.Sanitized(),
-            Recognition = Recognition.Sanitized() with { Culture = DefaultCulture },
             GenerativeAi = GenerativeAi.Sanitized(),
         };
     }

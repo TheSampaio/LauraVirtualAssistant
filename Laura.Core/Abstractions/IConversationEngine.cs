@@ -7,8 +7,8 @@ namespace Laura.Core.Abstractions;
 ///
 /// It is deliberately optional: the dispatcher only queries it after all
 /// skills reject the command, and the default implementation does nothing. This way
-/// Laura permanece inteiramente funcional e offline, e conectar um provedor local
-/// adding something like Ollama later only means registering another implementation of this interface.
+/// Laura remains fully functional and offline, and connecting a local provider such
+/// as Ollama only means registering another implementation of this interface.
 /// </summary>
 public interface IConversationEngine
 {
@@ -18,7 +18,7 @@ public interface IConversationEngine
     bool IsAvailable { get; }
 
     /// <summary>
-    /// Pede uma answer ao modelo.
+    /// Requests an answer from the model.
     ///
     /// Args:
     ///     turn: Prompt and user context.

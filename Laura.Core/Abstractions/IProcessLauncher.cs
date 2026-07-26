@@ -10,7 +10,7 @@ public interface IProcessLauncher
     ///
     /// Args:
     ///     uri: Address to open; accepts <c>http</c>, <c>https</c>, and
-    ///     protocolos registrados como <c>ms-settings:</c>.
+    ///     registered protocols such as <c>ms-settings:</c>.
     ///
     /// Returns:
     ///     <see langword="true"/> when the system accepted opening the address.
@@ -25,7 +25,7 @@ public interface IProcessLauncher
     ///     arguments: Command-line arguments, or <see langword="null"/>.
     ///
     /// Returns:
-    ///     <see langword="true"/> quando o processo foi iniciado.
+    ///     <see langword="true"/> when the process was started.
     /// </summary>
     bool TryStart(string fileName, string? arguments = null);
 }
