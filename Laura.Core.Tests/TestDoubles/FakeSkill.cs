@@ -18,7 +18,7 @@ public sealed class FakeSkill : ISkill
     ///     id: Skill identifier.
     ///     priority: Evaluation priority.
     ///     trigger: Normalized text recognized by the skill.
-    ///     response: Resposta devolvida quando o gatilho casa.
+    ///     response: Response returned when the trigger matches.
     /// </summary>
     public FakeSkill(string id, int priority, string trigger, SkillResponse response)
     {

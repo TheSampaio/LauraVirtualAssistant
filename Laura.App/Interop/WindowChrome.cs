@@ -17,7 +17,7 @@ public static partial class WindowChrome
     ///
     /// Args:
     ///     handle: Native window handle.
-    ///     enabled: <see langword="true"/> para a barra escura.
+    ///     enabled: <see langword="true"/> for a dark title bar.
     /// </summary>
     public static void UseDarkTitleBar(nint handle, bool enabled = true)
     {

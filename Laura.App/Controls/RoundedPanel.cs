@@ -9,6 +9,8 @@ namespace Laura.App.Controls;
 internal sealed class RoundedPanel : Panel
 {
     private int _cornerRadius = 10;
+    private Color _borderColor = Color.Transparent;
+    private int _borderThickness;
 
     public int CornerRadius
     {
@@ -19,6 +21,48 @@ internal sealed class RoundedPanel : Panel
             ApplyRegion();
             Invalidate();
         }
+    }
+
+    public Color BorderColor
+    {
+        get => _borderColor;
+        set
+        {
+            _borderColor = value;
+            Invalidate();
+        }
+    }
+
+    public int BorderThickness
+    {
+        get => _borderThickness;
+        set
+        {
+            _borderThickness = Math.Max(0, value);
+            Invalidate();
+        }
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+
+        if (BorderThickness <= 0 || BorderColor == Color.Transparent)
+        {
+            return;
+        }
+
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+        Rectangle bounds = new(
+            BorderThickness / 2,
+            BorderThickness / 2,
+            Width - BorderThickness,
+            Height - BorderThickness);
+
+        using GraphicsPath shape = CreateRoundedRectangle(bounds, CornerRadius);
+        using var pen = new Pen(BorderColor, BorderThickness);
+        e.Graphics.DrawPath(pen, shape);
     }
 
     protected override void OnSizeChanged(EventArgs e)

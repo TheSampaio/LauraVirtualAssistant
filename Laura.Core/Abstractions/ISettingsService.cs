@@ -5,7 +5,7 @@ namespace Laura.Core.Abstractions;
 /// <summary>
 /// Single access point for in-memory settings.
 ///
-/// Publishes <see cref="Changed"/> so the speech engine, listener, and interface react
+/// Publishes <see cref="Changed"/> so the speech engine and interface react
 /// immediately to a change - changing the voice or pitch should not require restarting Laura.
 /// </summary>
 public interface ISettingsService

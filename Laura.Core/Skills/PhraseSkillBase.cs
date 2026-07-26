@@ -5,7 +5,7 @@ namespace Laura.Core.Skills;
 /// <summary>
 /// Base for skills activated by a phrase list from the language file.
 ///
-/// It concentrates recognition so each concrete skill contains only what it actually does.
+/// It concentrates phrase matching so each concrete skill contains only what it actually does.
 /// </summary>
 public abstract class PhraseSkillBase : ISkill
 {

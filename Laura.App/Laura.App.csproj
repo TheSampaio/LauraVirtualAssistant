@@ -18,7 +18,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationIcon>..\Data\icon.ico</ApplicationIcon>
-    <!-- Exigido pelo gerador de LibraryImport usado na hotkey global e na moldura escura. -->
+    <!-- Required by the LibraryImport generator used by the global hotkey and dark window frame. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!--
       WFO1000/CA1859: rules aimed at the visual designer and micro-optimization of

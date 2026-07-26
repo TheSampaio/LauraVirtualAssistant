@@ -8,7 +8,6 @@ using Laura.Core.Engine;
 using Laura.Core.Localization;
 using Laura.Core.Skills.Builtin;
 using Laura.Core.Weather;
-using Laura.Platform.Windows.Audio;
 using Laura.Platform.Windows.Conversation;
 using Laura.Platform.Windows.Speech;
 using Laura.Platform.Windows.System;
@@ -123,11 +122,9 @@ public static class ServiceConfiguration
             provider.GetRequiredService<WinRtSpeechSynthesizer>(),
             GetTtsModelDirectory(),
             provider.GetRequiredService<ILogger<SherpaOnnxSpeechSynthesizer>>()));
-        services.AddSingleton<ISpeechRecognizer, SapiSpeechRecognizer>();
         services.AddSingleton<ISystemController, WindowsSystemController>();
         services.AddSingleton<IProcessLauncher, WindowsProcessLauncher>();
         services.AddSingleton<IStartupRegistration, RegistryStartupRegistration>();
-        services.AddSingleton<IAudioDeviceCatalog, WindowsAudioDeviceCatalog>();
     }
 
     /// <summary>

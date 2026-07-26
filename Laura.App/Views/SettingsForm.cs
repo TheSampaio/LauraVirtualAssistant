@@ -16,8 +16,8 @@ using Microsoft.Extensions.Logging;
 namespace Laura.App.Views;
 
 /// <summary>
-/// Laura's settings window: general behaviour, the user, voice, listening and the
-/// generative mode.
+/// Laura's settings window: chat, generative AI, general behaviour, the user, and
+/// voice.
 ///
 /// It stays hidden and is brought to the front by <c>Alt + L</c>; closing it from the
 /// title bar only hides it, keeping the assistant active in the tray.
@@ -34,7 +34,6 @@ public sealed class SettingsForm : Form
     private readonly IAssistantEngine _engine;
     private readonly IUiDispatcher _dispatcher;
     private readonly IModelCatalog _modelCatalog;
-    private readonly IAudioDeviceCatalog _audioDevices;
     private readonly IUserContext _userContext;
     private readonly ILogger<SettingsForm> _logger;
 
@@ -46,12 +45,19 @@ public sealed class SettingsForm : Form
     private string _builtCulture = string.Empty;
     private Label _statusLabel = null!;
     private Label _hintLabel = null!;
+    private Control _footerPanel = null!;
+    private Panel _chatTranscriptPanel = null!;
     private Panel _chatViewport = null!;
-    private FlowLayoutPanel _chatList = null!;
+    private Panel _chatList = null!;
     private Label _chatEmptyLabel = null!;
+    private Control _chatInputPanel = null!;
     private TextBox _chatInputBox = null!;
+    private CircleButton _chatSendButton = null!;
     private Panel _chatScrollTrack = null!;
     private Panel _chatScrollThumb = null!;
+    private Label _chatStatusLabel = null!;
+    private Label _chatModelLabel = null!;
+    private Control _chatAiSettingsPanel = null!;
     private CancellationTokenSource? _previewCts;
     private bool _closingToTray = true;
 
@@ -64,13 +70,6 @@ public sealed class SettingsForm : Form
     private Slider _rateSlider = null!;
     private Slider _pitchSlider = null!;
     private Slider _volumeSlider = null!;
-    private ToggleSwitch _recognitionToggle = null!;
-    private ComboBox _microphoneCombo = null!;
-    private ToggleSwitch _noiseToggle = null!;
-    private TextBox _wakePhrasesBox = null!;
-    private Slider _confidenceSlider = null!;
-    private Slider _timeoutSlider = null!;
-    private ToggleSwitch _inlineToggle = null!;
     private ToggleSwitch _aiToggle = null!;
     private TextBox _endpointBox = null!;
     private ComboBox _modelCombo = null!;
@@ -84,10 +83,9 @@ public sealed class SettingsForm : Form
     ///     synthesizer: Synthesis engine used for the preview and the voice list.
     ///     localizer: Source of the interface texts.
     ///     startupRegistration: Auto-start registration applied on save.
-    ///     engine: The assistant engine, observed to show the listening state.
+    ///     engine: The assistant engine, observed to show the current state.
     ///     dispatcher: Marshals engine events onto the UI thread.
     ///     modelCatalog: Catalog of installed generative models.
-    ///     audioDevices: Catalog of capture devices.
     ///     userContext: Provides the account name used as the nickname default.
     ///     logger: Destination for diagnostic logs.
     /// </summary>
@@ -99,7 +97,6 @@ public sealed class SettingsForm : Form
         IAssistantEngine engine,
         IUiDispatcher dispatcher,
         IModelCatalog modelCatalog,
-        IAudioDeviceCatalog audioDevices,
         IUserContext userContext,
         ILogger<SettingsForm> logger)
     {
@@ -110,7 +107,6 @@ public sealed class SettingsForm : Form
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(dispatcher);
         ArgumentNullException.ThrowIfNull(modelCatalog);
-        ArgumentNullException.ThrowIfNull(audioDevices);
         ArgumentNullException.ThrowIfNull(userContext);
         ArgumentNullException.ThrowIfNull(logger);
 
@@ -121,7 +117,6 @@ public sealed class SettingsForm : Form
         _engine = engine;
         _dispatcher = dispatcher;
         _modelCatalog = modelCatalog;
-        _audioDevices = audioDevices;
         _userContext = userContext;
         _logger = logger;
 
@@ -137,8 +132,8 @@ public sealed class SettingsForm : Form
     /// <summary>
     /// Brings the hidden window back to the front, reloading the settings.
     ///
-    /// If the language changed since the last build, the interface is rebuilt — the
-    /// labels are resolved at construction and do not translate themselves.
+    /// The interface can still rebuild itself if persisted settings from an older
+    /// version are normalized while the window is hidden.
     /// </summary>
     public void ShowFromTray()
     {
@@ -200,19 +195,6 @@ public sealed class SettingsForm : Form
     }
 
     /// <inheritdoc />
-    protected override void OnVisibleChanged(EventArgs e)
-    {
-        base.OnVisibleChanged(e);
-
-        if (!IsHandleCreated || !_closingToTray)
-        {
-            return;
-        }
-
-        _ = _engine.SetForegroundListeningAsync(Visible);
-    }
-
-    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -235,8 +217,17 @@ public sealed class SettingsForm : Form
     /// Returns:
     ///     A fresh edit model.
     /// </summary>
-    private SettingsEditModel CreateModel(LauraSettings settings) =>
-        new(settings, _synthesizer, _localizer, _modelCatalog, _audioDevices);
+    private SettingsEditModel CreateModel(LauraSettings settings, bool syncStartupRegistration = true)
+    {
+        var model = new SettingsEditModel(settings, _synthesizer, _modelCatalog);
+
+        if (syncStartupRegistration)
+        {
+            model.StartWithWindows = settings.StartWithWindows || _startupRegistration.IsEnabled();
+        }
+
+        return model;
+    }
 
     // === Window structure ===
 
@@ -247,15 +238,16 @@ public sealed class SettingsForm : Form
     {
         Text = _localizer.Get("ui.window.title");
         StartPosition = FormStartPosition.CenterScreen;
-        FormBorderStyle = FormBorderStyle.FixedSingle;
-        MaximizeBox = false;
+        FormBorderStyle = FormBorderStyle.Sizable;
+        MaximizeBox = true;
         MinimizeBox = false;
         ShowInTaskbar = true;
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = Palette.Background;
         ForeColor = Palette.TextPrimary;
         Font = FontFactory.Create(9.5f);
-        ClientSize = new Size(920, 660);
+        ClientSize = new Size(960, 700);
+        MinimumSize = new Size(860, 620);
         TryApplyWindowIcon();
     }
 
@@ -345,12 +337,10 @@ public sealed class SettingsForm : Form
         });
 
         // Conversation comes first because it is the primary interaction surface.
-        AddNavButton(navStack, _localizer.Get("ui.tab.chat"), "💬");
-        AddNavButton(navStack, _localizer.Get("ui.tab.general"), "⚙");
-        AddNavButton(navStack, _localizer.Get("ui.tab.user"), "\U0001F464");
-        AddNavButton(navStack, _localizer.Get("ui.tab.voice"), "\U0001F5E3");
-        AddNavButton(navStack, _localizer.Get("ui.tab.recognition"), "\U0001F3A4");
-        AddNavButton(navStack, _localizer.Get("ui.tab.ai"), "✨");
+        AddNavButton(navStack, _localizer.Get("ui.tab.chat"), IconGlyphs.Chat);
+        AddNavButton(navStack, _localizer.Get("ui.tab.general"), IconGlyphs.Settings);
+        AddNavButton(navStack, _localizer.Get("ui.tab.user"), IconGlyphs.User);
+        AddNavButton(navStack, _localizer.Get("ui.tab.voice"), IconGlyphs.Voice);
 
         panel.Controls.Add(navStack);
         return panel;
@@ -402,11 +392,11 @@ public sealed class SettingsForm : Form
         host.Controls.Add(BuildChatSection());
         host.Controls.Add(BuildUserSection());
         host.Controls.Add(BuildVoiceSection());
-        host.Controls.Add(BuildRecognitionSection());
-        host.Controls.Add(BuildAiSection());
+
+        _footerPanel = BuildFooter();
 
         container.Controls.Add(host, 0, 0);
-        container.Controls.Add(BuildFooter(), 0, 1);
+        container.Controls.Add(_footerPanel, 0, 1);
 
         return container;
     }
@@ -477,7 +467,14 @@ public sealed class SettingsForm : Form
         var restoreButton = new FlatButton { Text = _localizer.Get("ui.actions.restoreDefaults"), IsPrimary = false };
         restoreButton.Click += (_, _) => RestoreDefaults();
 
-        var stopButton = new FlatButton { Text = "■", IsPrimary = false };
+        var stopButton = new CircleButton
+        {
+            Text = IconGlyphs.Stop,
+            IsPrimary = false,
+            Size = new Size(38, 38),
+            MinimumSize = new Size(38, 38),
+            Margin = new Padding(0, 0, Palette.Unit, 0),
+        };
         _toolTip.SetToolTip(stopButton, _localizer.Get("ui.chat.stop"));
         stopButton.Click += (_, _) => _engine.StopSpeaking();
 
@@ -526,9 +523,8 @@ public sealed class SettingsForm : Form
         var page = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = Palette.Background,
+            BackColor = Palette.ChatBackground,
             Visible = false,
-            Padding = new Padding(Palette.Unit * 2, 0, Palette.Unit, 0),
         };
 
         var layout = new TableLayoutPanel
@@ -536,21 +532,45 @@ public sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            BackColor = Palette.Background,
+            BackColor = Palette.ChatBackground,
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
 
-        layout.Controls.Add(SettingRowFactory.Heading(Text_("ui.chat.section")), 0, 0);
+        layout.Controls.Add(BuildChatHeader(), 0, 0);
 
-        var chatHost = new RoundedPanel
+        var body = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = Palette.Surface,
-            CornerRadius = 12,
+            BackColor = Palette.ChatBackground,
+        };
+
+        _chatTranscriptPanel = BuildChatTranscript();
+        _chatAiSettingsPanel = BuildChatAiSettings();
+        _chatAiSettingsPanel.Visible = false;
+        body.Controls.Add(_chatTranscriptPanel);
+        body.Controls.Add(_chatAiSettingsPanel);
+
+        layout.Controls.Add(body, 0, 1);
+        layout.Controls.Add(BuildChatComposer(), 0, 2);
+        page.Controls.Add(layout);
+        _sections[_localizer.Get("ui.tab.chat")] = page;
+        ReplayChatHistory();
+        UpdateChatInputState();
+
+        return page;
+    }
+
+    /// <summary>
+    /// Builds the transcript viewport and its custom dark scrollbar.
+    /// </summary>
+    private Panel BuildChatTranscript()
+    {
+        var chatHost = new ChatSurfacePanel
+        {
+            Dock = DockStyle.Fill,
             Padding = new Padding(Palette.Unit * 2),
-            Margin = new Padding(0, 0, 0, Palette.Unit),
         };
 
         var chatGrid = new TableLayoutPanel
@@ -558,32 +578,26 @@ public sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 1,
-            BackColor = Palette.Surface,
+            BackColor = Palette.ChatBackground,
         };
         chatGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        chatGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 10));
+        chatGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 8));
 
         _chatViewport = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = Palette.Surface,
+            BackColor = Palette.ChatBackground,
         };
         _chatViewport.MouseWheel += (_, args) => ScrollChatBy(-args.Delta / 3);
         _chatViewport.Resize += (_, _) => LayoutChatMessages();
 
-        _chatList = new FlowLayoutPanel
+        _chatList = new Panel
         {
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            BackColor = Palette.Surface,
+            BackColor = Palette.ChatBackground,
             Location = Point.Empty,
-            Width = 1,
+            Size = new Size(1, 1),
         };
         _chatList.MouseWheel += (_, args) => ScrollChatBy(-args.Delta / 3);
-        _chatList.ControlAdded += (_, _) => UpdateChatScroll();
-        _chatList.ControlRemoved += (_, _) => UpdateChatScroll();
 
         _chatEmptyLabel = new Label
         {
@@ -592,7 +606,7 @@ public sealed class SettingsForm : Form
             UseMnemonic = false,
             ForeColor = Palette.TextSecondary,
             Font = FontFactory.Create(9f),
-            Margin = new Padding(0),
+            Margin = new Padding(Palette.Unit * 2),
         };
 
         _chatList.Controls.Add(_chatEmptyLabel);
@@ -623,21 +637,63 @@ public sealed class SettingsForm : Form
         chatGrid.Controls.Add(_chatViewport, 0, 0);
         chatGrid.Controls.Add(_chatScrollTrack, 1, 0);
         chatHost.Controls.Add(chatGrid);
-        layout.Controls.Add(chatHost, 0, 1);
+
+        return chatHost;
+    }
+
+    /// <summary>
+    /// Builds the fixed chat composer shown beneath both transcript and AI options.
+    /// </summary>
+    private Control BuildChatComposer()
+    {
+        var composer = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Palette.ChatBackground,
+            Padding = new Padding(Palette.Unit, 0, Palette.Unit, Palette.Unit),
+        };
+
+        var inputDock = new RoundedPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Palette.ChatDock,
+            BorderColor = Palette.Border,
+            BorderThickness = 1,
+            CornerRadius = 18,
+            Padding = new Padding(Palette.Unit * 2, Palette.Unit + 2, Palette.Unit * 2, Palette.Unit + 2),
+        };
 
         var inputRow = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Palette.Background,
+            RowCount = 1,
+            BackColor = Palette.ChatDock,
         };
         inputRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        inputRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        inputRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42));
+        inputRow.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        Control inputPanel = InputFactory.CreateTextBox(0, out _chatInputBox);
-        inputPanel.Dock = DockStyle.Fill;
+        _chatInputBox = new TextBox
+        {
+            BorderStyle = BorderStyle.None,
+            BackColor = Palette.Field,
+            ForeColor = Palette.TextPrimary,
+            Font = FontFactory.Create(10f),
+            Dock = DockStyle.Fill,
+        };
+
+        _chatInputPanel = new RoundedPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Palette.Field,
+            BorderColor = Palette.Border,
+            BorderThickness = 1,
+            CornerRadius = 16,
+            Padding = new Padding(Palette.Unit * 2, 9, Palette.Unit * 2, 8),
+            Margin = new Padding(0, 0, Palette.Unit + 2, 0),
+        };
+        _chatInputPanel.Controls.Add(_chatInputBox);
         _chatInputBox.PlaceholderText = Text_("ui.chat.input");
         _chatInputBox.KeyDown += async (_, args) =>
         {
@@ -648,18 +704,265 @@ public sealed class SettingsForm : Form
             }
         };
 
-        var sendButton = new FlatButton { Text = Text_("ui.chat.send"), IsPrimary = true };
-        sendButton.Click += async (_, _) => await SendChatInputAsync().ConfigureAwait(true);
+        _chatSendButton = new CircleButton
+        {
+            Text = IconGlyphs.Send,
+            IsPrimary = true,
+            Size = new Size(40, 40),
+            MinimumSize = new Size(40, 40),
+            Anchor = AnchorStyles.None,
+            Margin = Padding.Empty,
+        };
+        _toolTip.SetToolTip(_chatSendButton, Text_("ui.chat.send"));
+        _chatSendButton.Click += async (_, _) => await SendChatInputAsync().ConfigureAwait(true);
 
-        inputRow.Controls.Add(inputPanel, 0, 0);
-        inputRow.Controls.Add(sendButton, 1, 0);
+        inputRow.Controls.Add(_chatInputPanel, 0, 0);
+        inputRow.Controls.Add(_chatSendButton, 1, 0);
+        inputDock.Controls.Add(inputRow);
+        composer.Controls.Add(inputDock);
 
-        layout.Controls.Add(inputRow, 0, 2);
-        page.Controls.Add(layout);
-        _sections[_localizer.Get("ui.tab.chat")] = page;
-        ReplayChatHistory();
+        return composer;
+    }
 
-        return page;
+    /// <summary>
+    /// Builds the chat header with status, model summary, stop, and AI options.
+    /// </summary>
+    /// <returns>The chat header.</returns>
+    private Control BuildChatHeader()
+    {
+        var header = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 1,
+            BackColor = Palette.Surface,
+            Padding = new Padding(Palette.Unit * 3, 12, Palette.Unit * 2, 12),
+        };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var avatar = new LauraAvatar
+        {
+            Width = 40,
+            Height = 40,
+            BackColor = Palette.Surface,
+            Anchor = AnchorStyles.Left,
+            Margin = new Padding(0, 0, Palette.Unit + 2, 0),
+        };
+
+        var titleStack = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Palette.Surface,
+            Anchor = AnchorStyles.Left,
+            Margin = Padding.Empty,
+        };
+        titleStack.Controls.Add(new Label
+        {
+            Text = "Laura",
+            AutoSize = true,
+            UseMnemonic = false,
+            ForeColor = Palette.TextPrimary,
+            Font = FontFactory.Create(12f, FontStyle.Bold),
+            Margin = Padding.Empty,
+        });
+
+        var statusRow = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Palette.Surface,
+            Margin = new Padding(0, 2, 0, 0),
+        };
+        statusRow.Controls.Add(new RoundedPanel
+        {
+            Width = 8,
+            Height = 8,
+            BackColor = Palette.Ready,
+            CornerRadius = 4,
+            Margin = new Padding(0, 5, 6, 0),
+        });
+        _chatStatusLabel = new Label
+        {
+            Text = Text_("ui.status.idle"),
+            AutoSize = true,
+            UseMnemonic = false,
+            ForeColor = Palette.TextSecondary,
+            Font = FontFactory.Create(8.5f),
+            Margin = Padding.Empty,
+        };
+        statusRow.Controls.Add(_chatStatusLabel);
+        titleStack.Controls.Add(statusRow);
+
+        var actions = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Palette.Surface,
+            Anchor = AnchorStyles.Right,
+            Margin = Padding.Empty,
+        };
+
+        actions.Controls.Add(BuildModelBadge());
+
+        var stopButton = new CircleButton
+        {
+            Text = IconGlyphs.Stop,
+            IsPrimary = false,
+            Width = 36,
+            Height = 36,
+            MinimumSize = new Size(36, 36),
+            Margin = new Padding(Palette.Unit, 2, 0, 0),
+        };
+        _toolTip.SetToolTip(stopButton, _localizer.Get("ui.chat.stop"));
+        stopButton.Click += (_, _) => _engine.StopSpeaking();
+        actions.Controls.Add(stopButton);
+
+        var optionsButton = new CircleButton
+        {
+            Text = IconGlyphs.More,
+            IsPrimary = false,
+            Width = 36,
+            Height = 36,
+            MinimumSize = new Size(36, 36),
+            Margin = new Padding(Palette.Unit, 2, 0, 0),
+        };
+        _toolTip.SetToolTip(optionsButton, Text_("ui.chat.aiOptions"));
+        optionsButton.Click += (_, _) =>
+        {
+            bool showSettings = !_chatAiSettingsPanel.Visible;
+            _chatAiSettingsPanel.Visible = showSettings;
+            _chatTranscriptPanel.Visible = !showSettings;
+        };
+        actions.Controls.Add(optionsButton);
+
+        header.Controls.Add(avatar, 0, 0);
+        header.Controls.Add(titleStack, 1, 0);
+        header.Controls.Add(actions, 2, 0);
+
+        return header;
+    }
+
+    /// <summary>
+    /// Builds the model badge shown in the chat header.
+    /// </summary>
+    /// <returns>The badge control.</returns>
+    private Control BuildModelBadge()
+    {
+        var badge = new RoundedPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Palette.Field,
+            BorderColor = Palette.Border,
+            BorderThickness = 1,
+            CornerRadius = 16,
+            Padding = new Padding(Palette.Unit + 4, 7, Palette.Unit + 4, 7),
+            Margin = new Padding(0, 2, 0, 0),
+        };
+
+        var badgeRow = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            BackColor = Palette.Field,
+            Margin = Padding.Empty,
+        };
+        badgeRow.Controls.Add(new Label
+        {
+            Text = IconGlyphs.Model,
+            AutoSize = true,
+            UseMnemonic = false,
+            ForeColor = Palette.TextSecondary,
+            Font = FontFactory.CreateIcon(9f),
+            Margin = new Padding(0, 1, 6, 0),
+        });
+
+        _chatModelLabel = new Label
+        {
+            AutoSize = true,
+            UseMnemonic = false,
+            ForeColor = Palette.TextSecondary,
+            Font = FontFactory.Create(8.5f),
+            Margin = Padding.Empty,
+        };
+        badgeRow.Controls.Add(_chatModelLabel);
+        badge.Controls.Add(badgeRow);
+
+        return badge;
+    }
+
+    /// <summary>
+    /// Builds the generative AI controls shown inside the chat page.
+    /// </summary>
+    /// <returns>The AI settings stack.</returns>
+    private Control BuildChatAiSettings()
+    {
+        var host = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BackColor = Palette.ChatBackground,
+            Padding = new Padding(Palette.Unit),
+        };
+
+        var panel = new RoundedPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Palette.Surface,
+            BorderColor = Palette.Border,
+            BorderThickness = 1,
+            CornerRadius = 14,
+            Padding = new Padding(Palette.Unit * 2),
+            Margin = new Padding(Palette.Unit, Palette.Unit, Palette.Unit, Palette.Unit),
+        };
+
+        var stack = new TableLayoutPanel
+        {
+            ColumnCount = 1,
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Palette.Surface,
+            Margin = Padding.Empty,
+        };
+        stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        AddRow(stack, SettingRowFactory.Toggle(Text_("ui.ai.enabled"), Text_("ui.ai.hint"), out _aiToggle));
+        Tip(_aiToggle, "ui.ai.hint");
+        _aiToggle.CheckedChanged += (_, _) =>
+        {
+            UpdateChatInputState();
+            UpdateChatModelBadge();
+        };
+
+        AddRow(stack, SettingRowFactory.TextRow(Text_("ui.ai.endpoint"), Text_("ui.ai.endpointHint"), out _endpointBox));
+        Tip(_endpointBox, "ui.ai.endpointHint");
+
+        AddRow(stack, SettingRowFactory.ComboRow(Text_("ui.ai.model"), Text_("ui.ai.modelHint"), out _modelCombo));
+        Tip(_modelCombo, "ui.ai.modelHint");
+        _modelCombo.SelectedIndexChanged += (_, _) => UpdateChatModelBadge();
+
+        AddRow(stack, SettingRowFactory.MultilineRow(
+            Text_("ui.ai.persona"), Text_("ui.ai.personaHint"), MultilineHeight, out _personaBox));
+        Tip(_personaBox, "ui.ai.personaHint");
+
+        panel.Controls.Add(stack);
+        host.Controls.Add(panel);
+        return host;
     }
 
     /// <summary>
@@ -714,89 +1017,6 @@ public sealed class SettingsForm : Form
         previewButton.Click += async (_, _) => await PreviewVoiceAsync().ConfigureAwait(true);
 
         AddRow(stack, previewButton);
-        return page;
-    }
-
-    /// <summary>
-    /// Builds the listening section.
-    ///
-    /// Returns:
-    ///     The section panel.
-    /// </summary>
-    private Panel BuildRecognitionSection()
-    {
-        (Panel page, TableLayoutPanel stack) = CreateSection(_localizer.Get("ui.tab.recognition"));
-
-        AddRow(stack, SettingRowFactory.Heading(Text_("ui.recognition.section")));
-
-        AddRow(stack, SettingRowFactory.Toggle(
-            Text_("ui.recognition.enabled"), Text_("ui.recognition.enabledHint"), out _recognitionToggle));
-        Tip(_recognitionToggle, "ui.recognition.enabledHint");
-
-        AddRow(stack, SettingRowFactory.ComboRow(
-            Text_("ui.recognition.microphone"), Text_("ui.recognition.microphoneHint"), out _microphoneCombo));
-        Tip(_microphoneCombo, "ui.recognition.microphoneHint");
-
-        AddRow(stack, SettingRowFactory.Toggle(
-            Text_("ui.recognition.noise"), Text_("ui.recognition.noiseHint"), out _noiseToggle));
-        Tip(_noiseToggle, "ui.recognition.noiseHint");
-
-        AddRow(stack, SettingRowFactory.MultilineRow(
-            Text_("ui.recognition.wakePhrases"), Text_("ui.recognition.wakePhrasesHint"), MultilineHeight, out _wakePhrasesBox));
-        Tip(_wakePhrasesBox, "ui.recognition.wakePhrasesHint");
-
-        AddRow(stack, SettingRowFactory.SliderRow(
-            Text_("ui.recognition.confidence"), 0, 100, FormatPercent, out _confidenceSlider));
-        Tip(_confidenceSlider, "ui.recognition.confidenceHint");
-
-        AddRow(stack, SettingRowFactory.SliderRow(
-            Text_("ui.recognition.timeout"), 3, 30, FormatSeconds, out _timeoutSlider));
-        Tip(_timeoutSlider, "ui.recognition.timeout");
-
-        AddRow(stack, SettingRowFactory.Toggle(
-            Text_("ui.recognition.inlineCommand"), Text_("ui.recognition.inlineCommandHint"), out _inlineToggle));
-        Tip(_inlineToggle, "ui.recognition.inlineCommandHint");
-
-        return page;
-    }
-
-    /// <summary>
-    /// Builds the generative-mode section.
-    ///
-    /// Returns:
-    ///     The section panel.
-    /// </summary>
-    private Panel BuildAiSection()
-    {
-        (Panel page, TableLayoutPanel stack) = CreateSection(_localizer.Get("ui.tab.ai"));
-
-        AddRow(stack, SettingRowFactory.Heading(Text_("ui.ai.section")));
-
-        AddRow(stack, SettingRowFactory.Toggle(Text_("ui.ai.enabled"), Text_("ui.ai.hint"), out _aiToggle));
-        Tip(_aiToggle, "ui.ai.hint");
-
-        AddRow(stack, new Label
-        {
-            Text = Text_("ui.ai.notConfigured"),
-            AutoSize = true,
-            UseMnemonic = false,
-            MaximumSize = new Size(540, 0),
-            ForeColor = Palette.TextSecondary,
-            Font = FontFactory.Create(8.5f),
-            Margin = new Padding(4, 0, 0, Palette.Unit),
-            Anchor = AnchorStyles.Left,
-        });
-
-        AddRow(stack, SettingRowFactory.TextRow(Text_("ui.ai.endpoint"), Text_("ui.ai.endpointHint"), out _endpointBox));
-        Tip(_endpointBox, "ui.ai.endpointHint");
-
-        AddRow(stack, SettingRowFactory.ComboRow(Text_("ui.ai.model"), Text_("ui.ai.modelHint"), out _modelCombo));
-        Tip(_modelCombo, "ui.ai.modelHint");
-
-        AddRow(stack, SettingRowFactory.MultilineRow(
-            Text_("ui.ai.persona"), Text_("ui.ai.personaHint"), MultilineHeight, out _personaBox));
-        Tip(_personaBox, "ui.ai.personaHint");
-
         return page;
     }
 
@@ -869,6 +1089,8 @@ public sealed class SettingsForm : Form
     /// </summary>
     private void SelectSection(string key)
     {
+        bool showingChat = string.Equals(key, _localizer.Get("ui.tab.chat"), StringComparison.Ordinal);
+
         foreach ((string sectionKey, Panel page) in _sections)
         {
             page.Visible = string.Equals(sectionKey, key, StringComparison.Ordinal);
@@ -877,6 +1099,11 @@ public sealed class SettingsForm : Form
         foreach (NavButton button in _navButtons)
         {
             button.Selected = string.Equals(button.Caption, key, StringComparison.Ordinal);
+        }
+
+        if (_footerPanel is not null)
+        {
+            _footerPanel.Visible = !showingChat;
         }
     }
 
@@ -934,7 +1161,7 @@ public sealed class SettingsForm : Form
     /// </summary>
     private void RestoreDefaults()
     {
-        _model = CreateModel(LauraSettings.Default);
+        _model = CreateModel(LauraSettings.Default, syncStartupRegistration: false);
         LoadModelIntoControls();
     }
 
@@ -998,6 +1225,14 @@ public sealed class SettingsForm : Form
     /// </summary>
     private async Task SendChatInputAsync()
     {
+        CommitControlsToModel();
+
+        if (!_model.GenerativeAiEnabled)
+        {
+            UpdateChatInputState();
+            return;
+        }
+
         string text = _chatInputBox.Text.Trim();
 
         if (text.Length == 0)
@@ -1006,7 +1241,67 @@ public sealed class SettingsForm : Form
         }
 
         _chatInputBox.Clear();
+        await ApplyChatAiSettingsAsync().ConfigureAwait(true);
         await _engine.SubmitCommandAsync(text).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Applies the edited generative settings so chat messages use the current fields.
+    /// </summary>
+    /// <returns>A task completed when the settings are current.</returns>
+    private async Task ApplyChatAiSettingsAsync()
+    {
+        LauraSettings current = _settingsService.Current;
+        LauraSettings updated = current with
+        {
+            GenerativeAi = new GenerativeAiOptions
+            {
+                Enabled = _model.GenerativeAiEnabled,
+                Endpoint = _model.GenerativeAiEndpoint,
+                Model = _model.GenerativeAiModel,
+                Persona = _model.GenerativeAiPersona,
+            },
+        };
+
+        await _settingsService.UpdateAsync(updated).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Enables typing only when generative AI is active.
+    /// </summary>
+    private void UpdateChatInputState()
+    {
+        if (_chatInputBox is null || _chatSendButton is null || _chatInputPanel is null)
+        {
+            return;
+        }
+
+        bool enabled = _aiToggle.Checked;
+        _chatInputBox.ReadOnly = !enabled;
+        _chatInputBox.BackColor = enabled ? Palette.Field : Palette.Surface;
+        _chatInputBox.ForeColor = enabled ? Palette.TextPrimary : Palette.TextSecondary;
+        _chatInputBox.PlaceholderText = enabled
+            ? Text_("ui.chat.input")
+            : Text_("ui.chat.inputDisabled");
+        _chatSendButton.Enabled = enabled;
+        _chatSendButton.IsPrimary = enabled;
+        _chatInputPanel.BackColor = enabled ? Palette.Field : Palette.Surface;
+    }
+
+    /// <summary>
+    /// Updates the model badge in the chat header.
+    /// </summary>
+    private void UpdateChatModelBadge()
+    {
+        if (_chatModelLabel is null)
+        {
+            return;
+        }
+
+        string selectedModel = (_modelCombo.SelectedItem as ComboItem)?.Value ?? _model.GenerativeAiModel;
+        _chatModelLabel.Text = _aiToggle.Checked && !string.IsNullOrWhiteSpace(selectedModel)
+            ? selectedModel
+            : Text_("ui.chat.aiOff");
     }
 
     /// <summary>
@@ -1031,37 +1326,67 @@ public sealed class SettingsForm : Form
         var row = new Panel
         {
             Width = Math.Max(1, _chatViewport.ClientSize.Width),
-            BackColor = Palette.Surface,
-            Margin = new Padding(0, 0, 0, Palette.Unit),
+            BackColor = Palette.ChatBackground,
+            Margin = new Padding(0, 0, 0, Palette.Unit * 2),
             Tag = fromAssistant,
         };
+
+        if (fromAssistant)
+        {
+            row.Controls.Add(new LauraAvatar
+            {
+                Width = 34,
+                Height = 34,
+                BackColor = Palette.ChatBackground,
+                Margin = Padding.Empty,
+                Tag = "avatar",
+            });
+        }
 
         var bubble = new RoundedPanel
         {
             AutoSize = false,
-            BackColor = fromAssistant ? Palette.Accent : Palette.Field,
-            CornerRadius = 12,
+            BackColor = fromAssistant ? Palette.AssistantBubble : Palette.UserBubble,
+            BorderColor = fromAssistant ? Color.FromArgb(80, Palette.TextSecondary) : Color.FromArgb(120, Palette.AccentHover),
+            BorderThickness = 1,
+            CornerRadius = 14,
             Margin = new Padding(0),
+            Tag = "bubble",
         };
 
         var text = new Label
         {
             Text = message.Text,
             AutoSize = false,
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Top,
             UseMnemonic = false,
-            MaximumSize = new Size(Math.Max(220, _chatViewport.ClientSize.Width - Palette.Unit * 12), 0),
             ForeColor = Palette.TextPrimary,
-            BackColor = Color.Transparent,
-            Padding = new Padding(Palette.Unit * 2, Palette.Unit, Palette.Unit * 2, Palette.Unit),
+            BackColor = fromAssistant ? Palette.AssistantBubble : Palette.UserBubble,
+            Padding = new Padding(Palette.Unit * 2, Palette.Unit + 2, Palette.Unit * 2, 0),
             Margin = new Padding(0),
             Font = FontFactory.Create(9.25f),
+            Tag = "message-text",
+        };
+        var time = new Label
+        {
+            Text = message.Timestamp.ToString("HH:mm", CultureInfo.CurrentCulture),
+            AutoSize = false,
+            Dock = DockStyle.Bottom,
+            TextAlign = ContentAlignment.MiddleRight,
+            UseMnemonic = false,
+            ForeColor = Color.FromArgb(175, Palette.TextSecondary),
+            BackColor = fromAssistant ? Palette.AssistantBubble : Palette.UserBubble,
+            Padding = new Padding(Palette.Unit * 2, 0, Palette.Unit * 2, Palette.Unit),
+            Margin = Padding.Empty,
+            Font = FontFactory.Create(7.5f),
+            Tag = "message-time",
         };
 
         bubble.Controls.Add(text);
+        bubble.Controls.Add(time);
         row.Controls.Add(bubble);
-        LayoutChatRow(row);
         _chatList.Controls.Add(row);
+        LayoutChatMessages();
         SetChatScrollOffset(GetMaxChatScrollOffset());
     }
 
@@ -1091,43 +1416,91 @@ public sealed class SettingsForm : Form
             return;
         }
 
-        _chatList.Width = Math.Max(1, _chatViewport.ClientSize.Width);
+        int currentOffset = GetChatScrollOffset();
+        int listWidth = Math.Max(1, _chatViewport.ClientSize.Width);
+        int nextTop = 0;
 
         foreach (Control control in _chatList.Controls)
         {
             if (control is Panel row)
             {
                 LayoutChatRow(row);
+                row.Location = new Point(0, nextTop);
+                nextTop += row.Height + Palette.Unit * 2;
+            }
+            else if (ReferenceEquals(control, _chatEmptyLabel))
+            {
+                control.Location = new Point(Palette.Unit * 2, Palette.Unit * 2);
+                nextTop = Math.Max(nextTop, control.Bottom + Palette.Unit * 2);
             }
         }
 
-        UpdateChatScroll();
+        _chatList.Size = new Size(
+            listWidth,
+            Math.Max(_chatViewport.ClientSize.Height, Math.Max(1, nextTop)));
+        SetChatScrollOffset(currentOffset);
     }
 
     private void LayoutChatRow(Panel row)
     {
-        if (_chatViewport is null || row.Controls.Count == 0 || row.Controls[0] is not Panel bubble)
+        if (_chatViewport is null)
         {
             return;
         }
 
-        if (bubble.Controls.Count == 0 || bubble.Controls[0] is not Label text)
+        Panel? bubble = row.Controls
+            .OfType<Panel>()
+            .FirstOrDefault(static control => string.Equals(control.Tag as string, "bubble", StringComparison.Ordinal));
+        Control? avatar = row.Controls
+            .Cast<Control>()
+            .FirstOrDefault(static control => string.Equals(control.Tag as string, "avatar", StringComparison.Ordinal));
+
+        if (bubble is null)
+        {
+            return;
+        }
+
+        Label? text = bubble.Controls
+            .OfType<Label>()
+            .FirstOrDefault(static control => string.Equals(control.Tag as string, "message-text", StringComparison.Ordinal));
+        Label? time = bubble.Controls
+            .OfType<Label>()
+            .FirstOrDefault(static control => string.Equals(control.Tag as string, "message-time", StringComparison.Ordinal));
+
+        if (text is null || time is null)
         {
             return;
         }
 
         bool fromAssistant = row.Tag is true;
         int rowWidth = Math.Max(1, _chatViewport.ClientSize.Width);
-        int maxBubbleWidth = Math.Max(220, rowWidth - Palette.Unit * 12);
+        int sideInset = Palette.Unit * 2;
+        int avatarSpace = fromAssistant ? 48 : 0;
+        int availableWidth = Math.Max(120, rowWidth - avatarSpace - sideInset * 2);
+        int maxBubbleWidth = Math.Min(520, Math.Min((int)(rowWidth * 0.72), availableWidth));
+        maxBubbleWidth = Math.Max(120, maxBubbleWidth);
+        int minimumBubbleWidth = Math.Min(fromAssistant ? 180 : 96, maxBubbleWidth);
 
         row.Width = rowWidth;
-        text.MaximumSize = new Size(maxBubbleWidth, 0);
-        Size preferred = text.GetPreferredSize(new Size(maxBubbleWidth, 0));
-        bubble.Size = preferred;
+        Size naturalTextSize = text.GetPreferredSize(Size.Empty);
+        int bubbleWidth = Math.Clamp(naturalTextSize.Width, minimumBubbleWidth, maxBubbleWidth);
+        Size textPreferred = text.GetPreferredSize(new Size(bubbleWidth, 0));
+        int timeHeight = 20;
+        text.Width = bubbleWidth;
+        text.Height = textPreferred.Height;
+        time.Width = bubbleWidth;
+        time.Height = timeHeight;
+        bubble.Size = new Size(bubbleWidth, textPreferred.Height + timeHeight);
+
+        if (avatar is not null)
+        {
+            avatar.Location = new Point(sideInset, Math.Max(0, bubble.Height - avatar.Height));
+        }
+
         bubble.Location = fromAssistant
-            ? new Point(Palette.Unit, 0)
-            : new Point(Math.Max(Palette.Unit, rowWidth - preferred.Width - Palette.Unit), 0);
-        row.Height = preferred.Height;
+            ? new Point(sideInset + avatarSpace, 0)
+            : new Point(Math.Max(sideInset, rowWidth - bubble.Width - sideInset), 0);
+        row.Height = Math.Max(bubble.Height, avatar?.Height ?? 0);
     }
 
     private void ScrollChatBy(int delta) => SetChatScrollOffset(GetChatScrollOffset() + delta);
@@ -1158,18 +1531,7 @@ public sealed class SettingsForm : Form
 
     private void UpdateChatScroll()
     {
-        LayoutChatMessagesCore();
-        SetChatScrollOffset(GetChatScrollOffset());
-    }
-
-    private void LayoutChatMessagesCore()
-    {
-        if (_chatList is null || _chatViewport is null)
-        {
-            return;
-        }
-
-        _chatList.Width = Math.Max(1, _chatViewport.ClientSize.Width);
+        LayoutChatMessages();
     }
 
     private void UpdateChatScrollThumb(int offset)
@@ -1250,8 +1612,7 @@ public sealed class SettingsForm : Form
     /// <summary>
     /// Reflects the assistant state in the footer.
     ///
-    /// This is where a microphone failure becomes visible: instead of being announced
-    /// out loud on every start, it appears as a persistent window state.
+    /// Shows whether Laura is ready, working, speaking, or stopped.
     ///
     /// Args:
     ///     state: State to display.
@@ -1265,23 +1626,22 @@ public sealed class SettingsForm : Form
 
         (string key, Color color) = state switch
         {
-            AssistantState.AwaitingWakeWord => ("ui.status.idle", Palette.Listening),
-            AssistantState.ListeningForCommand => ("ui.status.listening", Palette.Listening),
+            AssistantState.Ready => ("ui.status.idle", Palette.Ready),
             AssistantState.Working => ("ui.status.thinking", Palette.Speaking),
             AssistantState.Speaking => ("ui.status.speaking", Palette.Speaking),
-            AssistantState.ListeningDisabled => ("ui.status.disabled", Palette.Muted),
-            AssistantState.RecognitionUnavailable => ("ui.status.unavailable", Palette.Warning),
             _ => ("ui.status.stopped", Palette.Muted),
         };
 
-        string wakePhrase = _model.WakePhrases.Count > 0 ? _model.WakePhrases[0] : "ok laura";
-
-        _statusLabel.Text = _localizer.Get(key, wakePhrase);
+        _statusLabel.Text = _localizer.Get(key);
         _statusLabel.ForeColor = color;
 
-        _hintLabel.Text = state is AssistantState.RecognitionUnavailable
-            ? _localizer.Get("ui.status.unavailableHint")
-            : _localizer.Get("ui.footer.hotkey");
+        _hintLabel.Text = _localizer.Get("ui.footer.hotkey");
+
+        if (_chatStatusLabel is not null)
+        {
+            _chatStatusLabel.Text = _localizer.Get(key);
+            _chatStatusLabel.ForeColor = color == Palette.Ready ? Palette.TextSecondary : color;
+        }
     }
 
     /// <summary>
@@ -1293,7 +1653,7 @@ public sealed class SettingsForm : Form
     private void ShowTransientStatus(string message)
     {
         _statusLabel.Text = message;
-        _statusLabel.ForeColor = Palette.Listening;
+        _statusLabel.ForeColor = Palette.Ready;
 
         _ = RestoreStatusAfterDelayAsync();
     }
@@ -1322,7 +1682,6 @@ public sealed class SettingsForm : Form
     private void LoadModelIntoControls()
     {
         PopulateVoiceCombo();
-        PopulateMicrophoneCombo();
         PopulateModelCombo();
 
         _nicknameBox.Text = _model.UserNickname;
@@ -1331,13 +1690,6 @@ public sealed class SettingsForm : Form
         _pitchSlider.Value = _model.Pitch;
         _volumeSlider.Value = _model.Volume;
 
-        _recognitionToggle.Checked = _model.RecognitionEnabled;
-        _noiseToggle.Checked = _model.NoiseSuppression;
-        _wakePhrasesBox.Text = string.Join(Environment.NewLine, _model.WakePhrases);
-        _confidenceSlider.Value = (int)Math.Round(_model.MinimumConfidence * 100);
-        _timeoutSlider.Value = _model.CommandTimeoutSeconds;
-        _inlineToggle.Checked = _model.AllowInlineCommand;
-
         _greetToggle.Checked = _model.GreetOnStartup;
         _hourlyToggle.Checked = _model.AnnounceHourly;
         _startupToggle.Checked = _model.StartWithWindows;
@@ -1345,6 +1697,8 @@ public sealed class SettingsForm : Form
         _aiToggle.Checked = _model.GenerativeAiEnabled;
         _endpointBox.Text = _model.GenerativeAiEndpoint;
         _personaBox.Text = _model.GenerativeAiPersona;
+        UpdateChatInputState();
+        UpdateChatModelBadge();
     }
 
     /// <summary>
@@ -1360,14 +1714,6 @@ public sealed class SettingsForm : Form
         _model.Rate = _rateSlider.Value;
         _model.Pitch = _pitchSlider.Value;
         _model.Volume = _volumeSlider.Value;
-
-        _model.RecognitionEnabled = _recognitionToggle.Checked;
-        _model.MicrophoneDeviceId = (_microphoneCombo.SelectedItem as ComboItem)?.Value;
-        _model.NoiseSuppression = _noiseToggle.Checked;
-        _model.WakePhrases = ParseWakePhrases(_wakePhrasesBox.Text);
-        _model.MinimumConfidence = _confidenceSlider.Value / 100.0;
-        _model.CommandTimeoutSeconds = _timeoutSlider.Value;
-        _model.AllowInlineCommand = _inlineToggle.Checked;
 
         _model.GreetOnStartup = _greetToggle.Checked;
         _model.AnnounceHourly = _hourlyToggle.Checked;
@@ -1401,30 +1747,6 @@ public sealed class SettingsForm : Form
         if (_voiceCombo.SelectedIndex < 0)
         {
             _voiceCombo.SelectedIndex = 0;
-        }
-    }
-
-    /// <summary>
-    /// Fills the microphone combo with the available capture devices.
-    /// </summary>
-    private void PopulateMicrophoneCombo()
-    {
-        _microphoneCombo.Items.Clear();
-        _microphoneCombo.SelectedIndex = -1;
-
-        foreach (AudioDevice device in _model.GetInputDevices())
-        {
-            int index = _microphoneCombo.Items.Add(new ComboItem(device.Name, device.Id));
-
-            if (string.Equals(device.Id, _model.MicrophoneDeviceId ?? string.Empty, StringComparison.OrdinalIgnoreCase))
-            {
-                _microphoneCombo.SelectedIndex = index;
-            }
-        }
-
-        if (_microphoneCombo.SelectedIndex < 0 && _microphoneCombo.Items.Count > 0)
-        {
-            _microphoneCombo.SelectedIndex = 0;
         }
     }
 
@@ -1464,18 +1786,6 @@ public sealed class SettingsForm : Form
     // === Helpers ===
 
     /// <summary>
-    /// Parses the multiline wake-phrase text.
-    ///
-    /// Args:
-    ///     text: Text box content, one phrase per line.
-    ///
-    /// Returns:
-    ///     The non-empty phrases, trimmed.
-    /// </summary>
-    private static IReadOnlyList<string> ParseWakePhrases(string text) =>
-        [.. text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
-
-    /// <summary>
     /// Tries to apply the application icon to the window.
     /// </summary>
     private void TryApplyWindowIcon()
@@ -1496,8 +1806,5 @@ public sealed class SettingsForm : Form
 
     /// <summary>Formats a value as a percentage.</summary>
     private static string FormatPercent(int value) => $"{value}%";
-
-    /// <summary>Formats a duration in seconds using the active translation.</summary>
-    private string FormatSeconds(int value) => _localizer.Get("ui.recognition.seconds", value);
 
 }

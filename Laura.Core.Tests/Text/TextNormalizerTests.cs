@@ -8,10 +8,10 @@ namespace Laura.Core.Tests.Text;
 public sealed class TextNormalizerTests
 {
     [Theory]
-    [InlineData("Ok, Laura!", "ok laura")]
+    [InlineData("Hello, Laura!", "hello laura")]
     [InlineData("WHAT TIME IS IT?", "what time is it")]
     [InlineData("  Hello   World  ", "hello world")]
-    [InlineData("Pesquise por gatos.", "pesquise por gatos")]
+    [InlineData("Search for cats.", "search for cats")]
     public void Normalize_RemovesAccentsCaseAndPunctuation(string input, string expected) =>
         Assert.Equal(expected, TextNormalizer.Normalize(input));
 
@@ -26,15 +26,15 @@ public sealed class TextNormalizerTests
     [Fact]
     public void ContainsPhrase_MatchesWholeWordsOnly()
     {
-        Assert.True(TextNormalizer.ContainsPhrase("ok laura what time is it", "laura"));
-        Assert.False(TextNormalizer.ContainsPhrase("lauraceas sao plantas", "laura"));
+        Assert.True(TextNormalizer.ContainsPhrase("hello laura what time is it", "laura"));
+        Assert.False(TextNormalizer.ContainsPhrase("lauraceous plants", "laura"));
     }
 
     [Fact]
     public void RemovePhrase_StripsFirstOccurrenceAndTrims() =>
-        Assert.Equal("what time is it", TextNormalizer.RemovePhrase("ok laura what time is it", "ok laura"));
+        Assert.Equal("what time is it", TextNormalizer.RemovePhrase("hello laura what time is it", "hello laura"));
 
     [Fact]
     public void RemovePhrase_ReturnsOriginalWhenPhraseAbsent() =>
-        Assert.Equal("bom dia", TextNormalizer.RemovePhrase("bom dia", "ok laura"));
+        Assert.Equal("good morning", TextNormalizer.RemovePhrase("good morning", "hello laura"));
 }

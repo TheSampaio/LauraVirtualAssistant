@@ -5,11 +5,11 @@ Guidelines for working in this repository. Read this before changing code.
 ## What Laura Is
 
 Laura is a personal assistant for Windows inspired by Jarvis, in a feminine version.
-She lives in the system tray, responds by voice ("Ok, Laura" / "Hey Laura"), and
+She lives in the system tray, speaks responses, accepts typed chat commands, and
 shows the settings window with **Alt + L**. Migrated from Python to **C# / .NET 9**.
 
 The only supported language is **English (en-US)**. Keep UI text, command
-phrases, recognition, and generative AI prompts aligned with English only.
+phrases, and generative AI prompts aligned with English only.
 
 ## Commands
 
@@ -68,12 +68,10 @@ domain.
 
 `AssistantEngine` processes everything in a **single consumer loop** fed by a queue
 (`System.Threading.Channels`). Rules when changing it:
-- Recognizer events and UI calls only **enqueue** messages; they never do work on the
-  caller. The UI must not freeze while Laura listens or speaks.
+- UI calls only **enqueue** messages; they never do work on the caller. The UI must
+  not freeze while Laura speaks or waits for a model.
 - Only the loop changes engine state. Do not introduce locks to protect shared state;
   enqueue a message.
-- Listening is suspended while speaking (otherwise Laura responds to her own voice).
-  Preserve that behavior.
 - Events from background threads that touch the UI go through `IUiDispatcher`.
 
 ## How to Add a Skill

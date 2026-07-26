@@ -28,4 +28,16 @@ internal static class FontFactory
             ? font
             : new Font(Palette.FallbackFontFamily, size, style, GraphicsUnit.Point);
     }
+
+    /// <summary>
+    /// Creates a font containing the native Windows interface icons.
+    /// </summary>
+    internal static Font CreateIcon(float size)
+    {
+        var font = new Font(Palette.IconFontFamily, size, FontStyle.Regular, GraphicsUnit.Point);
+
+        return font.Name.Equals(Palette.IconFontFamily, StringComparison.OrdinalIgnoreCase)
+            ? font
+            : new Font(Palette.IconFallbackFontFamily, size, FontStyle.Regular, GraphicsUnit.Point);
+    }
 }

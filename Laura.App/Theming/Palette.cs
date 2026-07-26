@@ -16,6 +16,18 @@ internal static class Palette
     /// <summary>Background for cards and raised panels.</summary>
     internal static Color Surface { get; } = Color.FromArgb(0x12, 0x14, 0x19);
 
+    /// <summary>Chat transcript background.</summary>
+    internal static Color ChatBackground { get; } = Color.FromArgb(0x0B, 0x0D, 0x14);
+
+    /// <summary>Assistant message bubble background.</summary>
+    internal static Color AssistantBubble { get; } = Color.FromArgb(0x1B, 0x20, 0x2D);
+
+    /// <summary>User message bubble background.</summary>
+    internal static Color UserBubble { get; } = Color.FromArgb(0xA7, 0x13, 0x24);
+
+    /// <summary>Chat input dock background.</summary>
+    internal static Color ChatDock { get; } = Color.FromArgb(0x10, 0x13, 0x1D);
+
     /// <summary>Input field background.</summary>
     internal static Color Field { get; } = Color.FromArgb(0x1A, 0x1D, 0x24);
 
@@ -40,8 +52,8 @@ internal static class Palette
     /// <summary>Dark chat scrollbar thumb.</summary>
     internal static Color ScrollThumb { get; } = Color.FromArgb(0x33, 0x38, 0x45);
 
-    /// <summary>Active listening indicator color.</summary>
-    internal static Color Listening { get; } = Color.FromArgb(0x38, 0xD9, 0x96);
+    /// <summary>Ready indicator color.</summary>
+    internal static Color Ready { get; } = Color.FromArgb(0x38, 0xD9, 0x96);
 
     /// <summary>Speaking indicator color.</summary>
     internal static Color Speaking { get; } = Color.FromArgb(0x64, 0xB5, 0xF6);
@@ -57,6 +69,12 @@ internal static class Palette
 
     /// <summary>Fallback font family, available on every Windows installation.</summary>
     internal const string FallbackFontFamily = "Segoe UI";
+
+    /// <summary>Native Windows icon font used for interface actions.</summary>
+    internal const string IconFontFamily = "Segoe Fluent Icons";
+
+    /// <summary>Windows 10 fallback for the native icon font.</summary>
+    internal const string IconFallbackFontFamily = "Segoe MDL2 Assets";
 
     /// <summary>Base spacing, in pixels, from which other measurements derive.</summary>
     internal const int Unit = 8;

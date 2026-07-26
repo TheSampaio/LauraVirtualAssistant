@@ -54,7 +54,7 @@ public interface ILocalizer
     /// Gets the phrase list associated with a key.
     ///
     /// Args:
-    ///     key: Chave da lista, como <c>phrases.time</c>.
+    ///     key: List key, such as <c>phrases.time</c>.
     ///
     /// Returns:
     ///     The registered phrases, or an empty list when the key does not exist.

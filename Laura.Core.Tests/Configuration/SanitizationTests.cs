@@ -25,47 +25,9 @@ public sealed class SanitizationTests
     }
 
     [Fact]
-    public void RecognitionOptions_RemovesDuplicateAndBlankPhrases()
+    public void LauraSettings_ForcesEnglishCulture()
     {
-        RecognitionOptions sanitized = new RecognitionOptions
-        {
-            WakePhrases = ["Ok Laura", "ok laura", "  ", "Hey Laura"],
-        }.Sanitized();
-
-        Assert.Equal(2, sanitized.WakePhrases.Count);
-    }
-
-    [Fact]
-    public void RecognitionOptions_RestoresDefaultsWhenAllPhrasesInvalid()
-    {
-        RecognitionOptions sanitized = new RecognitionOptions { WakePhrases = ["", "   "] }.Sanitized();
-        Assert.NotEmpty(sanitized.WakePhrases);
-    }
-
-    [Fact]
-    public void RecognitionOptions_ClampsConfidenceAndTimeout()
-    {
-        RecognitionOptions sanitized = new RecognitionOptions
-        {
-            MinimumConfidence = 5.0,
-            CommandTimeout = TimeSpan.FromSeconds(120),
-        }.Sanitized();
-
-        Assert.Equal(1.0, sanitized.MinimumConfidence);
-        Assert.Equal(30, sanitized.CommandTimeout.TotalSeconds);
-    }
-
-    [Fact]
-    public void LauraSettings_FallsBackToDefaultCultureWhenInvalid()
-    {
-        LauraSettings sanitized = new LauraSettings { Culture = "does-not-exist" }.Sanitized();
+        LauraSettings sanitized = new LauraSettings { Culture = "pt-BR" }.Sanitized();
         Assert.Equal(LauraSettings.Default.Culture, sanitized.Culture);
-    }
-
-    [Fact]
-    public void LauraSettings_MirrorsCultureIntoRecognition()
-    {
-        LauraSettings sanitized = new LauraSettings { Culture = "en-US" }.Sanitized();
-        Assert.Equal("en-US", sanitized.Recognition.Culture);
     }
 }

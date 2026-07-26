@@ -39,12 +39,12 @@ internal static class SettingRowFactory
     };
 
     /// <summary>
-    /// Cria uma linha com um interruptor liga/desliga.
+    /// Creates a row with an on/off switch.
     ///
     /// Args:
     ///     title: Option title.
     ///     hint: Helper description, or empty.
-    ///     toggle: Recebe o interruptor criado, para leitura posterior.
+    ///     toggle: Receives the created switch for later reads.
     ///
     /// Returns:
     ///     The row card.
@@ -61,14 +61,14 @@ internal static class SettingRowFactory
     }
 
     /// <summary>
-    /// Cria uma linha com um controle deslizante e leitura do valor.
+    /// Creates a row with a slider and value readout.
     ///
     /// Args:
     ///     title: Option title.
-    ///     minimum: Menor valor da faixa.
-    ///     maximum: Maior valor da faixa.
+    ///     minimum: Smallest range value.
+    ///     maximum: Largest range value.
     ///     format: Function that formats the value displayed beside the title.
-    ///     slider: Recebe o controle deslizante criado.
+    ///     slider: Receives the created slider.
     ///
     /// Returns:
     ///     The row card.
@@ -257,7 +257,7 @@ internal static class SettingRowFactory
                 Text = hint,
                 AutoSize = true,
                 // Without this, "&" in text such as "Time & language" is interpreted
-                // como marcador de tecla de acesso e desaparece da tela.
+                // as an access-key marker and disappears from the screen.
                 UseMnemonic = false,
                 MaximumSize = new Size(HintMaximumWidth, 0),
                 ForeColor = Palette.TextSecondary,

@@ -15,9 +15,7 @@ namespace Laura.App.Views;
 public sealed class SettingsEditModel
 {
     private readonly ISpeechSynthesizer _synthesizer;
-    private readonly ILocalizer _localizer;
     private readonly IModelCatalog _modelCatalog;
-    private readonly IAudioDeviceCatalog _audioDevices;
 
     /// <summary>
     /// Creates the model from the current settings.
@@ -25,27 +23,19 @@ public sealed class SettingsEditModel
     /// Args:
     ///     settings: Current settings, copied into the editable fields.
     ///     synthesizer: Synthesis engine, queried to list the voices.
-    ///     localizer: Localizer, queried to list the languages.
     ///     modelCatalog: Catalog of installed generative models.
-    ///     audioDevices: Catalog of capture devices.
     /// </summary>
     public SettingsEditModel(
         LauraSettings settings,
         ISpeechSynthesizer synthesizer,
-        ILocalizer localizer,
-        IModelCatalog modelCatalog,
-        IAudioDeviceCatalog audioDevices)
+        IModelCatalog modelCatalog)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(synthesizer);
-        ArgumentNullException.ThrowIfNull(localizer);
         ArgumentNullException.ThrowIfNull(modelCatalog);
-        ArgumentNullException.ThrowIfNull(audioDevices);
 
         _synthesizer = synthesizer;
-        _localizer = localizer;
         _modelCatalog = modelCatalog;
-        _audioDevices = audioDevices;
 
         Culture = settings.Culture;
         UserNickname = settings.UserNickname;
@@ -53,14 +43,6 @@ public sealed class SettingsEditModel
         Rate = settings.Voice.Rate;
         Pitch = settings.Voice.Pitch;
         Volume = settings.Voice.Volume;
-
-        RecognitionEnabled = settings.Recognition.Enabled;
-        MicrophoneDeviceId = settings.Recognition.MicrophoneDeviceId;
-        NoiseSuppression = settings.Recognition.NoiseSuppression;
-        WakePhrases = [.. settings.Recognition.WakePhrases];
-        MinimumConfidence = settings.Recognition.MinimumConfidence;
-        CommandTimeoutSeconds = (int)settings.Recognition.CommandTimeout.TotalSeconds;
-        AllowInlineCommand = settings.Recognition.AllowInlineCommand;
 
         GreetOnStartup = settings.GreetOnStartup;
         AnnounceHourly = settings.AnnounceHourly;
@@ -89,27 +71,6 @@ public sealed class SettingsEditModel
 
     /// <summary>Gets or sets the speech volume.</summary>
     public int Volume { get; set; }
-
-    /// <summary>Gets or sets whether Laura listens to the microphone.</summary>
-    public bool RecognitionEnabled { get; set; }
-
-    /// <summary>Gets or sets the chosen microphone id, or <see langword="null"/> for the default.</summary>
-    public string? MicrophoneDeviceId { get; set; }
-
-    /// <summary>Gets or sets whether the device's built-in noise reduction is requested.</summary>
-    public bool NoiseSuppression { get; set; }
-
-    /// <summary>Gets or sets the wake phrases.</summary>
-    public IReadOnlyList<string> WakePhrases { get; set; }
-
-    /// <summary>Gets or sets the minimum accepted confidence, from 0.0 to 1.0.</summary>
-    public double MinimumConfidence { get; set; }
-
-    /// <summary>Gets or sets the command listening window, in seconds.</summary>
-    public int CommandTimeoutSeconds { get; set; }
-
-    /// <summary>Gets or sets whether the command may come with the wake word.</summary>
-    public bool AllowInlineCommand { get; set; }
 
     /// <summary>Gets or sets whether Laura greets the user on startup.</summary>
     public bool GreetOnStartup { get; set; }
@@ -160,28 +121,12 @@ public sealed class SettingsEditModel
     }
 
     /// <summary>
-    /// Lists the languages a translation exists for.
-    ///
-    /// Returns:
-    ///     The available cultures.
-    /// </summary>
-    public IReadOnlyList<CultureInfo> GetSelectableCultures() => _localizer.AvailableCultures;
-
-    /// <summary>
     /// Lists the installed generative models.
     ///
     /// Returns:
     ///     The models pulled locally by the provider.
     /// </summary>
     public IReadOnlyList<string> GetInstalledModels() => _modelCatalog.GetInstalledModels();
-
-    /// <summary>
-    /// Lists the capture devices.
-    ///
-    /// Returns:
-    ///     The available microphones, the first being the system default.
-    /// </summary>
-    public IReadOnlyList<AudioDevice> GetInputDevices() => _audioDevices.GetInputDevices();
 
     /// <summary>
     /// Builds the current voice profile, for an immediate preview.
@@ -209,17 +154,6 @@ public sealed class SettingsEditModel
         Culture = Culture,
         UserNickname = UserNickname,
         Voice = BuildVoiceProfile(),
-        Recognition = new RecognitionOptions
-        {
-            Enabled = RecognitionEnabled,
-            Culture = Culture,
-            MicrophoneDeviceId = MicrophoneDeviceId,
-            NoiseSuppression = NoiseSuppression,
-            WakePhrases = WakePhrases,
-            MinimumConfidence = MinimumConfidence,
-            CommandTimeout = TimeSpan.FromSeconds(CommandTimeoutSeconds),
-            AllowInlineCommand = AllowInlineCommand,
-        },
         GenerativeAi = new GenerativeAiOptions
         {
             Enabled = GenerativeAiEnabled,

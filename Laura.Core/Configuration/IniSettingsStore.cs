@@ -27,7 +27,6 @@ public sealed class IniSettingsStore : ISettingsStore
     private const string GeneralSection = "General";
     private const string UserSection = "User";
     private const string VoiceSection = "Voice";
-    private const string RecognitionSection = "Recognition";
     private const string GenerativeAiSection = "GenerativeAI";
 
     private readonly string _filePath;
@@ -133,34 +132,6 @@ public sealed class IniSettingsStore : ISettingsStore
                 Volume = document.GetInt32(VoiceSection, "Volume", defaults.Voice.Volume),
             },
 
-            Recognition = new RecognitionOptions
-            {
-                Enabled = document.GetBoolean(RecognitionSection, "Enabled", defaults.Recognition.Enabled),
-                MicrophoneDeviceId = document.GetString(RecognitionSection, "Microphone", string.Empty) is { Length: > 0 } mic
-                    ? mic
-                    : null,
-                NoiseSuppression = document.GetBoolean(
-                    RecognitionSection,
-                    "NoiseSuppression",
-                    defaults.Recognition.NoiseSuppression),
-                WakePhrases = document.GetList(
-                    RecognitionSection,
-                    "WakePhrases",
-                    defaults.Recognition.WakePhrases),
-                MinimumConfidence = document.GetDouble(
-                    RecognitionSection,
-                    "MinimumConfidence",
-                    defaults.Recognition.MinimumConfidence),
-                CommandTimeout = TimeSpan.FromSeconds(document.GetDouble(
-                    RecognitionSection,
-                    "CommandTimeoutSeconds",
-                    defaults.Recognition.CommandTimeout.TotalSeconds)),
-                AllowInlineCommand = document.GetBoolean(
-                    RecognitionSection,
-                    "AcceptCommandWithWakeWord",
-                    defaults.Recognition.AllowInlineCommand),
-            },
-
             GenerativeAi = new GenerativeAiOptions
             {
                 Enabled = document.GetBoolean(GenerativeAiSection, "Enabled", defaults.GenerativeAi.Enabled),
@@ -196,14 +167,6 @@ public sealed class IniSettingsStore : ISettingsStore
         document.SetNumber(VoiceSection, "Rate", settings.Voice.Rate);
         document.SetNumber(VoiceSection, "Pitch", settings.Voice.Pitch);
         document.SetNumber(VoiceSection, "Volume", settings.Voice.Volume);
-
-        document.SetBoolean(RecognitionSection, "Enabled", settings.Recognition.Enabled);
-        document.Set(RecognitionSection, "Microphone", settings.Recognition.MicrophoneDeviceId ?? string.Empty);
-        document.SetBoolean(RecognitionSection, "NoiseSuppression", settings.Recognition.NoiseSuppression);
-        document.SetList(RecognitionSection, "WakePhrases", settings.Recognition.WakePhrases);
-        document.SetNumber(RecognitionSection, "MinimumConfidence", settings.Recognition.MinimumConfidence);
-        document.SetNumber(RecognitionSection, "CommandTimeoutSeconds", settings.Recognition.CommandTimeout.TotalSeconds);
-        document.SetBoolean(RecognitionSection, "AcceptCommandWithWakeWord", settings.Recognition.AllowInlineCommand);
 
         document.SetBoolean(GenerativeAiSection, "Enabled", settings.GenerativeAi.Enabled);
         document.Set(GenerativeAiSection, "Provider", settings.GenerativeAi.Provider);

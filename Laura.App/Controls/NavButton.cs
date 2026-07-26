@@ -12,13 +12,14 @@ public sealed class NavButton : Control
 {
     private bool _selected;
     private bool _hovered;
+    private readonly Font _iconFont = FontFactory.CreateIcon(12f);
 
     /// <summary>
     /// Initializes the navigation item.
     ///
     /// Args:
     ///     caption: Displayed label.
-    ///     glyph: Emoji or symbol that precedes the label.
+    ///     glyph: Native Windows icon that precedes the label.
     /// </summary>
     public NavButton(string caption, string glyph)
     {
@@ -78,6 +79,17 @@ public sealed class NavButton : Control
     }
 
     /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _iconFont.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    /// <inheritdoc />
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
@@ -100,10 +112,12 @@ public sealed class NavButton : Control
         }
 
         Color textColor = _selected ? Palette.TextPrimary : Palette.TextSecondary;
-        var textBounds = new Rectangle(Theming.Palette.Unit * 2, 0, Width - Theming.Palette.Unit * 2, Height);
+        var iconBounds = new Rectangle(Palette.Unit * 2, 0, 24, Height);
+        var textBounds = new Rectangle(Palette.Unit * 6, 0, Width - Palette.Unit * 7, Height);
         TextFormatFlags flags = TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPrefix;
 
-        TextRenderer.DrawText(graphics, $"{Glyph}   {Caption}", Font, textBounds, textColor, flags);
+        TextRenderer.DrawText(graphics, Glyph, _iconFont, iconBounds, textColor, flags);
+        TextRenderer.DrawText(graphics, Caption, Font, textBounds, textColor, flags);
     }
 
     /// <summary>

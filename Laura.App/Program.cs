@@ -16,8 +16,8 @@ internal static class Program
     /// Initializes Windows Forms, composes dependencies, and hands control to the
     /// system tray.
     ///
-    /// A single instance is guaranteed by a named mutex: two processes
-    /// would contend for the microphone and global hotkey.
+    /// A single instance is guaranteed by a named mutex: two processes would
+    /// contend for the tray icon and global hotkey.
     /// </summary>
     [STAThread]
     private static void Main()

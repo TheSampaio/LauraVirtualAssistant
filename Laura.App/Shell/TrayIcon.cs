@@ -8,13 +8,12 @@ namespace Laura.App.Shell;
 /// Assistant icon in the system tray and its context menu.
 ///
 /// It is Laura's only permanent visible presence: the window stays hidden,
-/// but the icon gives access to settings, listening pause, and exit.
+/// but the icon gives access to settings and exit.
 /// </summary>
 public sealed class TrayIcon : IDisposable
 {
     private readonly NotifyIcon _notifyIcon;
     private readonly ILocalizer _localizer;
-    private readonly ToolStripMenuItem _pauseItem;
 
     /// <summary>
     /// Creates the tray icon and builds its menu.
@@ -22,14 +21,12 @@ public sealed class TrayIcon : IDisposable
     /// Args:
     ///     localizer: Source for menu and tooltip text.
     ///     onOpen: Action when choosing "open settings" or double-clicking.
-    ///     onTogglePause: Action when toggling listening pause.
     ///     onExit: Action when choosing "exit".
     /// </summary>
-    public TrayIcon(ILocalizer localizer, Action onOpen, Action onTogglePause, Action onExit)
+    public TrayIcon(ILocalizer localizer, Action onOpen, Action onExit)
     {
         ArgumentNullException.ThrowIfNull(localizer);
         ArgumentNullException.ThrowIfNull(onOpen);
-        ArgumentNullException.ThrowIfNull(onTogglePause);
         ArgumentNullException.ThrowIfNull(onExit);
 
         _localizer = localizer;
@@ -39,15 +36,9 @@ public sealed class TrayIcon : IDisposable
         var openItem = new ToolStripMenuItem(_localizer.Get("ui.tray.open"), image: null, (_, _) => onOpen());
         openItem.Font = new Font(openItem.Font, FontStyle.Bold);
 
-        _pauseItem = new ToolStripMenuItem(_localizer.Get("ui.tray.mute"), image: null, (_, _) => onTogglePause())
-        {
-            CheckOnClick = true,
-        };
-
         var exitItem = new ToolStripMenuItem(_localizer.Get("ui.tray.exit"), image: null, (_, _) => onExit());
 
         menu.Items.Add(openItem);
-        menu.Items.Add(_pauseItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exitItem);
 
@@ -61,14 +52,6 @@ public sealed class TrayIcon : IDisposable
 
         _notifyIcon.DoubleClick += (_, _) => onOpen();
     }
-
-    /// <summary>
-    /// Reflects in the menu whether listening is paused.
-    ///
-    /// Args:
-    ///     paused: <see langword="true"/> when voice listening is off.
-    /// </summary>
-    public void SetPaused(bool paused) => _pauseItem.Checked = paused;
 
     /// <inheritdoc />
     public void Dispose()

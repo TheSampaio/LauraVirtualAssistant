@@ -5,9 +5,6 @@ namespace Laura.Core.Skills;
 /// </summary>
 public enum SkillRequestSource
 {
-    /// <summary>Command dictated to the microphone.</summary>
-    Voice,
-
     /// <summary>Command typed in the interface.</summary>
     Text,
 

@@ -1,24 +1,18 @@
 # Laura - Virtual Assistant
 
 Laura is a personal assistant for Windows inspired by Jarvis, in a feminine version.
-She lives in the system tray, responds by voice to **"Ok, Laura"** or
-**"Hey Laura"**, and handles simple everyday tasks: telling the time and date,
-searching the web, opening applications, adjusting the volume, and locking the
-computer.
+She lives in the system tray, speaks responses, and handles simple everyday tasks:
+telling the time and date, searching the web, opening applications, adjusting the
+volume, and locking the computer.
 
 The interface stays hidden and appears with **Alt + L**, where you can change the
-voice, tone, listening behavior, and other preferences. All listening and speaking happens
-off the UI thread, so the window never freezes while Laura listens or answers.
+voice, tone, generative AI mode, and other preferences. Speech and chat processing
+happen off the UI thread, so the window never freezes while Laura answers.
 
 ## Requirements
 
 - Windows 10 or 11
 - [.NET 9 SDK](https://dotnet.microsoft.com/download) to build
-- A microphone and the English (United States) speech pack
-  (Windows Settings > Time & language > Speech) for voice commands
-
-Without a microphone or an installed recognizer, Laura remains usable through the
-settings window only.
 
 ## How to Run
 
@@ -39,12 +33,12 @@ stay independent from Windows and the graphical interface.
 | Project | Responsibility |
 | --- | --- |
 | `Laura.Core` | Pure domain: settings, localization, skills, and the assistant engine. No platform dependencies. |
-| `Laura.Platform.Windows` | Windows adapters: speech synthesis and recognition (SAPI), volume control, automatic startup. |
+| `Laura.Platform.Windows` | Windows adapters: speech synthesis, volume control, automatic startup. |
 | `Laura.App` | Tray application and settings window in Windows Forms. |
 | `Laura.Core.Tests` | Domain unit tests. |
 
 The engine talks to the outside world only through interfaces (`ISpeechSynthesizer`,
-`ISpeechRecognizer`, `ISkill`, `ISettingsService`, ...), and the composition root in
+`ISkill`, `ISettingsService`, ...), and the composition root in
 [`ServiceConfiguration`](Laura.App/Composition/ServiceConfiguration.cs) connects each
 abstraction to its implementation.
 
@@ -60,13 +54,12 @@ files, not in code.
 Laura is English-only. Text and triggers live in
 `Laura.Core/Localization/Locales/en-US.json`.
 
-### Generative Mode (Planned)
+### Generative Mode
 
-The engine already anticipates an optional generative AI add-on: commands no skill
-recognizes may later be forwarded to a local model such as
-[Ollama](https://ollama.com/) through the `IConversationEngine` interface. Today the
-default registration is inert (`NullConversationEngine`) - **Laura works entirely
-offline**, and generative AI will only be an extra mode to enable in settings.
+Generative AI is optional. When enabled, typed chat commands that no built-in skill
+recognizes are forwarded to a local model through the `IConversationEngine`
+interface. When disabled, the chat page remains a read-only conversation history and
+Laura keeps working through the built-in offline skills.
 
 ## Tests
 

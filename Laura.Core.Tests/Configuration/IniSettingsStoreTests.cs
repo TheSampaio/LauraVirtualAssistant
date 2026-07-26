@@ -24,14 +24,6 @@ public sealed class IniSettingsStoreTests : IDisposable
             AnnounceHourly = true,
             StartWithWindows = true,
             Voice = new VoiceProfile { VoiceName = "Maria", Rate = 3, Pitch = -2, Volume = 80 },
-            Recognition = new RecognitionOptions
-            {
-                Enabled = false,
-                WakePhrases = ["ok laura", "hey laura"],
-                MinimumConfidence = 0.75,
-                CommandTimeout = TimeSpan.FromSeconds(12),
-                AllowInlineCommand = false,
-            },
             GenerativeAi = new GenerativeAiOptions
             {
                 Enabled = true,
@@ -50,11 +42,6 @@ public sealed class IniSettingsStoreTests : IDisposable
         Assert.Equal(original.AnnounceHourly, loaded.AnnounceHourly);
         Assert.Equal(original.StartWithWindows, loaded.StartWithWindows);
         Assert.Equal(original.Voice, loaded.Voice);
-        Assert.Equal(original.Recognition.Enabled, loaded.Recognition.Enabled);
-        Assert.Equal(original.Recognition.WakePhrases, loaded.Recognition.WakePhrases);
-        Assert.Equal(original.Recognition.MinimumConfidence, loaded.Recognition.MinimumConfidence);
-        Assert.Equal(original.Recognition.CommandTimeout, loaded.Recognition.CommandTimeout);
-        Assert.Equal(original.Recognition.AllowInlineCommand, loaded.Recognition.AllowInlineCommand);
         Assert.Equal(original.GenerativeAi, loaded.GenerativeAi);
     }
 
@@ -93,27 +80,27 @@ public sealed class IniSettingsStoreTests : IDisposable
             [Voice]
             Speed = this-is-not-a-number
             line without separator
-            [Listening]
-            Enabled = maybe
+            [General]
+            StartWithWindows = maybe
             """);
 
         LauraSettings loaded = await CreateStore().LoadAsync();
 
         Assert.Equal(LauraSettings.Default.Voice.Rate, loaded.Voice.Rate);
-        Assert.Equal(LauraSettings.Default.Recognition.Enabled, loaded.Recognition.Enabled);
+        Assert.Equal(LauraSettings.Default.StartWithWindows, loaded.StartWithWindows);
     }
 
     [Fact]
     public void IniDocument_ReadsSectionsKeysAndLists()
     {
         IniDocument document = IniDocument.Parse("""
-            [Listening]
-            WakePhrases = ok laura | hey laura
-            MinimumConfidence = 0.7
+            [General]
+            Items = one | two
+            Ratio = 0.7
             """);
 
-        Assert.Equal(["ok laura", "hey laura"], document.GetList("Listening", "WakePhrases", []));
-        Assert.Equal(0.7, document.GetDouble("Listening", "MinimumConfidence", 0.0));
+        Assert.Equal(["one", "two"], document.GetList("General", "Items", []));
+        Assert.Equal(0.7, document.GetDouble("General", "Ratio", 0.0));
     }
 
     /// <inheritdoc />

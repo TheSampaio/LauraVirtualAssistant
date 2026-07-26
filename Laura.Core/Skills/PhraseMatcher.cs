@@ -5,8 +5,8 @@ namespace Laura.Core.Skills;
 /// <summary>
 /// Matches commands against the phrase lists from the language files.
 ///
-/// Pure functions, so the recognition rule is testable without involving a
-/// microphone, localization or any concrete skill.
+/// Pure functions, so the matching rule is testable without involving localization
+/// or any concrete skill.
 /// </summary>
 public static class PhraseMatcher
 {
