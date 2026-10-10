@@ -68,6 +68,25 @@ public sealed class SkillDispatcher : ISkillDispatcher
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        IReadOnlyList<string>? steps = CommandSequence.Parse(request.RawText, _localizer.GetPhrases("phrases.sequencePrefix"));
+        if (steps is not null)
+        {
+            SkillRequest[] requests = [.. steps.Select(text => SkillRequest.Create(text, request.Culture, request.Timestamp, request.Source))];
+            if (requests.Length == 0 || requests.Any(step => !_skills.Any(skill => skill.CanHandle(step))))
+            {
+                return SkillResponse.Speak(_localizer.Get("tools.sequenceInvalid"));
+            }
+            var answers = new List<string>();
+            foreach (SkillRequest step in requests)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                SkillResponse response = await DispatchAsync(step, cancellationToken).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(response.SpokenText)) { answers.Add(response.SpokenText); }
+                if (response.RequestsShutdown) { return response; }
+            }
+            return SkillResponse.Speak(string.Join(" ", answers));
+        }
+
         foreach (ISkill skill in _skills)
         {
             if (!skill.CanHandle(request))

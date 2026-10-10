@@ -8,6 +8,7 @@ using Laura.Core.Engine;
 using Laura.Core.Localization;
 using Laura.Core.Models;
 using Laura.Core.Memory;
+using Laura.Core.Files;
 using Laura.Core.Skills.Builtin;
 using Laura.Core.Weather;
 using Laura.Platform.Windows.Conversation;
@@ -70,6 +71,7 @@ public static class ServiceConfiguration
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IConversationMemory>(_ => new SqliteConversationMemory(
             Path.Combine(Path.GetDirectoryName(settingsPath)!, "memory.db")));
+        services.AddSingleton(_ => new UserFileWorkspace(Path.Combine(Path.GetDirectoryName(settingsPath)!, "Workspace")));
 
         services.AddSingleton<ILocalizer>(provider => new JsonLocalizer(
             GetLocalesDirectory(),
@@ -108,6 +110,7 @@ public static class ServiceConfiguration
     private static void AddSkills(IServiceCollection services)
     {
         services.AddSingleton<ISkill, OpenSettingsSkill>();
+        services.AddSingleton<ISkill, DesktopToolSkill>();
         services.AddSingleton<ISkill, TimeSkill>();
         services.AddSingleton<ISkill, DateSkill>();
         services.AddSingleton<ISkill, WeatherSkill>();
@@ -148,6 +151,7 @@ public static class ServiceConfiguration
     private static void AddPresentation(IServiceCollection services)
     {
         services.AddSingleton<IUiDispatcher, WinFormsUiDispatcher>();
+        services.AddSingleton<IDesktopTools, WinFormsDesktopTools>();
         services.AddSingleton<WinFormsShellController>();
         services.AddSingleton<IShellController>(provider => provider.GetRequiredService<WinFormsShellController>());
         services.AddSingleton<SettingsForm>(provider =>
