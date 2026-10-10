@@ -331,5 +331,10 @@
   "phrases.sequencePrefix": [
     "run steps:"
   ],
-  "tools.sequenceInvalid": "Use up to four known commands separated by semicolons. No step ran."
+  "tools.sequenceInvalid": "Use up to four known commands separated by semicolons. No step ran.",
+  "ui.errors.network": "Check your internet connection and retry the download.",
+  "ui.errors.native": "The local engine could not start on this machine. Check the installation and CPU compatibility.",
+  "ui.errors.storage": "Check free disk space and file permissions, then retry. Existing data is preserved on failure.",
+  "ui.errors.invalid": "Check the selected device, model and entered values, then retry.",
+  "ui.errors.unexpected": "The operation could not finish. Check your settings and installed models, then retry. Technical details are recorded in the diagnostic log."
 }

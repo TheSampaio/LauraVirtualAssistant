@@ -179,7 +179,7 @@ public sealed partial class SettingsForm
         catch (OperationCanceledException) { _downloadStatus.Text = Text_("ui.models.cancelled"); }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
-            _downloadStatus.Text = _localizer.Get("ui.models.failed", exception.Message);
+            _downloadStatus.Text = _localizer.Get("ui.models.failed", DescribeFailure(exception));
         }
         finally
         {

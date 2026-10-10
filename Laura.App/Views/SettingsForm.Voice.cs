@@ -106,7 +106,7 @@ public sealed partial class SettingsForm
             else { ShowTransientStatus(Text_("ui.voice.noSpeech")); }
         }
         catch (OperationCanceledException) { /* Closing discards captured audio. */ }
-        catch (Exception exception) { ShowTransientStatus(_localizer.Get("ui.voice.failed", exception.Message)); }
+        catch (Exception exception) { ShowTransientStatus(_localizer.Get("ui.voice.failed", DescribeFailure(exception))); }
         finally
         {
             _recordingStop = null;

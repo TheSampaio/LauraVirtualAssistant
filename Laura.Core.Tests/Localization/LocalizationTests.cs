@@ -45,6 +45,15 @@ public sealed class LocalizationTests
         Assert.Equal("en-US", new LauraSettings { Culture = "bad-tag" }.Sanitized().Culture);
     }
 
+    [Fact]
+    public void VoicePreviewLookupDoesNotChangeInterfaceCulture()
+    {
+        var localizer = new JsonLocalizer(Locales, NullLogger<JsonLocalizer>.Instance);
+        Assert.Equal("Modelos", localizer.GetForCulture("pt-BR", "ui.tab.models"));
+        Assert.Equal("Models", localizer.GetForCulture("unknown", "ui.tab.models"));
+        Assert.Equal("en-US", localizer.Culture.Name);
+    }
+
     private static string[] Arguments(string text) => [.. Regex.Matches(text, @"\{(\d+)")
         .Select(static match => match.Groups[1].Value).Distinct().Order(StringComparer.Ordinal)];
 }

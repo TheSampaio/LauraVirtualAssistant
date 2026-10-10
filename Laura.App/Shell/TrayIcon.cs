@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Windows.Forms;
+using System.Globalization;
 using Laura.Core.Abstractions;
 
 namespace Laura.App.Shell;
@@ -14,6 +15,8 @@ public sealed class TrayIcon : IDisposable
 {
     private readonly NotifyIcon _notifyIcon;
     private readonly ILocalizer _localizer;
+    private readonly ToolStripMenuItem _openItem;
+    private readonly ToolStripMenuItem _exitItem;
 
     /// <summary>
     /// Creates the tray icon and builds its menu.
@@ -33,14 +36,14 @@ public sealed class TrayIcon : IDisposable
 
         var menu = new ContextMenuStrip();
 
-        var openItem = new ToolStripMenuItem(_localizer.Get("ui.tray.open"), image: null, (_, _) => onOpen());
-        openItem.Font = new Font(openItem.Font, FontStyle.Bold);
+        _openItem = new ToolStripMenuItem(_localizer.Get("ui.tray.open"), image: null, (_, _) => onOpen());
+        _openItem.Font = new Font(_openItem.Font, FontStyle.Bold);
 
-        var exitItem = new ToolStripMenuItem(_localizer.Get("ui.tray.exit"), image: null, (_, _) => onExit());
+        _exitItem = new ToolStripMenuItem(_localizer.Get("ui.tray.exit"), image: null, (_, _) => onExit());
 
-        menu.Items.Add(openItem);
+        menu.Items.Add(_openItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(exitItem);
+        menu.Items.Add(_exitItem);
 
         _notifyIcon = new NotifyIcon
         {
@@ -51,13 +54,25 @@ public sealed class TrayIcon : IDisposable
         };
 
         _notifyIcon.DoubleClick += (_, _) => onOpen();
+        _localizer.CultureChanged += OnCultureChanged;
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
+        _localizer.CultureChanged -= OnCultureChanged;
         _notifyIcon.Visible = false;
+        _notifyIcon.ContextMenuStrip?.Dispose();
+        _notifyIcon.Icon?.Dispose();
         _notifyIcon.Dispose();
+    }
+
+    /// <summary>Refreshes tray labels when the UI language changes on the UI thread.</summary>
+    private void OnCultureChanged(object? sender, CultureInfo culture)
+    {
+        _openItem.Text = _localizer.Get("ui.tray.open");
+        _exitItem.Text = _localizer.Get("ui.tray.exit");
+        _notifyIcon.Text = _localizer.Get("ui.tray.tooltip");
     }
 
     /// <summary>
@@ -69,6 +84,6 @@ public sealed class TrayIcon : IDisposable
     private static Icon LoadIcon()
     {
         string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "icon.ico");
-        return File.Exists(iconPath) ? new Icon(iconPath) : SystemIcons.Application;
+        return File.Exists(iconPath) ? new Icon(iconPath) : (Icon)SystemIcons.Application.Clone();
     }
 }

@@ -37,18 +37,21 @@ public sealed class LauraApplicationContext : ApplicationContext
 
     private SettingsForm? _settingsForm;
     private bool _shuttingDown;
+    private readonly bool _showAtStartup;
 
     /// <summary>
     /// Composes the tray, hotkey, and starts Laura services.
     ///
     /// Args:
     ///     services: Application dependency provider.
+    ///     showAtStartup: Opens the interface after services have started.
     /// </summary>
-    public LauraApplicationContext(IServiceProvider services)
+    public LauraApplicationContext(IServiceProvider services, bool showAtStartup = false)
     {
         ArgumentNullException.ThrowIfNull(services);
 
         _services = services;
+        _showAtStartup = showAtStartup;
         _shellController = services.GetRequiredService<WinFormsShellController>();
         _engine = services.GetRequiredService<IAssistantEngine>();
         _hourlyAnnouncer = services.GetRequiredService<HourlyAnnouncer>();
@@ -103,6 +106,7 @@ public sealed class LauraApplicationContext : ApplicationContext
             _hourlyAnnouncer.Start();
 
             SettingsForm form = EnsureSettingsForm();
+            if (_showAtStartup) { form.ShowFromTray(); }
             if (string.IsNullOrWhiteSpace(_services.GetRequiredService<ISettingsService>().Current.GenerativeAi.Model))
             {
                 form.ShowFromTray();

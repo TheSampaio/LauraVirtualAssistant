@@ -20,7 +20,7 @@ internal static class Program
     /// contend for the tray icon and global hotkey.
     /// </summary>
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
         using var singleInstanceMutex = new Mutex(
             initiallyOwned: true,
@@ -50,7 +50,7 @@ internal static class Program
         {
             InstallExceptionHandlers(provider.GetRequiredService<ILogger<LauraApplicationContext>>());
 
-            using var context = new LauraApplicationContext(provider);
+            using var context = new LauraApplicationContext(provider, args.Contains("--show", StringComparer.Ordinal));
             Application.Run(context);
         }
         finally

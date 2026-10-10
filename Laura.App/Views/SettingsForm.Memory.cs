@@ -33,6 +33,14 @@ public sealed partial class SettingsForm
         AddRow(stack, _memoryList);
         AddRow(stack, SettingRowFactory.TextRow(Text_("ui.memory.key"), string.Empty, out _memoryKey));
         AddRow(stack, SettingRowFactory.MultilineRow(Text_("ui.memory.text"), Text_("ui.memory.explicit"), 72, out _memoryText));
+        _memoryList.SelectedIndexChanged += (_, _) =>
+        {
+            if (_memoryList.SelectedItem is MemoryFact fact)
+            {
+                _memoryKey.Text = fact.Key;
+                _memoryText.Text = fact.Text;
+            }
+        };
         var save = new FlatButton { Text = Text_("ui.memory.save") };
         save.Click += async (_, _) => await RunMemoryOperationAsync(async () =>
         {
@@ -76,6 +84,6 @@ public sealed partial class SettingsForm
     private async Task RunMemoryOperationAsync(Func<Task> action)
     {
         try { await action().ConfigureAwait(true); ShowTransientStatus(Text_("ui.memory.done")); }
-        catch (Exception exception) { ShowTransientStatus(_localizer.Get("ui.models.failed", exception.Message)); }
+        catch (Exception exception) { ShowTransientStatus(_localizer.Get("ui.models.failed", DescribeFailure(exception))); }
     }
 }

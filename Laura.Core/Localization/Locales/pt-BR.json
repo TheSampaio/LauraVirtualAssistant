@@ -275,5 +275,10 @@
   "phrases.sequencePrefix": [
     "executar etapas:"
   ],
-  "tools.sequenceInvalid": "Use até quatro comandos conhecidos separados por ponto e vírgula. Nenhuma etapa foi executada."
+  "tools.sequenceInvalid": "Use até quatro comandos conhecidos separados por ponto e vírgula. Nenhuma etapa foi executada.",
+  "ui.errors.network": "Verifique sua conexão com a internet e tente baixar novamente.",
+  "ui.errors.native": "O mecanismo local não iniciou neste computador. Verifique a instalação e a compatibilidade da CPU.",
+  "ui.errors.storage": "Verifique o espaço livre e as permissões dos arquivos e tente novamente. Os dados existentes são preservados em caso de falha.",
+  "ui.errors.invalid": "Verifique o dispositivo, o modelo e os valores informados e tente novamente.",
+  "ui.errors.unexpected": "Não foi possível concluir. Verifique suas configurações e modelos instalados e tente novamente. Os detalhes técnicos estão no registro de diagnóstico."
 }
