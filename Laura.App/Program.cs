@@ -55,7 +55,7 @@ internal static class Program
         }
         finally
         {
-            provider.Dispose();
+            provider.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
     }
 

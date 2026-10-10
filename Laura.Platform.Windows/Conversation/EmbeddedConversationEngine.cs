@@ -4,6 +4,7 @@ using Laura.Core.Conversation;
 using LLama;
 using LLama.Common;
 using LLama.Sampling;
+using LLama.Transformers;
 using Microsoft.Extensions.Logging;
 
 namespace Laura.Platform.Windows.Conversation;
@@ -18,6 +19,7 @@ public sealed class EmbeddedConversationEngine : ILocalInferenceEngine, IDisposa
     private readonly CancellationTokenSource _lifetime = new();
     private LLamaWeights? _weights;
     private CancellationTokenSource? _generation;
+    private int _disposed;
 
     /// <summary>Composes storage, settings and diagnostic logging.</summary>
     public EmbeddedConversationEngine(ILocalModelManager models, ISettingsService settings,
@@ -80,8 +82,7 @@ public sealed class EmbeddedConversationEngine : ILocalInferenceEngine, IDisposa
             generation.CancelAfter(options.Timeout);
             await LoadInternalAsync(options.Model, generation.Token).ConfigureAwait(false);
             var parameters = new ModelParams(_models.GetModelPath(options.Model)) { ContextSize = 2048, GpuLayerCount = 0 };
-            using LLamaContext context = _weights!.CreateContext(parameters);
-            var executor = new InteractiveExecutor(context);
+            var executor = new StatelessExecutor(_weights!, parameters) { ApplyTemplate = false };
             var history = new ChatHistory();
             history.AddMessage(AuthorRole.System, options.Persona + " Respond in " + turn.Culture.Name + ".");
             if (turn.Memories.Count > 0)
@@ -96,13 +97,14 @@ public sealed class EmbeddedConversationEngine : ILocalInferenceEngine, IDisposa
                 history.AddMessage(message.Source == ConversationMessageSource.Assistant ? AuthorRole.Assistant : AuthorRole.User,
                     message.Text.Length > 400 ? message.Text[..400] : message.Text);
             }
-            var session = new ChatSession(executor, history);
+            history.AddMessage(AuthorRole.User, turn.Prompt.Length > 2000 ? turn.Prompt[..2000] : turn.Prompt);
+            string prompt = new PromptTemplateTransformer(_weights!, true).HistoryToText(history);
             var inference = new InferenceParams { MaxTokens = 256,
-                SamplingPipeline = new DefaultSamplingPipeline { Temperature = 0.7f } };
+                AntiPrompts = ["<|im_end|>", "<|im_start|>", "</s>"],
+                SamplingPipeline = new DefaultSamplingPipeline { Temperature = 0.5f } };
             Status = "Generating";
             var answer = new StringBuilder();
-            await foreach (string token in session.ChatAsync(new ChatHistory.Message(AuthorRole.User,
-                turn.Prompt.Length > 2000 ? turn.Prompt[..2000] : turn.Prompt), inference, generation.Token).ConfigureAwait(false))
+            await foreach (string token in executor.InferAsync(prompt, inference, generation.Token).ConfigureAwait(false))
             {
                 answer.Append(token);
                 TokenReceived?.Invoke(this, token);
@@ -139,6 +141,7 @@ public sealed class EmbeddedConversationEngine : ILocalInferenceEngine, IDisposa
     /// <inheritdoc />
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) { return; }
         _lifetime.Cancel();
         Cancel();
         _gate.Wait();
