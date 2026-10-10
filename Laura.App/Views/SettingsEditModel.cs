@@ -38,6 +38,7 @@ public sealed class SettingsEditModel
         _modelCatalog = modelCatalog;
 
         Culture = settings.Culture;
+        RememberConversations = settings.RememberConversations;
         UserNickname = settings.UserNickname;
         VoiceName = settings.Voice.VoiceName;
         Rate = settings.Voice.Rate;
@@ -57,6 +58,9 @@ public sealed class SettingsEditModel
 
     /// <summary>Gets or sets the speech and response culture, as a BCP-47 tag.</summary>
     public string Culture { get; set; }
+
+    /// <summary>Gets or sets whether conversation history persists.</summary>
+    public bool RememberConversations { get; set; }
 
     /// <summary>Gets or sets the nickname Laura addresses the user by, empty for the account name.</summary>
     public string UserNickname { get; set; }
@@ -156,6 +160,7 @@ public sealed class SettingsEditModel
     public LauraSettings ToSettings() => new()
     {
         Culture = Culture,
+        RememberConversations = RememberConversations,
         UserNickname = UserNickname,
         Voice = BuildVoiceProfile(),
         GenerativeAi = new GenerativeAiOptions

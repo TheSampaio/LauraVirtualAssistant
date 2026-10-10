@@ -272,5 +272,17 @@
   "ui.models.delete": "Delete model",
   "ui.models.deleteConfirm": "Delete these model weights? You can download them again.",
   "ui.models.failed": "Operation failed: {0}",
-  "ui.models.verifying": "Verifying SHA256…"
+  "ui.models.verifying": "Verifying SHA256…",
+  "ui.memory.clearConfirm": "Delete saved chat history? The current session stays visible until restart.",
+  "ui.memory.explicit": "Only memories you save here are stored as facts. No background extraction or cloud upload.",
+  "ui.memory.clear": "Delete saved conversation history",
+  "ui.memory.text": "Fact or preference",
+  "ui.memory.privacy": "History is stored locally in SQLite. Turning this off stops new storage and recall; existing data remains until deleted.",
+  "ui.memory.delete": "Delete selected memory",
+  "ui.memory.done": "Memory updated.",
+  "ui.memory.remember": "Remember conversations on this computer",
+  "ui.memory.search": "Search memories",
+  "ui.tab.memory": "Memory",
+  "ui.memory.save": "Save memory",
+  "ui.memory.key": "Memory name"
 }

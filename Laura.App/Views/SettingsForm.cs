@@ -341,6 +341,7 @@ public sealed partial class SettingsForm : Form
         // Conversation comes first because it is the primary interaction surface.
         AddNavButton(navStack, _localizer.Get("ui.tab.chat"), IconGlyphs.Chat);
         AddNavButton(navStack, _localizer.Get("ui.tab.models"), IconGlyphs.Model);
+        AddNavButton(navStack, _localizer.Get("ui.tab.memory"), IconGlyphs.Chat);
         AddNavButton(navStack, _localizer.Get("ui.tab.general"), IconGlyphs.Settings);
         AddNavButton(navStack, _localizer.Get("ui.tab.user"), IconGlyphs.User);
         AddNavButton(navStack, _localizer.Get("ui.tab.voice"), IconGlyphs.Voice);
@@ -396,6 +397,7 @@ public sealed partial class SettingsForm : Form
         host.Controls.Add(BuildUserSection());
         host.Controls.Add(BuildVoiceSection());
         host.Controls.Add(BuildModelsSection());
+        host.Controls.Add(BuildMemorySection());
 
         _footerPanel = BuildFooter();
 
@@ -1706,6 +1708,7 @@ public sealed partial class SettingsForm : Form
         _greetToggle.Checked = _model.GreetOnStartup;
         _hourlyToggle.Checked = _model.AnnounceHourly;
         _startupToggle.Checked = _model.StartWithWindows;
+        _rememberToggle.Checked = _model.RememberConversations;
 
         _aiToggle.Checked = _model.GenerativeAiEnabled;
         _endpointBox.Text = _model.GenerativeAiEndpoint;
@@ -1732,6 +1735,7 @@ public sealed partial class SettingsForm : Form
         _model.GreetOnStartup = _greetToggle.Checked;
         _model.AnnounceHourly = _hourlyToggle.Checked;
         _model.StartWithWindows = _startupToggle.Checked;
+        _model.RememberConversations = _rememberToggle.Checked;
 
         _model.GenerativeAiEnabled = _aiToggle.Checked;
         _model.GenerativeAiProvider = (_providerCombo.SelectedItem as ComboItem)?.Value ?? "embedded";

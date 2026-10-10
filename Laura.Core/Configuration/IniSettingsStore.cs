@@ -116,6 +116,7 @@ public sealed class IniSettingsStore : ISettingsStore
         return new LauraSettings
         {
             Culture = document.GetString(GeneralSection, "Language", defaults.Culture),
+            RememberConversations = document.GetBoolean(GeneralSection, "RememberConversations", defaults.RememberConversations),
             GreetOnStartup = document.GetBoolean(GeneralSection, "GreetOnStartup", defaults.GreetOnStartup),
             AnnounceHourly = document.GetBoolean(GeneralSection, "AnnounceHourly", defaults.AnnounceHourly),
             StartWithWindows = document.GetBoolean(GeneralSection, "StartWithWindows", defaults.StartWithWindows),
@@ -157,6 +158,7 @@ public sealed class IniSettingsStore : ISettingsStore
         var document = new IniDocument();
 
         document.Set(GeneralSection, "Language", settings.Culture);
+        document.SetBoolean(GeneralSection, "RememberConversations", settings.RememberConversations);
         document.SetBoolean(GeneralSection, "GreetOnStartup", settings.GreetOnStartup);
         document.SetBoolean(GeneralSection, "AnnounceHourly", settings.AnnounceHourly);
         document.SetBoolean(GeneralSection, "StartWithWindows", settings.StartWithWindows);

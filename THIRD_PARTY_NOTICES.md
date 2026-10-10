@@ -15,6 +15,7 @@ Laura retains its existing LICENSE. No endorsement by the reference projects is 
 | Windows SDK APIs | target 10.0.19041.0 | Windows platform terms; supplied by Windows |
 | NAudio | 2.2.1 | MIT, https://github.com/naudio/NAudio |
 | LLamaSharp / CPU backend | 0.27.0 | MIT, https://github.com/SciSharp/LLamaSharp; embeds MIT llama.cpp, https://github.com/ggml-org/llama.cpp |
+| Microsoft.Data.Sqlite | 9.0.10 | MIT, https://github.com/dotnet/efcore; SQLitePCLRaw bundles SQLite (public domain), https://www.sqlite.org/copyright.html |
 | OllamaSharp | 4.0.11 | MIT, https://github.com/awaescher/OllamaSharp |
 | sherpa-onnx | 1.13.4 | Apache-2.0, https://github.com/k2-fsa/sherpa-onnx |
 | xUnit (development only) | 2.9.2 / runner 2.8.2 | Apache-2.0, https://github.com/xunit/xunit |

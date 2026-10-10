@@ -7,6 +7,7 @@ using Laura.Core.Conversation;
 using Laura.Core.Engine;
 using Laura.Core.Localization;
 using Laura.Core.Models;
+using Laura.Core.Memory;
 using Laura.Core.Skills.Builtin;
 using Laura.Core.Weather;
 using Laura.Platform.Windows.Conversation;
@@ -66,6 +67,8 @@ public static class ServiceConfiguration
             IniSettingsStore.GetDefaultFilePath(),
             provider.GetRequiredService<ILogger<IniSettingsStore>>()));
         services.AddSingleton<ISettingsService, SettingsService>();
+        services.AddSingleton<IConversationMemory>(_ => new SqliteConversationMemory(
+            Path.Combine(Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())!, "memory.db")));
 
         services.AddSingleton<ILocalizer>(provider => new JsonLocalizer(
             GetLocalesDirectory(),
@@ -147,6 +150,7 @@ public static class ServiceConfiguration
         {
             SettingsForm form = ActivatorUtilities.CreateInstance<SettingsForm>(provider);
             form.BindInference(provider.GetRequiredService<ILocalInferenceEngine>());
+            form.BindMemory(provider.GetRequiredService<IConversationMemory>());
             form.BindOllamaCatalog(new OllamaModelCatalog(OllamaModelCatalog.GetDefaultLibraryDirectory(),
                 provider.GetRequiredService<ILogger<OllamaModelCatalog>>()));
             return form;

@@ -25,6 +25,7 @@ public sealed class AssistantEngine : IAssistantEngine
     private readonly GreetingComposer _greetingComposer;
     private readonly IClock _clock;
     private readonly ILogger<AssistantEngine> _logger;
+    private readonly IConversationMemory? _memory;
 
     private readonly Channel<EngineMessage> _messages = Channel.CreateUnbounded<EngineMessage>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
@@ -52,6 +53,7 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <param name="greetingComposer">Opening greeting composer.</param>
     /// <param name="clock">Source of date and time.</param>
     /// <param name="logger">Destination for diagnostic logs.</param>
+    /// <param name="memory">Optional unified persistent history.</param>
     public AssistantEngine(
         ISpeechSynthesizer synthesizer,
         ISkillDispatcher dispatcher,
@@ -60,7 +62,8 @@ public sealed class AssistantEngine : IAssistantEngine
         IShellController shell,
         GreetingComposer greetingComposer,
         IClock clock,
-        ILogger<AssistantEngine> logger)
+        ILogger<AssistantEngine> logger,
+        IConversationMemory? memory = null)
     {
         ArgumentNullException.ThrowIfNull(synthesizer);
         ArgumentNullException.ThrowIfNull(dispatcher);
@@ -79,6 +82,7 @@ public sealed class AssistantEngine : IAssistantEngine
         _greetingComposer = greetingComposer;
         _clock = clock;
         _logger = logger;
+        _memory = memory;
     }
 
     /// <inheritdoc />
@@ -111,6 +115,18 @@ public sealed class AssistantEngine : IAssistantEngine
         }
 
         _settings.Changed += OnSettingsChanged;
+        if (_memory is not null && _settings.Current.RememberConversations)
+        {
+            try
+            {
+                IReadOnlyList<ConversationMessage> history = await Task.Run(() => _memory.ReadRecent(MaxConversationHistory), cancellationToken).ConfigureAwait(false);
+                lock (_conversationHistoryGate) { _conversationHistory.AddRange(history); }
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _logger.LogWarning(exception, "Persistent memory unavailable; continuing with session history.");
+            }
+        }
         _worker = Task.Run(() => RunAsync(_lifetime.Token), CancellationToken.None);
 
         LauraSettings settings = _settings.Current;
@@ -367,6 +383,11 @@ public sealed class AssistantEngine : IAssistantEngine
         }
 
         var message = new ConversationMessage(source, text.Trim(), _clock.Now);
+        if (_memory is not null && _settings.Current.RememberConversations)
+        {
+            try { _memory.Append(message); }
+            catch (Exception exception) { _logger.LogWarning(exception, "Could not persist conversation message."); }
+        }
 
         lock (_conversationHistoryGate)
         {

@@ -22,6 +22,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
     private readonly ISettingsService _settings;
     private readonly IUserContext _userContext;
     private readonly ILogger<SkillDispatcher> _logger;
+    private readonly IConversationMemory? _memory;
 
     /// <summary>
     /// Initializes the dispatcher by ordering the registered skills.
@@ -41,7 +42,8 @@ public sealed class SkillDispatcher : ISkillDispatcher
         IConversationEngine conversationEngine,
         ISettingsService settings,
         IUserContext userContext,
-        ILogger<SkillDispatcher> logger)
+        ILogger<SkillDispatcher> logger,
+        IConversationMemory? memory = null)
     {
         ArgumentNullException.ThrowIfNull(skills);
         ArgumentNullException.ThrowIfNull(localizer);
@@ -56,6 +58,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
         _settings = settings;
         _userContext = userContext;
         _logger = logger;
+        _memory = memory;
     }
 
     /// <inheritdoc />
@@ -150,6 +153,19 @@ public sealed class SkillDispatcher : ISkillDispatcher
         }
 
         var turn = new ConversationTurn(request.RawText, request.Culture, _userContext.DisplayName);
+        if (_memory is not null && _settings.Current.RememberConversations)
+        {
+            try
+            {
+                var history = _memory.ReadRecent(8).ToList();
+                if (history.LastOrDefault() is { Source: ConversationMessageSource.UserTyped } last && last.Text == request.RawText)
+                {
+                    history.RemoveAt(history.Count - 1);
+                }
+                turn = turn with { History = history, Memories = [.. _memory.Search("").Take(3).Select(static fact => fact.Text)] };
+            }
+            catch (Exception exception) { _logger.LogWarning(exception, "Context memory unavailable."); }
+        }
         string? answer = await _conversationEngine.AskAsync(turn, cancellationToken).ConfigureAwait(false);
 
         return string.IsNullOrWhiteSpace(answer)

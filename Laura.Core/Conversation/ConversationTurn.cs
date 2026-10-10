@@ -12,4 +12,7 @@ public sealed record ConversationTurn(string Prompt, CultureInfo Culture, string
 {
     /// <summary>Gets bounded prior conversation data; never grants execution permissions.</summary>
     public IReadOnlyList<ConversationMessage> History { get; init; } = [];
+
+    /// <summary>Gets explicit user notes as untrusted conversation data.</summary>
+    public IReadOnlyList<string> Memories { get; init; } = [];
 }

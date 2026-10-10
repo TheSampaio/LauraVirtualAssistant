@@ -25,6 +25,9 @@ public sealed record LauraSettings
     /// </summary>
     public string Culture { get; init; } = DefaultCulture;
 
+    /// <summary>Gets whether local conversation history should persist across sessions.</summary>
+    public bool RememberConversations { get; init; } = true;
+
     /// <summary>
     /// Gets the name Laura uses to address the user.
     ///
