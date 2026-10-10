@@ -14,9 +14,12 @@ Laura retains its existing LICENSE. No endorsement by the reference projects is 
 | .NET / Microsoft.Extensions.* / System.Speech | 9.0.0 package family | MIT, https://github.com/dotnet/runtime |
 | Windows SDK APIs | target 10.0.19041.0 | Windows platform terms; supplied by Windows |
 | NAudio | 2.2.1 | MIT, https://github.com/naudio/NAudio |
+| LLamaSharp / CPU backend | 0.27.0 | MIT, https://github.com/SciSharp/LLamaSharp; embeds MIT llama.cpp, https://github.com/ggml-org/llama.cpp |
 | OllamaSharp | 4.0.11 | MIT, https://github.com/awaescher/OllamaSharp |
 | sherpa-onnx | 1.13.4 | Apache-2.0, https://github.com/k2-fsa/sherpa-onnx |
 | xUnit (development only) | 2.9.2 / runner 2.8.2 | Apache-2.0, https://github.com/xunit/xunit |
 | Microsoft.NET.Test.Sdk (development only) | 17.12.0 | MIT, https://github.com/microsoft/vstest |
 
 AI weights and voices have separate distribution terms. An installed engine package does not grant permission to redistribute arbitrary models. The implementation assessment and package lock files track added dependencies; release packaging must include the corresponding upstream license texts and model attribution.
+
+The optional reviewed Qwen 2.5 0.5B Instruct GGUF weights are provided by the Qwen team under Apache-2.0, https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF. Weights are downloaded only by user choice and are excluded from the Laura application package.

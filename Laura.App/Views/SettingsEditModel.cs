@@ -49,6 +49,7 @@ public sealed class SettingsEditModel
         StartWithWindows = settings.StartWithWindows;
 
         GenerativeAiEnabled = settings.GenerativeAi.Enabled;
+        GenerativeAiProvider = settings.GenerativeAi.Provider;
         GenerativeAiEndpoint = settings.GenerativeAi.Endpoint;
         GenerativeAiModel = settings.GenerativeAi.Model;
         GenerativeAiPersona = settings.GenerativeAi.Persona;
@@ -83,6 +84,9 @@ public sealed class SettingsEditModel
 
     /// <summary>Gets or sets whether the generative mode is on.</summary>
     public bool GenerativeAiEnabled { get; set; }
+
+    /// <summary>Gets or sets the explicit inference backend.</summary>
+    public string GenerativeAiProvider { get; set; }
 
     /// <summary>Gets or sets the generative service endpoint.</summary>
     public string GenerativeAiEndpoint { get; set; }
@@ -157,6 +161,7 @@ public sealed class SettingsEditModel
         GenerativeAi = new GenerativeAiOptions
         {
             Enabled = GenerativeAiEnabled,
+            Provider = GenerativeAiProvider,
             Endpoint = GenerativeAiEndpoint,
             Model = GenerativeAiModel,
             Persona = GenerativeAiPersona,

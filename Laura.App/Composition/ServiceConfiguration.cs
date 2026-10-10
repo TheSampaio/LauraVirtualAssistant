@@ -6,6 +6,7 @@ using Laura.Core.Configuration;
 using Laura.Core.Conversation;
 using Laura.Core.Engine;
 using Laura.Core.Localization;
+using Laura.Core.Models;
 using Laura.Core.Skills.Builtin;
 using Laura.Core.Weather;
 using Laura.Platform.Windows.Conversation;
@@ -70,15 +71,19 @@ public static class ServiceConfiguration
             GetLocalesDirectory(),
             provider.GetRequiredService<ILogger<JsonLocalizer>>()));
 
-        services.AddSingleton<IModelCatalog>(provider => new OllamaModelCatalog(
-            OllamaModelCatalog.GetDefaultLibraryDirectory(),
-            provider.GetRequiredService<ILogger<OllamaModelCatalog>>()));
+        services.AddSingleton<ILocalModelManager>(_ => new LocalModelManager(
+            Path.Combine(Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())!, "Models"),
+            new HttpClient { Timeout = TimeSpan.FromMinutes(60) }, SupportedModels.All));
+        services.AddSingleton<IModelCatalog>(provider => provider.GetRequiredService<ILocalModelManager>());
 
         // A short timeout keeps a slow network from making the weather skill hang.
         services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromSeconds(8) });
         services.AddSingleton<IWeatherProvider, WttrWeatherProvider>();
 
-        services.AddSingleton<IConversationEngine, OllamaConversationEngine>();
+        services.AddSingleton<EmbeddedConversationEngine>();
+        services.AddSingleton<ILocalInferenceEngine>(provider => provider.GetRequiredService<EmbeddedConversationEngine>());
+        services.AddSingleton<OllamaConversationEngine>();
+        services.AddSingleton<IConversationEngine, ConversationRouter>();
         services.AddSingleton<GreetingComposer>();
 
         AddSkills(services);
@@ -138,7 +143,14 @@ public static class ServiceConfiguration
         services.AddSingleton<IUiDispatcher, WinFormsUiDispatcher>();
         services.AddSingleton<WinFormsShellController>();
         services.AddSingleton<IShellController>(provider => provider.GetRequiredService<WinFormsShellController>());
-        services.AddSingleton<SettingsForm>();
+        services.AddSingleton<SettingsForm>(provider =>
+        {
+            SettingsForm form = ActivatorUtilities.CreateInstance<SettingsForm>(provider);
+            form.BindInference(provider.GetRequiredService<ILocalInferenceEngine>());
+            form.BindOllamaCatalog(new OllamaModelCatalog(OllamaModelCatalog.GetDefaultLibraryDirectory(),
+                provider.GetRequiredService<ILogger<OllamaModelCatalog>>()));
+            return form;
+        });
     }
 
     /// <summary>

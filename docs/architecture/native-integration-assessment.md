@@ -41,4 +41,8 @@ User-initiated model download: curated Hugging Face HTTPS artifacts and its auth
 
 ## Validation policy
 
+### Validated stage: local AI foundation
+
+Implemented `LocalModelManager`, reviewed Qwen 2.5 0.5B Q4_K_M download (491,400,032 bytes), Windows CPU/RAM/disk probe, embedded llama.cpp through LLamaSharp/CPU 0.27.0, model setup navigation and first-run display. Settings now load at startup. CPU-only backend avoids a separate server; optional Ollama remains loopback-restricted. Download staging, range resume, size/SHA256/GGUF verification and model deletion are covered by 8 new tests. Build: zero warnings/errors; tests: 34/34. Native model generation and GUI smoke remain to be executed. The catalog intentionally begins with one small reviewed model; installed compatible GGUF files can also be detected. GPU/VRAM detection and additional catalogs are not implemented yet. Core retains platform-independent HTTP/file services consistent with its existing INI/weather services, supplied with injected HTTP dependencies.
+
 Record real hardware/package tests separately from mocks. Unit tests cover domain and failure boundaries; temporary SQLite/files and fake HTTP exercise integration without downloading gigabytes. A small permissively licensed GGUF may be downloaded into ignored output solely for native smoke validation if feasible. Hardware-dependent speech and clean-machine installation remain unverified until actually exercised. Never declare all phases complete on the strength of mocked responses.

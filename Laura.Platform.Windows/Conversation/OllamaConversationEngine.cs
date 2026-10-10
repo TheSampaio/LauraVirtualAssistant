@@ -43,7 +43,7 @@ public sealed class OllamaConversationEngine : IConversationEngine
         get
         {
             GenerativeAiOptions options = _settings.Current.GenerativeAi;
-            return !string.IsNullOrWhiteSpace(options.Model) && Uri.TryCreate(options.Endpoint, UriKind.Absolute, out _);
+            return !string.IsNullOrWhiteSpace(options.Model) && IsLocalEndpoint(options.Endpoint);
         }
     }
 
@@ -54,7 +54,7 @@ public sealed class OllamaConversationEngine : IConversationEngine
 
         GenerativeAiOptions options = _settings.Current.GenerativeAi;
 
-        if (string.IsNullOrWhiteSpace(options.Model)
+        if (!IsLocalEndpoint(options.Endpoint) || string.IsNullOrWhiteSpace(options.Model)
             || !Uri.TryCreate(options.Endpoint, UriKind.Absolute, out Uri? endpoint))
         {
             return null;
@@ -99,4 +99,7 @@ public sealed class OllamaConversationEngine : IConversationEngine
             return null;
         }
     }
+    /// <summary>Restricts the optional server adapter to loopback to avoid undisclosed prompt uploads.</summary>
+    private static bool IsLocalEndpoint(string value) => Uri.TryCreate(value, UriKind.Absolute, out Uri? uri)
+        && uri.IsLoopback && uri.Scheme is "http" or "https" && string.IsNullOrEmpty(uri.UserInfo);
 }

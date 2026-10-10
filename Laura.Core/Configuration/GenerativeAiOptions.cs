@@ -23,7 +23,7 @@ public sealed record GenerativeAiOptions
     /// <summary>
     /// Gets the identifier of the provider to use, for example <c>ollama</c>.
     /// </summary>
-    public string Provider { get; init; } = "ollama";
+    public string Provider { get; init; } = "embedded";
 
     /// <summary>
     /// Gets the base address of the service, typically a local instance.
@@ -42,7 +42,7 @@ public sealed record GenerativeAiOptions
     /// Gets the system instruction that defines Laura's persona for the model.
     /// </summary>
     public string Persona { get; init; } =
-        "You are Laura, a discreet Jarvis-like personal assistant: calm, capable, precise, " +
+        "You are Laura, a discreet personal assistant: calm, capable, precise, " +
         "and quietly confident. Speak as if replying aloud, never as a chatbot. Keep answers " +
         "to one short sentence by default, two only when truly needed. Do not use lists, " +
         "markdown, emojis, long explanations, disclaimers, or filler. If the user asks for " +
@@ -55,7 +55,7 @@ public sealed record GenerativeAiOptions
     /// A short limit is deliberate: a voice assistant that is slow to answer is
     /// worse than one that admits it did not understand.
     /// </summary>
-    public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(20);
+    public TimeSpan Timeout { get; init; } = TimeSpan.FromMinutes(2);
 
     /// <summary>
     /// Returns a copy with safe, trimmed values.

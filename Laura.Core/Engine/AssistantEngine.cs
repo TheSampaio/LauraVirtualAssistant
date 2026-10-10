@@ -252,7 +252,8 @@ public sealed class AssistantEngine : IAssistantEngine
         }
         catch (OperationCanceledException)
         {
-            throw;
+            if (cancellationToken.IsCancellationRequested) { throw; }
+            SetState(AssistantState.Ready);
         }
         catch (Exception exception)
         {

@@ -22,7 +22,7 @@ namespace Laura.App.Views;
 /// It stays hidden and is brought to the front by <c>Alt + L</c>; closing it from the
 /// title bar only hides it, keeping the assistant active in the tray.
 /// </summary>
-public sealed class SettingsForm : Form
+public sealed partial class SettingsForm : Form
 {
     private const int NavigationWidth = 210;
     private const int MultilineHeight = 96;
@@ -119,6 +119,7 @@ public sealed class SettingsForm : Form
         _modelCatalog = modelCatalog;
         _userContext = userContext;
         _logger = logger;
+        _localModels = modelCatalog as ILocalModelManager;
 
         _model = CreateModel(settingsService.Current);
 
@@ -203,6 +204,7 @@ public sealed class SettingsForm : Form
             _engine.ConversationMessageReceived -= OnConversationMessageReceived;
             _toolTip.Dispose();
             _previewCts?.Dispose();
+            _modelOperation?.Cancel();
         }
 
         base.Dispose(disposing);
@@ -338,6 +340,7 @@ public sealed class SettingsForm : Form
 
         // Conversation comes first because it is the primary interaction surface.
         AddNavButton(navStack, _localizer.Get("ui.tab.chat"), IconGlyphs.Chat);
+        AddNavButton(navStack, _localizer.Get("ui.tab.models"), IconGlyphs.Model);
         AddNavButton(navStack, _localizer.Get("ui.tab.general"), IconGlyphs.Settings);
         AddNavButton(navStack, _localizer.Get("ui.tab.user"), IconGlyphs.User);
         AddNavButton(navStack, _localizer.Get("ui.tab.voice"), IconGlyphs.Voice);
@@ -392,6 +395,7 @@ public sealed class SettingsForm : Form
         host.Controls.Add(BuildChatSection());
         host.Controls.Add(BuildUserSection());
         host.Controls.Add(BuildVoiceSection());
+        host.Controls.Add(BuildModelsSection());
 
         _footerPanel = BuildFooter();
 
@@ -476,7 +480,7 @@ public sealed class SettingsForm : Form
             Margin = new Padding(0, 0, Palette.Unit, 0),
         };
         _toolTip.SetToolTip(stopButton, _localizer.Get("ui.chat.stop"));
-        stopButton.Click += (_, _) => _engine.StopSpeaking();
+        stopButton.Click += (_, _) => { _inference?.Cancel(); _engine.StopSpeaking(); };
 
         var saveButton = new FlatButton { Text = _localizer.Get("ui.actions.save"), IsPrimary = true };
         saveButton.Click += async (_, _) => await SaveAsync().ConfigureAwait(true);
@@ -824,7 +828,7 @@ public sealed class SettingsForm : Form
             Margin = new Padding(Palette.Unit, 2, 0, 0),
         };
         _toolTip.SetToolTip(stopButton, _localizer.Get("ui.chat.stop"));
-        stopButton.Click += (_, _) => _engine.StopSpeaking();
+        stopButton.Click += (_, _) => { _inference?.Cancel(); _engine.StopSpeaking(); };
         actions.Controls.Add(stopButton);
 
         var optionsButton = new CircleButton
@@ -949,6 +953,14 @@ public sealed class SettingsForm : Form
             UpdateChatModelBadge();
         };
 
+        AddRow(stack, SettingRowFactory.ComboRow(Text_("ui.ai.provider"), string.Empty, out _providerCombo));
+        _providerCombo.Items.Add(new ComboItem(Text_("ui.ai.embedded"), "embedded"));
+        _providerCombo.Items.Add(new ComboItem("Ollama", "ollama"));
+        _providerCombo.SelectedIndexChanged += (_, _) =>
+        {
+            _model.GenerativeAiProvider = (_providerCombo.SelectedItem as ComboItem)?.Value ?? "embedded";
+            PopulateModelCombo();
+        };
         AddRow(stack, SettingRowFactory.TextRow(Text_("ui.ai.endpoint"), Text_("ui.ai.endpointHint"), out _endpointBox));
         Tip(_endpointBox, "ui.ai.endpointHint");
 
@@ -1256,6 +1268,7 @@ public sealed class SettingsForm : Form
         {
             GenerativeAi = new GenerativeAiOptions
             {
+                Provider = _model.GenerativeAiProvider,
                 Enabled = _model.GenerativeAiEnabled,
                 Endpoint = _model.GenerativeAiEndpoint,
                 Model = _model.GenerativeAiModel,
@@ -1697,6 +1710,7 @@ public sealed class SettingsForm : Form
         _aiToggle.Checked = _model.GenerativeAiEnabled;
         _endpointBox.Text = _model.GenerativeAiEndpoint;
         _personaBox.Text = _model.GenerativeAiPersona;
+        _providerCombo.SelectedIndex = _model.GenerativeAiProvider == "ollama" ? 1 : 0;
         UpdateChatInputState();
         UpdateChatModelBadge();
     }
@@ -1720,6 +1734,7 @@ public sealed class SettingsForm : Form
         _model.StartWithWindows = _startupToggle.Checked;
 
         _model.GenerativeAiEnabled = _aiToggle.Checked;
+        _model.GenerativeAiProvider = (_providerCombo.SelectedItem as ComboItem)?.Value ?? "embedded";
         _model.GenerativeAiEndpoint = _endpointBox.Text.Trim();
         _model.GenerativeAiModel = (_modelCombo.SelectedItem as ComboItem)?.Value ?? string.Empty;
         _model.GenerativeAiPersona = _personaBox.Text.Trim();
@@ -1761,7 +1776,9 @@ public sealed class SettingsForm : Form
         _modelCombo.Items.Clear();
         _modelCombo.SelectedIndex = -1;
 
-        foreach (string model in _model.GetInstalledModels())
+        IReadOnlyList<string> installed = _model.GenerativeAiProvider == "ollama"
+            ? _ollamaModels?.GetInstalledModels() ?? [] : _model.GetInstalledModels();
+        foreach (string model in installed)
         {
             int index = _modelCombo.Items.Add(new ComboItem(model, model));
 

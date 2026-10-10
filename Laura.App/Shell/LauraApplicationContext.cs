@@ -97,10 +97,16 @@ public sealed class LauraApplicationContext : ApplicationContext
     {
         try
         {
+            await _services.GetRequiredService<ISettingsService>().LoadAsync().ConfigureAwait(true);
             await _engine.StartAsync().ConfigureAwait(true);
             _hourlyAnnouncer.Start();
 
-            _ = EnsureSettingsForm();
+            SettingsForm form = EnsureSettingsForm();
+            if (string.IsNullOrWhiteSpace(_services.GetRequiredService<ISettingsService>().Current.GenerativeAi.Model))
+            {
+                form.ShowFromTray();
+                form.ShowModelSetup();
+            }
         }
         catch (Exception exception)
         {
