@@ -107,7 +107,7 @@ public sealed class LauraApplicationContext : ApplicationContext
 
             SettingsForm form = EnsureSettingsForm();
             if (_showAtStartup) { form.ShowFromTray(); }
-            if (string.IsNullOrWhiteSpace(_services.GetRequiredService<ISettingsService>().Current.GenerativeAi.Model))
+            if (!_showAtStartup && string.IsNullOrWhiteSpace(_services.GetRequiredService<ISettingsService>().Current.GenerativeAi.Model))
             {
                 form.ShowFromTray();
                 form.ShowModelSetup();

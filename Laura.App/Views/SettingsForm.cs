@@ -16,15 +16,13 @@ using Microsoft.Extensions.Logging;
 namespace Laura.App.Views;
 
 /// <summary>
-/// Laura's settings window: chat, generative AI, general behaviour, the user, and
-/// voice.
+/// Laura's assistant HUD, activity/command surface and central settings workspace.
 ///
 /// It stays hidden and is brought to the front by <c>Alt + L</c>; closing it from the
 /// title bar only hides it, keeping the assistant active in the tray.
 /// </summary>
 public sealed partial class SettingsForm : Form
 {
-    private const int NavigationWidth = 210;
     private const int MultilineHeight = 96;
 
     private readonly ISettingsService _settingsService;
@@ -206,6 +204,7 @@ public sealed partial class SettingsForm : Form
             _engine.StateChanged -= OnEngineStateChanged;
             _engine.ConversationMessageReceived -= OnConversationMessageReceived;
             _toolTip.Dispose();
+            _hudTimer?.Dispose();
             _previewCts?.Dispose();
             _modelOperation?.Cancel();
             _voiceLifetime.Cancel();
@@ -254,8 +253,8 @@ public sealed partial class SettingsForm : Form
         BackColor = Palette.Background;
         ForeColor = Palette.TextPrimary;
         Font = FontFactory.Create(9.5f);
-        ClientSize = new Size(960, 700);
-        MinimumSize = new Size(860, 620);
+        ClientSize = new Size(1280, 800);
+        MinimumSize = new Size(1100, 720);
         TryApplyWindowIcon();
     }
 
@@ -278,230 +277,15 @@ public sealed partial class SettingsForm : Form
     }
 
     /// <summary>
-    /// Builds the side navigation, the body and the footer.
+    /// Builds the assistant HUD, central workspace and persistent activity panel.
     /// </summary>
     private void BuildInterface()
     {
-        var root = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1,
-            BackColor = Palette.Background,
-        };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, NavigationWidth));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-
-        root.Controls.Add(BuildNavigation(), 0, 0);
-        root.Controls.Add(BuildContentArea(), 1, 0);
-
-        Controls.Add(root);
-
+        BuildHudInterface();
         _builtCulture = _localizer.Culture.Name;
         LoadModelIntoControls();
         SelectSection(_localizer.Get("ui.tab.chat"));
-    }
-
-    /// <summary>
-    /// Builds the side navigation column.
-    ///
-    /// Returns:
-    ///     The navigation panel.
-    /// </summary>
-    private Control BuildNavigation()
-    {
-        var panel = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Palette.Background,
-            Padding = new Padding(Palette.Unit * 2),
-        };
-
-        var navStack = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            BackColor = Palette.Background,
-        };
-
-        navStack.Controls.Add(new Label
-        {
-            Text = "Laura",
-            AutoSize = true,
-            ForeColor = Palette.TextPrimary,
-            Font = FontFactory.Create(18f, FontStyle.Bold),
-            Margin = new Padding(4, 0, 0, 0),
-        });
-
-        navStack.Controls.Add(new Label
-        {
-            Text = _localizer.Get("ui.window.subtitle"),
-            AutoSize = true,
-            UseMnemonic = false,
-            MaximumSize = new Size(NavigationWidth - Palette.Unit * 5, 0),
-            ForeColor = Palette.TextSecondary,
-            Font = FontFactory.Create(8.5f),
-            Margin = new Padding(4, 2, 0, Palette.Unit * 2),
-        });
-
-        // Conversation comes first because it is the primary interaction surface.
-        AddNavButton(navStack, _localizer.Get("ui.tab.chat"), IconGlyphs.Chat);
-        AddNavButton(navStack, _localizer.Get("ui.tab.models"), IconGlyphs.Model);
-        AddNavButton(navStack, _localizer.Get("ui.tab.memory"), IconGlyphs.Chat);
-        AddNavButton(navStack, _localizer.Get("ui.tab.general"), IconGlyphs.Settings);
-        AddNavButton(navStack, _localizer.Get("ui.tab.user"), IconGlyphs.User);
-        AddNavButton(navStack, _localizer.Get("ui.tab.voice"), IconGlyphs.Voice);
-
-        panel.Controls.Add(navStack);
-        return panel;
-    }
-
-    /// <summary>
-    /// Creates a navigation item and links it to its section.
-    ///
-    /// Args:
-    ///     container: Stack the item is added to.
-    ///     caption: Section label, also used as the key.
-    ///     glyph: Item symbol.
-    /// </summary>
-    private void AddNavButton(Control container, string caption, string glyph)
-    {
-        var button = new NavButton(caption, glyph)
-        {
-            Width = NavigationWidth - Palette.Unit * 5,
-            Margin = new Padding(0, 2, 0, 2),
-        };
-
-        button.Click += (_, _) => SelectSection(caption);
-
-        _navButtons.Add(button);
-        container.Controls.Add(button);
-    }
-
-    /// <summary>
-    /// Builds the content area with the scrolling body and the action footer.
-    ///
-    /// Returns:
-    ///     The content-area panel.
-    /// </summary>
-    private Control BuildContentArea()
-    {
-        var container = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-            BackColor = Palette.Background,
-            Padding = new Padding(0, Palette.Unit * 2, Palette.Unit * 3, Palette.Unit * 2),
-        };
-        container.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        container.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-
-        var host = new Panel { Dock = DockStyle.Fill, BackColor = Palette.Background };
-        host.Controls.Add(BuildGeneralSection());
-        host.Controls.Add(BuildChatSection());
-        host.Controls.Add(BuildUserSection());
-        host.Controls.Add(BuildVoiceSection());
-        host.Controls.Add(BuildModelsSection());
-        host.Controls.Add(BuildMemorySection());
-
-        _footerPanel = BuildFooter();
-
-        container.Controls.Add(host, 0, 0);
-        container.Controls.Add(_footerPanel, 0, 1);
-
-        return container;
-    }
-
-    /// <summary>
-    /// Builds the footer with the assistant state and the action buttons.
-    ///
-    /// Returns:
-    ///     The footer panel.
-    /// </summary>
-    private Control BuildFooter()
-    {
-        var footer = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Palette.Background,
-            Margin = new Padding(0, Palette.Unit, 0, 0),
-        };
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-
-        var statusStack = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Palette.Background,
-            Anchor = AnchorStyles.Left,
-        };
-
-        _statusLabel = new Label
-        {
-            AutoSize = true,
-            UseMnemonic = false,
-            ForeColor = Palette.TextSecondary,
-            Font = FontFactory.Create(9f, FontStyle.Bold),
-            Margin = new Padding(4, 0, 0, 2),
-        };
-
-        _hintLabel = new Label
-        {
-            Text = _localizer.Get("ui.footer.hotkey"),
-            AutoSize = true,
-            UseMnemonic = false,
-            ForeColor = Palette.TextSecondary,
-            Font = FontFactory.Create(8.5f),
-            Margin = new Padding(4, 0, 0, 0),
-        };
-
-        statusStack.Controls.Add(_statusLabel);
-        statusStack.Controls.Add(_hintLabel);
-
-        var actions = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.LeftToRight,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Anchor = AnchorStyles.Right,
-            WrapContents = false,
-            BackColor = Palette.Background,
-        };
-
-        var restoreButton = new FlatButton { Text = _localizer.Get("ui.actions.restoreDefaults"), IsPrimary = false };
-        restoreButton.Click += (_, _) => RestoreDefaults();
-
-        var stopButton = new CircleButton
-        {
-            Text = IconGlyphs.Stop,
-            IsPrimary = false,
-            Size = new Size(38, 38),
-            MinimumSize = new Size(38, 38),
-            Margin = new Padding(0, 0, Palette.Unit, 0),
-        };
-        _toolTip.SetToolTip(stopButton, _localizer.Get("ui.chat.stop"));
-        stopButton.Click += (_, _) => { _inference?.Cancel(); _engine.StopSpeaking(); };
-
-        var saveButton = new FlatButton { Text = _localizer.Get("ui.actions.save"), IsPrimary = true };
-        saveButton.Click += async (_, _) => await SaveAsync().ConfigureAwait(true);
-
-        actions.Controls.Add(stopButton);
-        actions.Controls.Add(restoreButton);
-        actions.Controls.Add(saveButton);
-
-        footer.Controls.Add(statusStack, 0, 0);
-        footer.Controls.Add(actions, 1, 0);
-
-        return footer;
+        UpdateEngineStatus(_engine.State);
     }
 
     // === Sections ===
@@ -553,12 +337,12 @@ public sealed partial class SettingsForm : Form
             RowCount = 4,
             BackColor = Palette.ChatBackground,
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 94));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
 
-        layout.Controls.Add(BuildChatHeader(), 0, 0);
+        layout.Controls.Add(BuildActivityHeader(), 0, 0);
 
         var body = new Panel
         {
@@ -567,10 +351,7 @@ public sealed partial class SettingsForm : Form
         };
 
         _chatTranscriptPanel = BuildChatTranscript();
-        _chatAiSettingsPanel = BuildChatAiSettings();
-        _chatAiSettingsPanel.Visible = false;
         body.Controls.Add(_chatTranscriptPanel);
-        body.Controls.Add(_chatAiSettingsPanel);
 
         layout.Controls.Add(body, 0, 1);
         _streamPreview = new Label { Dock = DockStyle.Fill, UseMnemonic = false, AutoEllipsis = true,
@@ -590,7 +371,7 @@ public sealed partial class SettingsForm : Form
     /// </summary>
     private Panel BuildChatTranscript()
     {
-        var chatHost = new ChatSurfacePanel
+        var chatHost = new Panel
         {
             Dock = DockStyle.Fill,
             Padding = new Padding(Palette.Unit * 2),
@@ -613,6 +394,7 @@ public sealed partial class SettingsForm : Form
         };
         _chatViewport.MouseWheel += (_, args) => ScrollChatBy(-args.Delta / 3);
         _chatViewport.Resize += (_, _) => LayoutChatMessages();
+        _chatViewport.Resize += (_, _) => _chatEmptyLabel.MaximumSize = new Size(Math.Max(1, _chatViewport.Width - 32), 0);
 
         _chatList = new Panel
         {
@@ -745,185 +527,6 @@ public sealed partial class SettingsForm : Form
         composer.Controls.Add(inputDock);
 
         return composer;
-    }
-
-    /// <summary>
-    /// Builds the chat header with status, model summary, stop, and AI options.
-    /// </summary>
-    /// <returns>The chat header.</returns>
-    private Control BuildChatHeader()
-    {
-        var header = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 3,
-            RowCount = 1,
-            BackColor = Palette.Surface,
-            Padding = new Padding(Palette.Unit * 3, 12, Palette.Unit * 2, 12),
-        };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-        var avatar = new LauraAvatar
-        {
-            Width = 40,
-            Height = 40,
-            BackColor = Palette.Surface,
-            Anchor = AnchorStyles.Left,
-            Margin = new Padding(0, 0, Palette.Unit + 2, 0),
-        };
-
-        var titleStack = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Palette.Surface,
-            Anchor = AnchorStyles.Left,
-            Margin = Padding.Empty,
-        };
-        titleStack.Controls.Add(new Label
-        {
-            Text = "Laura",
-            AutoSize = true,
-            UseMnemonic = false,
-            ForeColor = Palette.TextPrimary,
-            Font = FontFactory.Create(12f, FontStyle.Bold),
-            Margin = Padding.Empty,
-        });
-
-        var statusRow = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Palette.Surface,
-            Margin = new Padding(0, 2, 0, 0),
-        };
-        statusRow.Controls.Add(new RoundedPanel
-        {
-            Width = 8,
-            Height = 8,
-            BackColor = Palette.Ready,
-            CornerRadius = 4,
-            Margin = new Padding(0, 5, 6, 0),
-        });
-        _chatStatusLabel = new Label
-        {
-            Text = Text_("ui.status.idle"),
-            AutoSize = true,
-            UseMnemonic = false,
-            ForeColor = Palette.TextSecondary,
-            Font = FontFactory.Create(8.5f),
-            Margin = Padding.Empty,
-        };
-        statusRow.Controls.Add(_chatStatusLabel);
-        titleStack.Controls.Add(statusRow);
-
-        var actions = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Palette.Surface,
-            Anchor = AnchorStyles.Right,
-            Margin = Padding.Empty,
-        };
-
-        actions.Controls.Add(BuildModelBadge());
-
-        var stopButton = new CircleButton
-        {
-            Text = IconGlyphs.Stop,
-            IsPrimary = false,
-            Width = 36,
-            Height = 36,
-            MinimumSize = new Size(36, 36),
-            Margin = new Padding(Palette.Unit, 2, 0, 0),
-        };
-        _toolTip.SetToolTip(stopButton, _localizer.Get("ui.chat.stop"));
-        stopButton.Click += (_, _) => { _inference?.Cancel(); _engine.StopSpeaking(); };
-        actions.Controls.Add(stopButton);
-
-        var optionsButton = new CircleButton
-        {
-            Text = IconGlyphs.More,
-            IsPrimary = false,
-            Width = 36,
-            Height = 36,
-            MinimumSize = new Size(36, 36),
-            Margin = new Padding(Palette.Unit, 2, 0, 0),
-        };
-        _toolTip.SetToolTip(optionsButton, Text_("ui.chat.aiOptions"));
-        optionsButton.Click += (_, _) =>
-        {
-            bool showSettings = !_chatAiSettingsPanel.Visible;
-            _chatAiSettingsPanel.Visible = showSettings;
-            _chatTranscriptPanel.Visible = !showSettings;
-        };
-        actions.Controls.Add(optionsButton);
-
-        header.Controls.Add(avatar, 0, 0);
-        header.Controls.Add(titleStack, 1, 0);
-        header.Controls.Add(actions, 2, 0);
-
-        return header;
-    }
-
-    /// <summary>
-    /// Builds the model badge shown in the chat header.
-    /// </summary>
-    /// <returns>The badge control.</returns>
-    private Control BuildModelBadge()
-    {
-        var badge = new RoundedPanel
-        {
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Palette.Field,
-            BorderColor = Palette.Border,
-            BorderThickness = 1,
-            CornerRadius = 16,
-            Padding = new Padding(Palette.Unit + 4, 7, Palette.Unit + 4, 7),
-            Margin = new Padding(0, 2, 0, 0),
-        };
-
-        var badgeRow = new FlowLayoutPanel
-        {
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            BackColor = Palette.Field,
-            Margin = Padding.Empty,
-        };
-        badgeRow.Controls.Add(new Label
-        {
-            Text = IconGlyphs.Model,
-            AutoSize = true,
-            UseMnemonic = false,
-            ForeColor = Palette.TextSecondary,
-            Font = FontFactory.CreateIcon(9f),
-            Margin = new Padding(0, 1, 6, 0),
-        });
-
-        _chatModelLabel = new Label
-        {
-            AutoSize = true,
-            UseMnemonic = false,
-            ForeColor = Palette.TextSecondary,
-            Font = FontFactory.Create(8.5f),
-            Margin = Padding.Empty,
-        };
-        badgeRow.Controls.Add(_chatModelLabel);
-        badge.Controls.Add(badgeRow);
-
-        return badge;
     }
 
     /// <summary>
@@ -1125,8 +728,13 @@ public sealed partial class SettingsForm : Form
 
         foreach ((string sectionKey, Panel page) in _sections)
         {
-            page.Visible = string.Equals(sectionKey, key, StringComparison.Ordinal);
+            page.Visible = string.Equals(sectionKey, _localizer.Get("ui.tab.chat"), StringComparison.Ordinal)
+                || string.Equals(sectionKey, key, StringComparison.Ordinal);
         }
+
+        _hudHome.Visible = showingChat;
+        _hudSettings.Visible = !showingChat;
+        if (!showingChat && _sections.TryGetValue(key, out Panel? selected)) { selected.BringToFront(); }
 
         foreach (NavButton button in _navButtons)
         {
@@ -1668,8 +1276,9 @@ public sealed partial class SettingsForm : Form
 
         _statusLabel.Text = _localizer.Get(key);
         _statusLabel.ForeColor = color;
+        if (_hudCanvas is not null) { _hudCanvas.State = state; }
 
-        _hintLabel.Text = _localizer.Get("ui.footer.hotkey");
+        _hintLabel.Text = _localizer.Get("ui.hud.hotkey");
 
         if (_chatStatusLabel is not null)
         {

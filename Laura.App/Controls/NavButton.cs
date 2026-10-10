@@ -6,7 +6,7 @@ using Laura.App.Theming;
 namespace Laura.App.Controls;
 
 /// <summary>
-/// Side navigation item that switches between settings sections.
+/// Keyboard-accessible navigation item that switches between settings sections.
 /// </summary>
 public sealed class NavButton : Control
 {
@@ -38,6 +38,9 @@ public sealed class NavButton : Control
         Height = 42;
         Cursor = Cursors.Hand;
         Font = FontFactory.Create(10f);
+        AccessibleRole = AccessibleRole.PushButton;
+        AccessibleName = caption;
+        TabStop = true;
     }
 
     /// <summary>Gets the section label.</summary>
@@ -59,6 +62,24 @@ public sealed class NavButton : Control
 
             _selected = value;
             Invalidate();
+        }
+    }
+
+    /// <summary>Activates the navigation item when enabled.</summary>
+    public void PerformClick()
+    {
+        if (Enabled && !IsDisposed) { OnClick(EventArgs.Empty); }
+    }
+
+    /// <inheritdoc />
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.KeyCode is Keys.Enter or Keys.Space)
+        {
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+            PerformClick();
         }
     }
 
@@ -113,8 +134,11 @@ public sealed class NavButton : Control
 
         Color textColor = _selected ? Palette.TextPrimary : Palette.TextSecondary;
         var iconBounds = new Rectangle(Palette.Unit * 2, 0, 24, Height);
-        var textBounds = new Rectangle(Palette.Unit * 6, 0, Width - Palette.Unit * 7, Height);
+        bool iconVisible = !string.IsNullOrEmpty(Glyph);
+        var textBounds = iconVisible ? new Rectangle(Palette.Unit * 6, 0, Width - Palette.Unit * 7, Height)
+            : new Rectangle(8, 0, Width - 16, Height);
         TextFormatFlags flags = TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPrefix;
+        if (!iconVisible) { flags = TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPrefix; }
 
         TextRenderer.DrawText(graphics, Glyph, _iconFont, iconBounds, textColor, flags);
         TextRenderer.DrawText(graphics, Caption, Font, textBounds, textColor, flags);

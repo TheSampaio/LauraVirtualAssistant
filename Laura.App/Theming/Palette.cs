@@ -11,25 +11,25 @@ namespace Laura.App.Theming;
 internal static class Palette
 {
     /// <summary>Main window background.</summary>
-    internal static Color Background { get; } = Color.FromArgb(0x08, 0x09, 0x0C);
+    internal static Color Background { get; } = Color.FromArgb(0x0A, 0x06, 0x08);
 
     /// <summary>Background for cards and raised panels.</summary>
-    internal static Color Surface { get; } = Color.FromArgb(0x12, 0x14, 0x19);
+    internal static Color Surface { get; } = Color.FromArgb(0x16, 0x0D, 0x11);
 
     /// <summary>Chat transcript background.</summary>
-    internal static Color ChatBackground { get; } = Color.FromArgb(0x0B, 0x0D, 0x14);
+    internal static Color ChatBackground { get; } = Color.FromArgb(0x0F, 0x09, 0x0D);
 
     /// <summary>Assistant message bubble background.</summary>
-    internal static Color AssistantBubble { get; } = Color.FromArgb(0x1B, 0x20, 0x2D);
+    internal static Color AssistantBubble { get; } = Color.FromArgb(0x24, 0x17, 0x1D);
 
     /// <summary>User message bubble background.</summary>
     internal static Color UserBubble { get; } = Color.FromArgb(0xA7, 0x13, 0x24);
 
     /// <summary>Chat input dock background.</summary>
-    internal static Color ChatDock { get; } = Color.FromArgb(0x10, 0x13, 0x1D);
+    internal static Color ChatDock { get; } = Color.FromArgb(0x19, 0x0F, 0x14);
 
     /// <summary>Input field background.</summary>
-    internal static Color Field { get; } = Color.FromArgb(0x1A, 0x1D, 0x24);
+    internal static Color Field { get; } = Color.FromArgb(0x22, 0x14, 0x1B);
 
     /// <summary>Accent color used for focus, selection, and primary actions.</summary>
     internal static Color Accent { get; } = Color.FromArgb(0xD9, 0x1F, 0x2E);
@@ -44,7 +44,7 @@ internal static class Palette
     internal static Color TextSecondary { get; } = Color.FromArgb(0xA2, 0xA7, 0xB3);
 
     /// <summary>Subtle dividers and outlines.</summary>
-    internal static Color Border { get; } = Color.FromArgb(0x24, 0x28, 0x32);
+    internal static Color Border { get; } = Color.FromArgb(0x49, 0x22, 0x2B);
 
     /// <summary>Dark chat scrollbar track.</summary>
     internal static Color ScrollTrack { get; } = Color.FromArgb(0x0D, 0x0F, 0x14);

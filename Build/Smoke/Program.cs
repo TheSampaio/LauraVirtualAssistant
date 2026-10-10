@@ -1,6 +1,7 @@
 using System.Globalization;
 using Laura.App.Composition;
 using Laura.App.Views;
+using Laura.App.Controls;
 using Laura.Core.Abstractions;
 using Laura.Core.Configuration;
 using Laura.Core.Conversation;
@@ -14,6 +15,43 @@ using Microsoft.Extensions.DependencyInjection;
 /// <summary>Opt-in real native inference and UI smoke. Uses isolated ignored storage; never captures microphone audio.</summary>
 internal static class Program
 {
+    private static void SaveView(SettingsForm form, string directory, string name)
+    {
+        Application.DoEvents();
+        using var bitmap = new Bitmap(form.Width, form.Height);
+        form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
+        bitmap.Save(Path.Combine(directory, name));
+    }
+
+    private static IEnumerable<Control> Descendants(Control parent)
+    {
+        foreach (Control child in parent.Controls)
+        {
+            yield return child;
+            foreach (Control descendant in Descendants(child)) { yield return descendant; }
+        }
+    }
+
+    private static void RenderSettings(SettingsForm form, string directory, string culture)
+    {
+        int index = 0;
+        foreach (NavButton tab in Descendants(form).OfType<NavButton>().ToArray())
+        {
+            tab.PerformClick();
+            SaveView(form, directory, $"settings-{index++}-{culture}.png");
+            if (!tab.Selected) { throw new InvalidOperationException("HUD settings navigation failed: " + tab.Caption); }
+        }
+        var home = Descendants(form).OfType<Button>().First(button => button.Text == "LAURA");
+        home.PerformClick();
+        form.ClientSize = new Size(1100, 720);
+        SaveView(form, directory, $"hud-small-{culture}.png");
+        form.ShowModelSetup();
+        SaveView(form, directory, $"models-small-{culture}.png");
+        form.ClientSize = new Size(1280, 800);
+        home.PerformClick();
+        Console.WriteLine("HUD navigation and render passed: " + culture);
+    }
+
     [STAThread]
     private static int Main(string[] args)
     {
@@ -43,12 +81,14 @@ internal static class Program
             form.Opacity = 0;
             form.Show();
             Application.DoEvents();
+            SaveView(form, directory, "hud-en-US.png");
             form.ShowModelSetup();
             using (var bitmap = new Bitmap(form.Width, form.Height))
             {
                 form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
                 bitmap.Save(Path.Combine(directory, "models-en-US.png"));
             }
+            RenderSettings(form, directory, "en-US");
             form.Hide();
             if (args.Contains("--download", StringComparer.Ordinal))
             {
@@ -116,6 +156,7 @@ internal static class Program
             settings.UpdateAsync(settings.Current with { UiCulture = "pt-BR", Culture = "en-US" }, timeout.Token).GetAwaiter().GetResult();
             provider.GetRequiredService<IUiLocalizer>().SetCulture(CultureInfo.GetCultureInfo("pt-BR"));
             form.ShowFromTray();
+            SaveView(form, directory, "hud-pt-BR.png");
             form.ShowModelSetup();
             form.Show();
             Application.DoEvents();
@@ -124,6 +165,7 @@ internal static class Program
                 form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
                 bitmap.Save(Path.Combine(directory, "models-pt-BR.png"));
             }
+            RenderSettings(form, directory, "pt-BR");
             form.Hide();
             settings.LoadAsync(timeout.Token).GetAwaiter().GetResult();
             if (settings.Current.UiCulture != "pt-BR" || settings.Current.Culture != "en-US") { throw new InvalidOperationException("Independent language persistence failed."); }

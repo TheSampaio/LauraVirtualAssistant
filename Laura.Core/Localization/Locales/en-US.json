@@ -336,5 +336,32 @@
   "ui.errors.native": "The local engine could not start on this machine. Check the installation and CPU compatibility.",
   "ui.errors.storage": "Check free disk space and file permissions, then retry. Existing data is preserved on failure.",
   "ui.errors.invalid": "Check the selected device, model and entered values, then retry.",
-  "ui.errors.unexpected": "The operation could not finish. Check your settings and installed models, then retry. Technical details are recorded in the diagnostic log."
+  "ui.errors.unexpected": "The operation could not finish. Check your settings and installed models, then retry. Technical details are recorded in the diagnostic log.",
+
+  "ui.hud.setup": "Setup",
+  "ui.hud.controls": "Controls",
+  "ui.hud.subtitle": "PERSONAL AI ASSISTANT",
+  "ui.hud.monitor": "SYSTEM MONITOR",
+  "ui.hud.cpu": "LAURA CPU / THREADS",
+  "ui.hud.ram": "SYSTEM MEMORY",
+  "ui.hud.disk": "APP DISK · FREE",
+  "ui.hud.backend": "INFERENCE BACKEND",
+  "ui.hud.uptime": "SESSION UPTIME",
+  "ui.hud.system": "PLATFORM",
+  "ui.hud.privacy": "MICROPHONE",
+  "ui.hud.local": "Push to talk only",
+  "ui.hud.core": "ASSISTANT CORE",
+  "ui.hud.awaiting": "STATE DISPLAY",
+  "ui.hud.ready": "Ready when you are.",
+  "ui.hud.prompt": "Type a command or use push to talk.",
+  "ui.hud.ai": "AI",
+  "ui.hud.back": "Back to HUD",
+  "ui.hud.activity": "ACTIVITY / COMMANDS",
+  "ui.hud.interrupt": "Interrupt",
+  "ui.hud.microphone": "Toggle mic",
+  "ui.hud.micReady": "Mic ready",
+
+  "ui.hud.micMuted": "Mic muted",
+  "ui.hud.hotkey": "Alt + L · show / hide",
+  "ui.hud.recording": "Recording voice"
 }

@@ -1,6 +1,6 @@
 # Laura Virtual Assistant
 
-Laura is one local-first Windows tray application with its existing red WinForms interface. Press **Alt + L** to open or hide it. Built-in text commands work without a model or cloud credentials. Native llama.cpp and Whisper run inside Laura; neither reference project is launched or redistributed.
+Laura is one local-first Windows tray application with a Mark-LV-inspired three-column HUD, independently implemented in WinForms with Laura branding and red accents. Press **Alt + L** to open or hide it. Built-in text commands work without a model or cloud credentials. Native llama.cpp and Whisper run inside Laura; neither reference project is launched or redistributed.
 
 ## Install and first run
 
@@ -8,7 +8,7 @@ Use `_Output/Distribution/LauraSetup.exe`, produced by `Build/Publish.bat`. The 
 
 Validated on this Windows x64 machine. The minimum API target is Windows 10 build 19041; other Windows versions and a clean virtual machine have not been validated. Uninstall by closing Laura, disabling automatic startup in settings, removing its installation folder and Start Menu shortcut. Personal data is kept separately and must be deleted explicitly if desired.
 
-First run opens **Models**. Hardware details and compatibility estimates appear before download. Select a reviewed model, choose **Download / resume**, then **Load and use**. Downloads use HTTPS, pinned publisher revisions, exact size and SHA256 verification. Cancel retains resumable partial data; verification failures permit retry. Models can be unloaded, switched and deleted from this page. Compatible GGUF files placed in the Models directory are detected, but imported files are the user's responsibility.
+The HUD has a system monitor on the left, an original geometric face in the center, and activity/chat commands with microphone controls on the right. **Setup** opens the central settings workspace; **LAURA** returns to the HUD. First run opens **Models**; launching with `--show` opens the HUD, where **Setup** also provides model installation. Hardware details and compatibility estimates appear before download. Select a reviewed model, choose **Download / resume**, then **Load and use**. Downloads use HTTPS, pinned publisher revisions, exact size and SHA256 verification. Cancel retains resumable partial data; verification failures permit retry. Models can be unloaded, switched and deleted from this page. Compatible GGUF files placed in the Models directory are detected, but imported files are the user's responsibility.
 
 The reviewed catalog starts with Qwen 2.5 0.5B Instruct Q4_K_M, a 469 MiB multilingual download under Apache-2.0. CPU inference uses a 2,048-token context and at most 256 output tokens. The hardware estimate recommends at least 4 GiB total RAM and accounts for available RAM and disk space. This small model's quality varies. GPU/VRAM detection and GPU acceleration are not implemented. Optional Ollama is supported only at an explicitly configured loopback endpoint and requires an existing user-managed Ollama installation; embedded inference is the default.
 
@@ -18,7 +18,7 @@ English is the default. **General** provides independent interface and conversat
 
 On **Voice**, install the optional multilingual Whisper Base model (141 MiB, MIT), select audio devices, unmute the microphone and press **Record**. Press it again to finish, or allow the 15-second limit. Audio stays in memory and is transcribed locally. The recognized text enters the chat draft for review; press **Send** to execute it. Installed Windows offline recognizers provide a fallback when Whisper is absent and the selected language is available. Windows offline voices provide TTS. Existing Sherpa voice support remains available for compatible user-supplied assets with their own licenses.
 
-Recording begins only while Laura is idle, preventing Laura's speech from being recorded during normal use. Cancel discards capture or stops inference. This is half-duplex interaction; full-duplex acoustic echo cancellation is unavailable. Continuous listening and **Hey Laura** are unavailable until an appropriately licensed detection model has measured accuracy and false positives. The existing Laura icon and activity indicators are retained; advanced avatar and viseme animation are deferred.
+Recording begins only while Laura is idle, preventing Laura's speech from being recorded during normal use. Cancel discards capture or stops inference. This is half-duplex interaction; full-duplex acoustic echo cancellation is unavailable. Continuous listening and **Hey Laura** are unavailable until an appropriately licensed detection model has measured accuracy and false positives. The HUD uses an original geometric face with animated rings and a speaking-state mouth indicator. It does not implement phoneme timing or audio-reactive lip sync; advanced viseme animation is deferred.
 
 ## Memory and tools
 

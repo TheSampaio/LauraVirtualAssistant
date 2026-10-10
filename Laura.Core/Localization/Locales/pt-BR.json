@@ -280,5 +280,32 @@
   "ui.errors.native": "O mecanismo local não iniciou neste computador. Verifique a instalação e a compatibilidade da CPU.",
   "ui.errors.storage": "Verifique o espaço livre e as permissões dos arquivos e tente novamente. Os dados existentes são preservados em caso de falha.",
   "ui.errors.invalid": "Verifique o dispositivo, o modelo e os valores informados e tente novamente.",
-  "ui.errors.unexpected": "Não foi possível concluir. Verifique suas configurações e modelos instalados e tente novamente. Os detalhes técnicos estão no registro de diagnóstico."
+  "ui.errors.unexpected": "Não foi possível concluir. Verifique suas configurações e modelos instalados e tente novamente. Os detalhes técnicos estão no registro de diagnóstico.",
+
+  "ui.hud.setup": "Configurar",
+  "ui.hud.controls": "Controles",
+  "ui.hud.subtitle": "ASSISTENTE PESSOAL COM IA",
+  "ui.hud.monitor": "MONITOR DO SISTEMA",
+  "ui.hud.cpu": "CPU LAURA / THREADS",
+  "ui.hud.ram": "MEMÓRIA DO SISTEMA",
+  "ui.hud.disk": "DISCO DO APP · LIVRE",
+  "ui.hud.backend": "MOTOR DE INFERÊNCIA",
+  "ui.hud.uptime": "TEMPO DA SESSÃO",
+  "ui.hud.system": "PLATAFORMA",
+  "ui.hud.privacy": "MICROFONE",
+  "ui.hud.local": "Só ao pressionar",
+  "ui.hud.core": "NÚCLEO DA ASSISTENTE",
+  "ui.hud.awaiting": "ESTADO DA ASSISTENTE",
+  "ui.hud.ready": "Pronta quando você precisar.",
+  "ui.hud.prompt": "Digite um comando ou pressione para falar.",
+  "ui.hud.ai": "IA",
+  "ui.hud.back": "Voltar ao HUD",
+  "ui.hud.activity": "ATIVIDADE / COMANDOS",
+  "ui.hud.interrupt": "Interromper",
+  "ui.hud.microphone": "Alternar mic",
+  "ui.hud.micReady": "Mic pronto",
+
+  "ui.hud.micMuted": "Mic silenciado",
+  "ui.hud.hotkey": "Alt + L · abrir / ocultar",
+  "ui.hud.recording": "Gravando voz"
 }

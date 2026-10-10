@@ -91,6 +91,7 @@ public sealed partial class SettingsForm
         using var stop = new CancellationTokenSource();
         _recordingStop = stop;
         _talkButton.Text = Text_("ui.voice.finish");
+        RefreshHudMicrophone();
         _synthesizer.CancelSpeech();
         try
         {
@@ -111,6 +112,7 @@ public sealed partial class SettingsForm
         {
             _recordingStop = null;
             if (!_talkButton.IsDisposed) { _talkButton.Text = Text_("ui.voice.talk"); }
+            if (!IsDisposed) { RefreshHudMicrophone(); }
         }
     }
 }

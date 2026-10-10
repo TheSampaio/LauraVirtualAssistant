@@ -5,7 +5,7 @@ Laura retains its existing LICENSE. No endorsement by the reference projects is 
 ## Reference projects (not redistributed)
 
 - OpenJarvis, Open Jarvis Contributors, Apache-2.0, reviewed at `ecbde4b32091e2a8b02e8acfa41cb5f95e4da560`: https://github.com/open-jarvis/OpenJarvis. Architecture and capabilities informed Laura's integration assessment. No Python/Rust source is copied in this integration.
-- Mark-LV, copyright (c) 2026 FatihMakes, CC BY-NC 4.0, reviewed at `c3e795af71bff38bb406c62a2e7a63869cdc8eb2`: https://github.com/FatihMakes/Mark-LV. Behavioral reference only. No source, translated code or assets are redistributed. Commercial permission has not been obtained. Canonical license: https://creativecommons.org/licenses/by-nc/4.0/legalcode.
+- Mark-LV, copyright (c) 2026 FatihMakes, CC BY-NC 4.0, reviewed at `c3e795af71bff38bb406c62a2e7a63869cdc8eb2`: https://github.com/FatihMakes/Mark-LV. Capability and general HUD layout reference. Laura's HUD is independently implemented; its geometric face does not use Mark-LV's mesh or assets. No source, translated code or assets are redistributed. Commercial permission has not been obtained. Canonical license: https://creativecommons.org/licenses/by-nc/4.0/legalcode.
 
 ## Existing application dependencies
 
