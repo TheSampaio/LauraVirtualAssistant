@@ -94,8 +94,10 @@ public sealed class WindowsSpeechInput : ISpeechInput
             var result = new StringBuilder();
             await foreach (var segment in processor.ProcessAsync(audio, cancellationToken).ConfigureAwait(false))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 result.Append(segment.Text).Append(' ');
             }
+            cancellationToken.ThrowIfCancellationRequested();
             return result.ToString().Trim();
         }, cancellationToken).ConfigureAwait(false);
     }

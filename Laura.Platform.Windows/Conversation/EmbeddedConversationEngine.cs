@@ -106,9 +106,12 @@ public sealed class EmbeddedConversationEngine : ILocalInferenceEngine, IDisposa
             var answer = new StringBuilder();
             await foreach (string token in executor.InferAsync(prompt, inference, generation.Token).ConfigureAwait(false))
             {
+                generation.Token.ThrowIfCancellationRequested();
                 answer.Append(token);
                 TokenReceived?.Invoke(this, token);
             }
+            // Some native backends end their iterator on cancellation instead of throwing.
+            generation.Token.ThrowIfCancellationRequested();
             Status = "Ready (CPU)";
             return answer.ToString().Trim();
         }
