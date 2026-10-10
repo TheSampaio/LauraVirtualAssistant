@@ -1,68 +1,60 @@
-# Laura - Virtual Assistant
+# Laura Virtual Assistant
 
-Laura is a personal assistant for Windows inspired by Jarvis, in a feminine version.
-She lives in the system tray, speaks responses, and handles simple everyday tasks:
-telling the time and date, searching the web, opening applications, adjusting the
-volume, and locking the computer.
+Laura is one local-first Windows tray application with its existing red WinForms interface. Press **Alt + L** to open or hide it. Built-in text commands work without a model or cloud credentials. Native llama.cpp and Whisper run inside Laura; neither reference project is launched or redistributed.
 
-The interface stays hidden and appears with **Alt + L**, where you can change the
-voice, tone, generative AI mode, and other preferences. Speech and chat processing
-happen off the UI thread, so the window never freezes while Laura answers.
+## Install and first run
 
-## Requirements
+Use `_Output/Distribution/LauraSetup.exe`, produced by `Build/Publish.bat`. The per-user installer presents the Microsoft runtime license terms, includes .NET 9.0.20, the C++ CRT/OpenMP runtime and native CPU libraries, verifies its embedded ZIP, installs under `%LOCALAPPDATA%/Programs/Laura`, creates a Start Menu shortcut and opens Laura. Close Laura before updating. The installer is unsigned; organizational execution policies may block it. A portable alternative is `Laura-win-x64.zip`: extract the entire folder and run `Laura.exe`. Keep the bundled libraries and licenses beside the executable. No Python, Git, .NET installation, developer toolchain or model server is required by either distribution.
 
-- Windows 10 or 11
-- [.NET 9 SDK](https://dotnet.microsoft.com/download) to build
+Validated on this Windows x64 machine. The minimum API target is Windows 10 build 19041; other Windows versions and a clean virtual machine have not been validated. Uninstall by closing Laura, disabling automatic startup in settings, removing its installation folder and Start Menu shortcut. Personal data is kept separately and must be deleted explicitly if desired.
 
-## How to Run
+First run opens **Models**. Hardware details and compatibility estimates appear before download. Select a reviewed model, choose **Download / resume**, then **Load and use**. Downloads use HTTPS, pinned publisher revisions, exact size and SHA256 verification. Cancel retains resumable partial data; verification failures permit retry. Models can be unloaded, switched and deleted from this page. Compatible GGUF files placed in the Models directory are detected, but imported files are the user's responsibility.
 
-```powershell
-dotnet run --project Laura.App
-```
+The reviewed catalog starts with Qwen 2.5 0.5B Instruct Q4_K_M, a 469 MiB multilingual download under Apache-2.0. CPU inference uses a 2,048-token context and at most 256 output tokens. The hardware estimate recommends at least 4 GiB total RAM and accounts for available RAM and disk space. This small model's quality varies. GPU/VRAM detection and GPU acceleration are not implemented. Optional Ollama is supported only at an explicitly configured loopback endpoint and requires an existing user-managed Ollama installation; embedded inference is the default.
 
-Or use the scripts in `Build/`:
+## Voice and languages
 
-- `Build/Run.bat` - builds and runs in debug mode
-- `Build/Publish.bat` - creates a self-contained `Laura.exe` in `_Output/Publish`
+English is the default. **General** provides independent interface and conversation language settings: English (`en-US`) and Brazilian Portuguese (`pt-BR`). Settings persist after restart. Speech recognition and synthesis follow the conversation language, including voice previews. Missing UI translations fall back to English; missing local voices are reported and do not silently speak another language.
 
-## Architecture
+On **Voice**, install the optional multilingual Whisper Base model (141 MiB, MIT), select audio devices, unmute the microphone and press **Record**. Press it again to finish, or allow the 15-second limit. Audio stays in memory and is transcribed locally. The recognized text enters the chat draft for review; press **Send** to execute it. Installed Windows offline recognizers provide a fallback when Whisper is absent and the selected language is available. Windows offline voices provide TTS. Existing Sherpa voice support remains available for compatible user-supplied assets with their own licenses.
 
-The solution separates domain, platform, and presentation so the assistant's rules
-stay independent from Windows and the graphical interface.
+Recording begins only while Laura is idle, preventing Laura's speech from being recorded during normal use. Cancel discards capture or stops inference. This is half-duplex interaction; full-duplex acoustic echo cancellation is unavailable. Continuous listening and **Hey Laura** are unavailable until an appropriately licensed detection model has measured accuracy and false positives. The existing Laura icon and activity indicators are retained; advanced avatar and viseme animation are deferred.
 
-| Project | Responsibility |
-| --- | --- |
-| `Laura.Core` | Pure domain: settings, localization, skills, and the assistant engine. No platform dependencies. |
-| `Laura.Platform.Windows` | Windows adapters: speech synthesis, volume control, automatic startup. |
-| `Laura.App` | Tray application and settings window in Windows Forms. |
-| `Laura.Core.Tests` | Domain unit tests. |
+## Memory and tools
 
-The engine talks to the outside world only through interfaces (`ISpeechSynthesizer`,
-`ISkill`, `ISettingsService`, ...), and the composition root in
-[`ServiceConfiguration`](Laura.App/Composition/ServiceConfiguration.cs) connects each
-abstraction to its implementation.
+Saved conversation history appears in **Chat**. **Memory** searches and inspects explicit keyed preferences. Add, inspect or delete a preference. Disable **Remember conversations** to stop storing and retrieving history/preferences; existing saved data remains until explicitly deleted. Clear history removes saved messages; current-session messages remain visible until restart. SQLite uses one versioned database, bounded storage and parameterized queries. Corrupt and future-version databases are preserved, with errors reported rather than destructive replacement. No automatic learning, extraction or telemetry runs.
 
-### Skills
+Examples in the selected conversation language:
 
-Each capability is an `ISkill` implementation that decides whether a command belongs
-to it. Adding a new capability means registering one more skill without touching the
-engine or the existing skills. The phrases that trigger each skill live in language
-files, not in code.
+| English | Brazilian Portuguese |
+|---|---|
+| `what time is it` | `que horas são` |
+| `save note Buy milk` | `salvar nota Comprar leite` |
+| `list assistant files` | `listar arquivos da assistente` |
+| `read clipboard` | `ler área de transferência` |
+| `capture screen` | `capturar tela` |
+| `undo last file` | `desfazer último arquivo` |
+| `run steps: what time is it; save note Buy milk` | `executar etapas: que horas são; salvar nota Comprar leite` |
 
-### Language
+Clipboard reading, screen capture and undo require a trusted UI confirmation with **No** selected by default. Notes and PNGs receive generated names inside Laura's dedicated Workspace. Undo applies only to an unchanged file created by Laura in this session. Explicit command sequences permit one to four known commands; unknown or nested steps are rejected before execution. Model responses cannot execute tools or supply approval. Existing allowlisted app launch, web search, volume and lock skills remain available. Arbitrary filesystem access, browser DOM control, remote dashboards, plugin execution and proactive reminders are unavailable.
 
-Laura is English-only. Text and triggers live in
-`Laura.Core/Localization/Locales/en-US.json`.
+Settings, `Models/`, `memory.db` and `Workspace/` live in **Documents/Laura Virtual Assistant**. These files contain local personal data and are not encrypted. Cloud-synced Documents folders may sync them under the user's Windows configuration. No microphone audio, screenshot, file, prompt or memory is uploaded by embedded inference. User-requested downloads contact Hugging Face and its CDN; weather contacts wttr.in; web searches open the browser. Cloud AI/voice and privileged remote APIs are absent.
 
-### Generative Mode
+## Build and verify
 
-Generative AI is optional. When enabled, typed chat commands that no built-in skill
-recognizes are forwarded to a local model through the `IConversationEngine`
-interface. When disabled, the chat page remains a read-only conversation history and
-Laura keeps working through the built-in offline skills.
-
-## Tests
+Development requires the SDK pinned in `global.json` and Windows SDK access. Publishing also requires a licensed Visual Studio release redistributable directory: the pinned x64 CRT/OpenMP files are hash-checked against `licenses/vc-runtime-inventory.json`. The default directory is Visual Studio 2026 Community's `VC/Redist/MSVC/14.51.36231/x64`; pass `-VcRedistDirectory` to `Build/Publish.ps1` for another location containing those exact files. End users receive these files inside Laura. Dependencies are pinned by project references and committed NuGet lock files. Analyzer rules remain fixed at .NET 9 recommendations. Projects stay at the repository root; composition is App → Platform.Windows → Core.
 
 ```powershell
-dotnet test
+dotnet restore Laura.sln --locked-mode
+dotnet build Laura.sln -c Release --no-restore
+dotnet test Laura.sln -c Release --no-restore
+Build/Publish.bat
 ```
+
+`Build/Publish.ps1` creates the self-contained folder, ZIP, offline installer and `SHA256SUMS.txt` under ignored `_Output/Distribution`. `Build/Run.bat` runs the development application. Optional native smoke uses isolated ignored storage and synthetic speech, never microphone recordings:
+
+```powershell
+dotnet run --project Build/Smoke/Laura.Smoke.csproj -c Release -- _Output/Smoke --download --native --speech
+```
+
+The smoke may download the reviewed weights (about 610 MiB total) and requires installed English/Portuguese TTS voices for its bilingual speech fixture. Tests cover downloads, cancellation, resume, corruption, path validation, memory restart/search/deletion, localization and bounded tools. See [the assessment](docs/architecture/native-integration-assessment.md), [delivery report](docs/architecture/native-integration-delivery.md), and [third-party notices](THIRD_PARTY_NOTICES.md) for evidence, provenance and remaining limitations. No Mark-LV source, translated code or assets are included; its noncommercial license is respected.

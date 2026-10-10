@@ -1,0 +1,79 @@
+[
+  {
+    "File": "concrt140.dll",
+    "RelativePath": "Microsoft.VC145.CRT/concrt140.dll",
+    "Version": "14.51.36247.0",
+    "Sha256": "54716F0738AF891F283D213B5C8D11B25896BB8EE3097D301EAE718560CF974E",
+    "Publisher": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+  },
+  {
+    "File": "msvcp140_1.dll",
+    "RelativePath": "Microsoft.VC145.CRT/msvcp140_1.dll",
+    "Version": "14.51.36247.0",
+    "Sha256": "206C931BF90FDAD8816DE3B5E2EF80B2BCAA9406C89ECC05FE6FDDFFE251E982",
+    "Publisher": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+  },
+  {
+    "File": "msvcp140_2.dll",
+    "RelativePath": "Microsoft.VC145.CRT/msvcp140_2.dll",
+    "Version": "14.51.36247.0",
+    "Sha256": "D50D7883F20D1DC6191768D3746F52DD9CAC89C346FFAED5BE1F110C2F34A838",
+    "Publisher": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+  },
+  {
+    "File": "msvcp140_atomic_wait.dll",
+    "RelativePath": "Microsoft.VC145.CRT/msvcp140_atomic_wait.dll",
+    "Version": "14.51.36247.0",
+    "Sha256": "3D0CBFAA1BF3EECF5A3F4491D2960EE803CB994F30292C6ADC4A07C498F60E2B",
+    "Publisher": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+  },
+  {
+    "File": "msvcp140_codecvt_ids.dll",
+    "RelativePath": "Microsoft.VC145.CRT/msvcp140_codecvt_ids.dll",
+    "Version": "14.51.36247.0",
+    "Sha256": "8A65C7596EF2E6938731F5A1058E7E40145B6D97967CC649231A076B9A608D78",
+    "Publisher": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+  },
+  {
+    "File": "msvcp140.dll",
+    "RelativePath": "Microsoft.VC145.CRT/msvcp140.dll",
+    "Version": "14.51.36247.0",
+    "Sha256": "7C26614E1D733892C2DEAC7E245CE115504B1D80592DD0A01B08E3E5A55F89CA",
+    "Publisher": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+  },
+  {
+    "File": "vccorlib140.dll",
+    "RelativePath": "Microsoft.VC145.CRT/vccorlib140.dll",
+    "Version": "14.51.36247.0",
+    "Sha256": "09F93D5FF96AE09767F3E1AF3CDD43A5A58F2598654FC63089429BB6F9F4737F",
+    "Publisher": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+  },
+  {
+    "File": "vcruntime140_1.dll",
+    "RelativePath": "Microsoft.VC145.CRT/vcruntime140_1.dll",
+    "Version": "14.51.36247.0",
+    "Sha256": "A7146C08F89FE5B04541AB507CDB59FF7B44534D4BA3C668A426C6450A03434E",
+    "Publisher": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+  },
+  {
+    "File": "vcruntime140_threads.dll",
+    "RelativePath": "Microsoft.VC145.CRT/vcruntime140_threads.dll",
+    "Version": "14.51.36247.0",
+    "Sha256": "40F39E8CEE5F5A531B4010E18B807E8FE265B908DC58F959ECB7EBC6EA6CB11A",
+    "Publisher": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+  },
+  {
+    "File": "vcruntime140.dll",
+    "RelativePath": "Microsoft.VC145.CRT/vcruntime140.dll",
+    "Version": "14.51.36247.0",
+    "Sha256": "D1F4225DF2CD877DBF130D5668A021DCE3F94118455FF5EC952061C30AFC9CE7",
+    "Publisher": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+  },
+  {
+    "File": "vcomp140.dll",
+    "RelativePath": "Microsoft.VC145.OpenMP/vcomp140.dll",
+    "Version": "14.51.36247.0",
+    "Sha256": "95D4CE4A6802D1E18B5E0E1722CC30EA72CA7E033F83828F05C0B7B993FE7CBF",
+    "Publisher": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+  }
+]

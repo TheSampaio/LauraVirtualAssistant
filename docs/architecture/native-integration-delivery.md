@@ -1,0 +1,55 @@
+# Native integration delivery report
+
+Delivery date: 2026-10-10. Baseline: `eec6621`. Initial assessment was committed before implementation as `0079a1e`. No reference-project application, Python runtime, copied Mark-LV code, translated Mark-LV implementation or restricted asset is shipped. Laura remains the only application and uses its original WinForms/red palette and channel-based lifecycle.
+
+## Implemented capabilities
+
+| Area | Delivered behavior | Evidence / boundary |
+|---|---|---|
+| Models | Curated metadata, CPU/RAM/disk estimates, download/progress/cancel/resume, size/SHA256/container verification, installed GGUF discovery, load/unload/switch/delete and persistence | Real reviewed Qwen and Whisper downloads verified; fake HTTP tests cover corruption, resume, cancellation and unsafe identifiers. One reviewed text model initially; imported GGUF compatibility is user responsibility. GPU/VRAM not detected. |
+| Inference | Embedded C++ llama.cpp/LLamaSharp CPU; model chat template, streaming, bounded history/notes, timeout, cancellation/recovery, serialized weight ownership and cleanup | Real English/Portuguese answers; deterministic cancellation after first streamed chunk; subsequent answer and unload pass. Native iterator cancellation is explicitly propagated so partial answers are not accepted as completed. CPU only; context 2048, output 256, temperature 0.5. |
+| Orchestration | Existing dispatcher plus typed tools and explicit one-to-four-step command sequences | Preflight rejects unknown, empty and nested steps; no second agent engine. Models provide conversation only and cannot fabricate tool permission. Autonomous planning/training excluded. |
+| Memory | Unified SQLite history and explicit keyed preferences, bounded contextual retrieval, literal search, inspection/edit/delete, clear-history, version 1 migration and privacy controls | Real temporary-database restart, injection-resistant search, selective deletion and future-schema rejection. Existing corrupt/future data is preserved. No automatic repair that could erase data; no model training or automatic extraction. |
+| Voice | In-process C++ Whisper with shared verified installer; Windows offline fallback; 15-second in-memory push-to-talk; device selection, microphone mute, review-before-send, Windows/Sherpa TTS | Synthetic English and pt-BR audio transcribed correctly in the same process as llama.cpp. Device enumeration succeeded. No human microphone, personal clipboard or personal screenshot used for tests. Half-duplex prevention, no full-duplex AEC. |
+| Tools | Existing application/search/volume/lock skills; approved clipboard reading and primary-screen capture; generated local notes/PNGs, listing and unchanged-file undo | Tests cover hostile command strings, path/content separation, artifact limits and edited-file undo refusal. Sensitive approvals come only from UI with default No. No arbitrary shell, file deletion or browser DOM control. |
+| UX/languages | Integrated Models, Memory and Voice pages; first-run setup; streamed chat preview; English default, pt-BR optional, independent persisted UI/conversation cultures, localized tray/errors and voice previews | Full catalog/placeholder parity and persistence tests; both Models pages rendered and visually inspected. Explicit memory selection exposes its key and full text for inspection/editing. `--show` opens the UI after startup. |
+| Distribution | Self-contained Windows x64 app folder, portable ZIP and embedded offline installer; SDK/dependency pins, license texts, attribution inventory and package hashes | Actual installer extraction, fresh isolated install, update, native dependency presence, unrelated-file preservation and tampered-payload refusal passed. Start Menu creation, the interactive license dialog and installer launch on a clean machine are not validated. |
+
+## Validation
+
+- Original baseline: 26/26 tests. Final: **56/56 passed, none skipped** (`dotnet test Laura.sln -c Release --no-restore`). Release solution and smoke builds: **zero warnings and errors**. Analyzer policy remains the .NET 9 recommended level; no test was disabled.
+- Native fixture: reviewed Qwen 2.5 0.5B Q4_K_M (491,400,032 bytes) and multilingual Whisper Base (147,951,465 bytes), verified by the integrated downloader. Ignored `_Output/Smoke` stores these fixtures and logs; weights are excluded from Git and distribution.
+- CPU machine: 12 logical processors, 15.9 GiB physical RAM. Available RAM/free disk varied during tests. English generation: “Hello! It's nice to meet you.” (9 streamed chunks). Portuguese generation: “Olá!” Cancellation recovered with “OK.” Weights unloaded and DI shutdown completed without repeated-disposal failure.
+- Offline speech: installed Windows voices include en-US and pt-BR. English synthesized fixture transcribed as “The quick brown fox jumps over the lazy dog.” Portuguese synthesized fixture transcribed as “Bom dia! A Laura trabalha no meu computador.” No microphone recording occurred during tests. These deterministic fixtures establish native/language operation, not human speech accuracy under noise.
+- UI images: `_Output/Smoke/models-en-US.png` and `models-pt-BR.png`. Laura's existing red accent, layout and identity are retained; native controls remain consistent with the surrounding WinForms implementation.
+- `Build/Test-Package.ps1` tests the actual EXE's extraction-only path, installed files, repeat installation, checksum identity and deliberately corrupted test payload. All destinations are isolated under ignored `_Output`. `Build/Smoke` exercised the published assemblies/native libraries from a separate copy; module inspection confirmed MSVCP140, VCRUNTIME140, VCRUNTIME140_1 and VCOMP140 loaded from the application directory, with no reliance on their system-wide copies.
+- OpenJarvis's Python test suite was inspected but not run because no Python environment is installed. No Mark-LV automated suite was found. Neither upstream suite substitutes for Laura's tests.
+
+## Architecture, security and licensing decisions
+
+C++ handles compute through packaged llama.cpp and Whisper. C# retains WinForms, domain orchestration, SQLite, downloads and Windows audio: replacing mature managed modules would add ABI/lifetime complexity without a measurable benefit. Interfaces and the composition root isolate native ownership, tools and storage. No IPC or background service is needed for the embedded providers. Existing optional Ollama is restricted to a configured loopback HTTP/HTTPS endpoint; no automatically installed external server or cloud fallback exists.
+
+Memory, prompts and tools are local. Microphone audio remains in memory and is discarded after recognition. Captures/notes stay in the Workspace. Data is not encrypted; a Windows cloud-synced Documents folder may sync it independently. External communications are limited to user-triggered Hugging Face/CDN model downloads, existing wttr.in weather requests, explicit browser searches and explicitly selected loopback Ollama. No telemetry, cloud credentials, microphone/screen uploads, remote listening API or automatic plugins are introduced.
+
+OpenJarvis (Apache-2.0) and Mark-LV (CC BY-NC 4.0), credited to Open Jarvis Contributors and FatihMakes respectively, served as capability/architecture references at the exact hashes recorded in the assessment. No restricted code/assets were copied or ported. Independently authored Laura modules use standard platform APIs and permissively licensed engine/storage/audio dependencies. `THIRD_PARTY_NOTICES.md`, `licenses/dependency-inventory.json`, `licenses/upstream-sources.json`, upstream license/notice texts and NuGet lock files accompany the release. Model terms are separate from engine terms. There is no upstream endorsement claim.
+
+The installer is unsigned and includes only local payload/scripts. PE import inspection identified MSVCP140, VCRUNTIME140/140_1 and VCOMP140 dependencies in llama.cpp/Whisper; signed Microsoft CRT/OpenMP 14.51.36247.0 files are therefore copied app-locally from the installed Visual Studio Release redistributable directory, version/hash pinned. Early loading precedes Windows speech initialization. The bundled official runtime license is presented for acceptance by the installer; build/redistribution rights remain subject to the supplied Visual Studio terms. Runtime security patches require Laura updates. It verifies the embedded archive, validates extraction paths and linked ancestors, stages replacement with rollback, refuses an unrelated existing directory and refuses updating the running destination. It requires no administrator installation into system folders. Personal data stays outside the installation. No remote script is fetched or executed. Build outputs and model weights are ignored; no push was performed.
+
+## Explicit exclusions and follow-up validation
+
+A licensed, accuracy-tested **Hey Laura** model is not available, so continuous wake detection is unavailable and push-to-talk is the working alternative. Existing Laura activity visuals are retained; advanced facial assets/visemes are deferred because no compatible Laura asset pipeline is established and Mark-LV's assets are restricted. GPU/VRAM detection, GPU backends, a larger reviewed catalog, full-duplex AEC, autonomous model-driven tools, general filesystem/window/browser automation and proactive reminders remain outside this release. Remote dashboards/pairing, untrusted plugins and Gemini/cloud voice are absent; adding them requires explicit provider disclosure, secure credential storage, authentication and new permission tests. Training/trace-based learning lacked demonstrated value for this small local assistant and was excluded.
+
+Human microphone capture/noise accuracy, device hot-plug behavior, end-to-end approval dialogs against personal desktop content, a clean Windows VM, installer shortcuts and Windows versions other than this development machine require additional validation. This report does not claim cross-platform support, signed production distribution, advanced avatar/wake functionality or all optional upstream features.
+
+## Commit stages
+
+1. `0079a1e` — assessment/provenance before code.
+2. `d5454bb` — verified models and embedded CPU inference.
+3. `59d6cd1` — unified SQLite memory.
+4. `5f9af36` — chat templates and idempotent native cleanup.
+5. `cda506a` — multilingual offline voice and localized settings.
+6. `d25bc4a` — approved desktop tools and bounded sequences.
+7. `ca06cb8` — native cancellation propagation.
+8. `d95aec0` — localized failures, memory inspection and tray/startup polish.
+9. `25db156` — app-local Microsoft runtime initialization.
+10. Final packaging/documentation commit — self-contained installer, reproducibility, license bundle and native/package smoke harnesses.

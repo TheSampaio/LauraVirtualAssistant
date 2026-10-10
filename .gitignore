@@ -1,16 +1,16 @@
-# Diretórios de IDE
+# IDE directories
 .vs/
 .vscode/
 .idea/
 
-# Saída de build
+# Build output
 _Output/
 bin/
 obj/
 [Bb]in/
 [Oo]bj/
 
-# Arquivos de usuário e temporários
+# User and temporary files
 *.user
 *.suo
 *.cache

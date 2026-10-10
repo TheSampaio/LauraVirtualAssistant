@@ -1,8 +1,4 @@
-:: Builds and runs Laura in debug mode.
-@ECHO OFF
-TITLE Executar Laura
-CLS
-
-CD /D "%~dp0.."
-
-dotnet run --project src/Laura.App/Laura.App.csproj
+@echo off
+title Run Laura
+cd /d "%~dp0.."
+dotnet run --project Laura.App/Laura.App.csproj

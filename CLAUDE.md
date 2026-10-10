@@ -8,8 +8,7 @@ Laura is a personal assistant for Windows inspired by Jarvis, in a feminine vers
 She lives in the system tray, speaks responses, accepts typed chat commands, and
 shows the settings window with **Alt + L**. Migrated from Python to **C# / .NET 9**.
 
-The only supported language is **English (en-US)**. Keep UI text, command
-phrases, and generative AI prompts aligned with English only.
+English (en-US) is the default; Brazilian Portuguese (pt-BR) is optional. Keep interface and conversation language independently configurable through centralized resources.
 
 ## Commands
 
@@ -19,7 +18,7 @@ dotnet test                     # run the tests
 dotnet run --project Laura.App  # run (Build/Run.bat does the same)
 ```
 
-`Build/Publish.bat` creates a self-contained `Laura.exe` in `_Output/Publish`.
+`Build/Publish.bat` creates a self-contained Windows x64 folder, ZIP and offline installer in `_Output/Distribution`. Native libraries and licenses must accompany Laura.
 
 ## Folder Structure
 
@@ -48,8 +47,7 @@ Dependencies flow in only one direction: `App -> Platform.Windows -> Core`.
 
 Rules:
 - Every external dependency (speech, system, network, UI) enters `Core` through an
-  **interface** in `Laura.Core/Abstractions`. Concrete implementations live in
-  `Platform.Windows` or `App`.
+  **interface** in `Laura.Core/Abstractions`. Windows implementations live in `Platform.Windows` or `App`; portable file/HTTP/SQLite implementations may live in Core behind injected interfaces, following the existing INI/weather pattern.
 - The abstraction-to-implementation connection happens **only** in
   [`ServiceConfiguration`](Laura.App/Composition/ServiceConfiguration.cs). Do not
   instantiate services with `new` outside the composition root and tests.
@@ -80,7 +78,7 @@ domain.
    inheriting from `PhraseSkillBase` when activated by a phrase list).
 2. Define `Priority`: **lower** values are evaluated first. Specific triggers need
    to precede generic ones (for example, "open settings" before "open").
-3. Activation phrases and responses go in the **English language file**, not in
+3. Activation phrases and responses go in the **language catalogs**, not in
    code. Add the key to `LocalizationKeys` and the text to `Locales/en-US.json`.
 4. Register it in `AddSkills` in `ServiceConfiguration`.
 5. A skill should not throw for normal flow (for example, missing app -> spoken
@@ -93,14 +91,14 @@ Never hard-code spoken text or fixed triggers in a skill.
 - Text and triggers: `Laura.Core/Localization/Locales/en-US.json`.
 - A key may contain a single string or a list (random response variants / multiple
   triggers).
-- The app is English-only; do not add Portuguese catalogs or UI language switching.
+- English is the default. Maintain pt-BR catalog parity and independent UI/conversation settings.
 - Keys accessed by the domain must exist in `LocalizationKeys` (typos become compile
   errors).
 
 ## Generative AI Is Optional
 
 A command not recognized by any skill **may** go to a model through
-`IConversationEngine`, but the default is `NullConversationEngine` (inert).
+`IConversationEngine`, with embedded CPU inference as the default provider; generation stays disabled until configured.
 **Laura must work 100% offline.** Never make generative AI a required path; it is an
 extra mode enabled in settings.
 
