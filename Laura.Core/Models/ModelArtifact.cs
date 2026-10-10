@@ -12,7 +12,13 @@ namespace Laura.Core.Models;
 /// <param name="License">Weight license name.</param>
 /// <param name="LicenseUrl">Weight terms and attribution.</param>
 public sealed record ModelArtifact(string Id, string Name, Uri Source, long Size, string Sha256,
-    string Quantization, int ContextLength, long RecommendedRam, string License, Uri LicenseUrl);
+    string Quantization, int ContextLength, long RecommendedRam, string License, Uri LicenseUrl)
+{
+    /// <summary>Gets whether this is a multilingual speech model rather than a text model.</summary>
+    public bool IsSpeechModel { get; init; }
+    /// <summary>Gets the reviewed container extension.</summary>
+    public string FileExtension => IsSpeechModel ? ".bin" : ".gguf";
+}
 
 /// <summary>Measured CPU/RAM/disk information; unknown GPU values are not guessed.</summary>
 /// <param name="Processors">Logical CPU count.</param>

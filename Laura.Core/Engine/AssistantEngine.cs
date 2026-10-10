@@ -340,7 +340,7 @@ public sealed class AssistantEngine : IAssistantEngine
         try
         {
             LauraSettings settings = _settings.Current;
-            var request = new SpeechRequest(text, settings.Voice, settings.Culture);
+            var request = new SpeechRequest(text, settings.Voice, settings.Culture) { OutputDevice = settings.OutputDevice };
 
             PublishConversation(ConversationMessageSource.Assistant, text);
             await _synthesizer.SpeakAsync(request, cancellationToken).ConfigureAwait(false);

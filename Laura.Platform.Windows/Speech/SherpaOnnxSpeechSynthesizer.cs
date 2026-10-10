@@ -98,7 +98,7 @@ public sealed class SherpaOnnxSpeechSynthesizer : ISpeechSynthesizer
                     return;
                 }
 
-                await PlayAsync(tempPath, request.Voice, cancellationToken).ConfigureAwait(false);
+                await PlayAsync(tempPath, request.Voice, request.OutputDevice, cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -179,13 +179,13 @@ public sealed class SherpaOnnxSpeechSynthesizer : ISpeechSynthesizer
         return _tts;
     }
 
-    private async Task PlayAsync(string path, VoiceProfile profile, CancellationToken cancellationToken)
+    private async Task PlayAsync(string path, VoiceProfile profile, int outputDevice, CancellationToken cancellationToken)
     {
         using var reader = new AudioFileReader(path)
         {
             Volume = (float)Math.Clamp(profile.Volume / 100.0, 0.0, 1.0),
         };
-        using var output = new WaveOutEvent();
+        using var output = new WaveOutEvent { DeviceNumber = outputDevice < WaveOut.DeviceCount ? outputDevice : -1 };
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         output.PlaybackStopped += (_, _) => completion.TrySetResult();

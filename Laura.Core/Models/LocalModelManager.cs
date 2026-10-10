@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using System.Diagnostics;
 using Laura.Core.Abstractions;
 
 namespace Laura.Core.Models;
@@ -32,7 +33,15 @@ public sealed class LocalModelManager : ILocalModelManager, IDisposable
         {
             throw new ArgumentException("Unsafe model identifier.", nameof(id));
         }
-        string path = Path.Combine(_directory, id + ".gguf");
+        string stem = id.Split('.')[0].ToUpperInvariant();
+        if (id.EndsWith('.') || stem is "CON" or "PRN" or "AUX" or "NUL"
+            || stem.Length == 4 && (stem.StartsWith("COM", StringComparison.Ordinal) || stem.StartsWith("LPT", StringComparison.Ordinal))
+                && stem[3] is >= '1' and <= '9')
+        {
+            throw new ArgumentException("Reserved model identifier.", nameof(id));
+        }
+        string extension = Catalog.FirstOrDefault(model => model.Id == id)?.FileExtension ?? ".gguf";
+        string path = Path.Combine(_directory, id + extension);
         if (Directory.Exists(_directory) && (File.GetAttributes(_directory) & FileAttributes.ReparsePoint) != 0
             || File.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
         {
@@ -99,13 +108,18 @@ public sealed class LocalModelManager : ILocalModelManager, IDisposable
                 await using var output = new FileStream(partial, offset == 0 ? FileMode.Create : FileMode.Append,
                     FileAccess.Write, FileShare.None, 81920, useAsync: true);
                 byte[] buffer = new byte[81920];
+                var reportClock = Stopwatch.StartNew();
                 int read;
                 while ((read = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
                 {
                     if (offset + read > artifact.Size) { throw new IOException("Model download exceeds expected size."); }
                     await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
                     offset += read;
-                    progress?.Report(new(offset, artifact.Size, false));
+                    if (reportClock.ElapsedMilliseconds >= 200 || offset == artifact.Size)
+                    {
+                        progress?.Report(new(offset, artifact.Size, false));
+                        reportClock.Restart();
+                    }
                 }
             }
             progress?.Report(new(offset, artifact.Size, true));
@@ -116,7 +130,7 @@ public sealed class LocalModelManager : ILocalModelManager, IDisposable
                 byte[] magic = new byte[4];
                 int count = await file.ReadAsync(magic, cancellationToken).ConfigureAwait(false);
                 if (file.Length != artifact.Size || !Convert.ToHexString(digest).Equals(artifact.Sha256, StringComparison.OrdinalIgnoreCase)
-                    || count != 4 || !magic.AsSpan().SequenceEqual("GGUF"u8))
+                    || count != 4 || !artifact.IsSpeechModel && !magic.AsSpan().SequenceEqual("GGUF"u8))
                 {
                     file.Close();
                     File.Delete(partial);

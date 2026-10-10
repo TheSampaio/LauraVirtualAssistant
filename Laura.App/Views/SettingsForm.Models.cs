@@ -18,9 +18,23 @@ public sealed partial class SettingsForm
     private Label _downloadStatus = null!;
     private ProgressBar _downloadProgress = null!;
     private CancellationTokenSource? _modelOperation;
+    private readonly System.Text.StringBuilder _streamedResponse = new();
+    private Label _streamPreview = null!;
 
     /// <summary>Binds native lifecycle operations from the composition root.</summary>
-    public void BindInference(ILocalInferenceEngine inference) => _inference = inference;
+    public void BindInference(ILocalInferenceEngine inference)
+    {
+        _inference = inference;
+        _inference.TokenReceived += OnInferenceToken;
+    }
+
+    /// <summary>Marshals streamed text into the chat preview without touching controls on the inference thread.</summary>
+    private void OnInferenceToken(object? sender, string text) => _dispatcher.Post(() =>
+    {
+        if (IsDisposed || _streamPreview.IsDisposed) { return; }
+        _streamedResponse.Append(text);
+        _streamPreview.Text = _streamedResponse.ToString();
+    });
 
     /// <summary>Binds the optional preexisting Ollama model catalog.</summary>
     public void BindOllamaCatalog(IModelCatalog models) => _ollamaModels = models;
@@ -36,7 +50,10 @@ public sealed partial class SettingsForm
         AddRow(stack, SettingRowFactory.ComboRow(Text_("ui.models.catalog"), Text_("ui.models.network"), out _downloadCombo));
         if (_localModels is not null)
         {
-            foreach (ModelArtifact model in _localModels.Catalog) { _downloadCombo.Items.Add(new ComboItem(model.Name, model.Id)); }
+            foreach (ModelArtifact model in _localModels.Catalog.Where(static model => !model.IsSpeechModel))
+            {
+                _downloadCombo.Items.Add(new ComboItem(model.Name, model.Id));
+            }
         }
         _modelInfo = new Label { AutoSize = true, MaximumSize = new Size(600, 0), UseMnemonic = false,
             ForeColor = Palette.TextSecondary, Padding = new Padding(8) };
@@ -164,6 +181,10 @@ public sealed partial class SettingsForm
         {
             _downloadStatus.Text = _localizer.Get("ui.models.failed", exception.Message);
         }
-        finally { _modelOperation = null; }
+        finally
+        {
+            _modelOperation = null;
+            if (_speechModelStatus is not null && !_speechModelStatus.IsDisposed) { _speechModelStatus.Text = _downloadStatus.Text; }
+        }
     }
 }

@@ -8,6 +8,8 @@ namespace Laura.App.Views;
 public sealed partial class SettingsForm
 {
     private IConversationMemory? _memory;
+    private ComboBox _uiCultureCombo = null!;
+    private ComboBox _conversationCultureCombo = null!;
     private ToggleSwitch _rememberToggle = null!;
     private TextBox _memorySearch = null!;
     private TextBox _memoryKey = null!;

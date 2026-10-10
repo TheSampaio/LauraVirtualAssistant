@@ -11,7 +11,7 @@ namespace Laura.Core.Localization;
 /// Each key accepts a single string or a string list; lists are used both
 /// for alternate response wording and for a skill's triggers.
 /// </summary>
-public sealed class JsonLocalizer : ILocalizer
+public sealed class JsonLocalizer : IUiLocalizer
 {
     private const string FallbackCultureName = "en-US";
 
@@ -109,11 +109,19 @@ public sealed class JsonLocalizer : ILocalizer
         return Lookup(key);
     }
 
+    /// <inheritdoc />
+    public string GetForCulture(string culture, string key)
+    {
+        IReadOnlyDictionary<string, IReadOnlyList<string>> catalog = _catalogs.GetValueOrDefault(culture) ?? _fallback;
+        IReadOnlyList<string> variants = catalog.GetValueOrDefault(key) ?? _fallback.GetValueOrDefault(key) ?? [];
+        return variants.Count == 0 ? $"[{key}]" : variants[0];
+    }
+
     /// <summary>
     /// Looks up a key in the active culture and, when needed, in the resource culture.
     ///
     /// Args:
-    ///     key: Chave a procurar.
+    ///     key: Text key to find.
     ///
     /// Returns:
     ///     The registered values, or an empty list when the key does not exist

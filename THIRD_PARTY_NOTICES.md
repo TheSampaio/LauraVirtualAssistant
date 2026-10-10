@@ -16,6 +16,7 @@ Laura retains its existing LICENSE. No endorsement by the reference projects is 
 | NAudio | 2.2.1 | MIT, https://github.com/naudio/NAudio |
 | LLamaSharp / CPU backend | 0.27.0 | MIT, https://github.com/SciSharp/LLamaSharp; embeds MIT llama.cpp, https://github.com/ggml-org/llama.cpp |
 | Microsoft.Data.Sqlite | 9.0.10 | MIT, https://github.com/dotnet/efcore; SQLitePCLRaw bundles SQLite (public domain), https://www.sqlite.org/copyright.html |
+| Whisper.net / CPU runtime | 1.9.1 | MIT, https://github.com/sandrohanea/whisper.net; MIT whisper.cpp, https://github.com/ggml-org/whisper.cpp |
 | OllamaSharp | 4.0.11 | MIT, https://github.com/awaescher/OllamaSharp |
 | sherpa-onnx | 1.13.4 | Apache-2.0, https://github.com/k2-fsa/sherpa-onnx |
 | xUnit (development only) | 2.9.2 / runner 2.8.2 | Apache-2.0, https://github.com/xunit/xunit |
@@ -24,3 +25,5 @@ Laura retains its existing LICENSE. No endorsement by the reference projects is 
 AI weights and voices have separate distribution terms. An installed engine package does not grant permission to redistribute arbitrary models. The implementation assessment and package lock files track added dependencies; release packaging must include the corresponding upstream license texts and model attribution.
 
 The optional reviewed Qwen 2.5 0.5B Instruct GGUF weights are provided by the Qwen team under Apache-2.0, https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF. Weights are downloaded only by user choice and are excluded from the Laura application package.
+
+Optional multilingual Whisper base weights originate from OpenAI Whisper under MIT, https://github.com/openai/whisper, converted by Georgi Gerganov at https://huggingface.co/ggerganov/whisper.cpp. Weights are separate downloads, never microphone uploads. GGML dependencies in Whisper's native runtime use suffixed library names to coexist with llama.cpp; the smoke test exercises both engines in one process.

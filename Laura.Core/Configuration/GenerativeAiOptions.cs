@@ -65,10 +65,12 @@ public sealed record GenerativeAiOptions
     /// </summary>
     public GenerativeAiOptions Sanitized() => this with
     {
-        Provider = string.IsNullOrWhiteSpace(Provider) ? Default.Provider : Provider.Trim(),
+        Provider = Provider?.Trim().ToLowerInvariant() == "ollama" ? "ollama" : "embedded",
         Endpoint = string.IsNullOrWhiteSpace(Endpoint) ? Default.Endpoint : Endpoint.Trim(),
-        Model = Model.Trim(),
+        Model = Model?.Trim() is { Length: <= 100 } model && !model.Contains("..", StringComparison.Ordinal)
+            && (Provider == "ollama" || model.All(static c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.'))
+                ? model : string.Empty,
         Persona = string.IsNullOrWhiteSpace(Persona) ? Default.Persona : Persona.Trim(),
-        Timeout = Timeout <= TimeSpan.Zero ? Default.Timeout : Timeout,
+        Timeout = Timeout <= TimeSpan.Zero || Timeout > TimeSpan.FromMinutes(10) ? Default.Timeout : Timeout,
     };
 }

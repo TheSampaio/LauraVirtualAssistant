@@ -24,6 +24,9 @@ public sealed class LocalModelManagerTests : IDisposable
     [InlineData("../outside")]
     [InlineData("C:\\outside")]
     [InlineData("a/b")]
+    [InlineData("CON")]
+    [InlineData("test.")]
+    [InlineData("LPT1")]
     public void RejectsUnsafeIdentifiers(string id)
     {
         using var manager = CreateManager(new DownloadHandler(ArtifactBytes));

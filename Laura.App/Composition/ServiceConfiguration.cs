@@ -35,7 +35,7 @@ public static class ServiceConfiguration
     /// Returns:
     ///     The same collection, for chaining.
     /// </summary>
-    public static IServiceCollection AddLauraServices(this IServiceCollection services)
+    public static IServiceCollection AddLauraServices(this IServiceCollection services, string? storageDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -45,7 +45,7 @@ public static class ServiceConfiguration
             builder.AddDebug();
         });
 
-        AddDomain(services);
+        AddDomain(services, storageDirectory);
         AddPlatform(services);
         AddPresentation(services);
 
@@ -58,24 +58,27 @@ public static class ServiceConfiguration
     /// Args:
     ///     services: Service collection.
     /// </summary>
-    private static void AddDomain(IServiceCollection services)
+    private static void AddDomain(IServiceCollection services, string? storageDirectory)
     {
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IUserContext, UserContext>();
 
+        string settingsPath = storageDirectory is null ? IniSettingsStore.GetDefaultFilePath() : Path.Combine(storageDirectory, "settings.ini");
         services.AddSingleton<ISettingsStore>(provider => new IniSettingsStore(
-            IniSettingsStore.GetDefaultFilePath(),
+            settingsPath,
             provider.GetRequiredService<ILogger<IniSettingsStore>>()));
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IConversationMemory>(_ => new SqliteConversationMemory(
-            Path.Combine(Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())!, "memory.db")));
+            Path.Combine(Path.GetDirectoryName(settingsPath)!, "memory.db")));
 
         services.AddSingleton<ILocalizer>(provider => new JsonLocalizer(
             GetLocalesDirectory(),
             provider.GetRequiredService<ILogger<JsonLocalizer>>()));
+        services.AddSingleton<IUiLocalizer>(provider => new JsonLocalizer(
+            GetLocalesDirectory(), provider.GetRequiredService<ILogger<JsonLocalizer>>()));
 
         services.AddSingleton<ILocalModelManager>(_ => new LocalModelManager(
-            Path.Combine(Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())!, "Models"),
+            Path.Combine(Path.GetDirectoryName(settingsPath)!, "Models"),
             new HttpClient { Timeout = TimeSpan.FromMinutes(60) }, SupportedModels.All));
         services.AddSingleton<IModelCatalog>(provider => provider.GetRequiredService<ILocalModelManager>());
 
@@ -126,6 +129,7 @@ public static class ServiceConfiguration
     private static void AddPlatform(IServiceCollection services)
     {
         services.AddSingleton<WinRtSpeechSynthesizer>();
+        services.AddSingleton<ISpeechInput, WindowsSpeechInput>();
         services.AddSingleton<ISpeechSynthesizer>(provider => new SherpaOnnxSpeechSynthesizer(
             provider.GetRequiredService<WinRtSpeechSynthesizer>(),
             GetTtsModelDirectory(),
@@ -151,6 +155,7 @@ public static class ServiceConfiguration
             SettingsForm form = ActivatorUtilities.CreateInstance<SettingsForm>(provider);
             form.BindInference(provider.GetRequiredService<ILocalInferenceEngine>());
             form.BindMemory(provider.GetRequiredService<IConversationMemory>());
+            form.BindSpeechInput(provider.GetRequiredService<ISpeechInput>());
             form.BindOllamaCatalog(new OllamaModelCatalog(OllamaModelCatalog.GetDefaultLibraryDirectory(),
                 provider.GetRequiredService<ILogger<OllamaModelCatalog>>()));
             return form;

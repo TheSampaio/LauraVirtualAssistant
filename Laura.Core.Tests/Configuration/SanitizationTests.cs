@@ -25,9 +25,9 @@ public sealed class SanitizationTests
     }
 
     [Fact]
-    public void LauraSettings_ForcesEnglishCulture()
+    public void LauraSettings_PreservesSupportedPortugueseCulture()
     {
         LauraSettings sanitized = new LauraSettings { Culture = "pt-BR" }.Sanitized();
-        Assert.Equal(LauraSettings.Default.Culture, sanitized.Culture);
+        Assert.Equal("pt-BR", sanitized.Culture);
     }
 }

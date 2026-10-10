@@ -60,6 +60,7 @@ public sealed partial class SettingsForm : Form
     private Control _chatAiSettingsPanel = null!;
     private CancellationTokenSource? _previewCts;
     private bool _closingToTray = true;
+    private bool _resourcesDisposed;
 
     // Controls whose values are read on save.
     private TextBox _nicknameBox = null!;
@@ -92,7 +93,7 @@ public sealed partial class SettingsForm : Form
     public SettingsForm(
         ISettingsService settingsService,
         ISpeechSynthesizer synthesizer,
-        ILocalizer localizer,
+        IUiLocalizer localizer,
         IStartupRegistration startupRegistration,
         IAssistantEngine engine,
         IUiDispatcher dispatcher,
@@ -198,13 +199,18 @@ public sealed partial class SettingsForm : Form
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
+        if (disposing && !_resourcesDisposed)
         {
+            _resourcesDisposed = true;
+            if (_inference is not null) { _inference.TokenReceived -= OnInferenceToken; }
             _engine.StateChanged -= OnEngineStateChanged;
             _engine.ConversationMessageReceived -= OnConversationMessageReceived;
             _toolTip.Dispose();
             _previewCts?.Dispose();
             _modelOperation?.Cancel();
+            _voiceLifetime.Cancel();
+            _recordingStop?.Cancel();
+            _voiceLifetime.Dispose();
         }
 
         base.Dispose(disposing);
@@ -260,6 +266,7 @@ public sealed partial class SettingsForm : Form
     {
         SuspendLayout();
 
+        foreach (Control control in Controls.Cast<Control>().ToArray()) { control.Dispose(); }
         Controls.Clear();
         _sections.Clear();
         _navButtons.Clear();
@@ -510,6 +517,12 @@ public sealed partial class SettingsForm : Form
         (Panel page, TableLayoutPanel stack) = CreateSection(_localizer.Get("ui.tab.general"));
 
         AddRow(stack, SettingRowFactory.Heading(Text_("ui.general.section")));
+        AddRow(stack, SettingRowFactory.ComboRow(Text_("ui.general.language"), string.Empty, out _uiCultureCombo));
+        _uiCultureCombo.Items.Add(new ComboItem("English", "en-US"));
+        _uiCultureCombo.Items.Add(new ComboItem("Português (Brasil)", "pt-BR"));
+        AddRow(stack, SettingRowFactory.ComboRow(Text_("ui.general.conversationLanguage"), Text_("ui.general.languageHint"), out _conversationCultureCombo));
+        _conversationCultureCombo.Items.Add(new ComboItem("English", "en-US"));
+        _conversationCultureCombo.Items.Add(new ComboItem("Português (Brasil)", "pt-BR"));
 
         AddRow(stack, SettingRowFactory.Toggle(Text_("ui.general.greetOnStartup"), string.Empty, out _greetToggle));
         AddRow(stack, SettingRowFactory.Toggle(Text_("ui.general.announceHourly"), string.Empty, out _hourlyToggle));
@@ -537,11 +550,12 @@ public sealed partial class SettingsForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 4,
             BackColor = Palette.ChatBackground,
         };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
 
         layout.Controls.Add(BuildChatHeader(), 0, 0);
@@ -559,7 +573,10 @@ public sealed partial class SettingsForm : Form
         body.Controls.Add(_chatAiSettingsPanel);
 
         layout.Controls.Add(body, 0, 1);
-        layout.Controls.Add(BuildChatComposer(), 0, 2);
+        _streamPreview = new Label { Dock = DockStyle.Fill, UseMnemonic = false, AutoEllipsis = true,
+            ForeColor = Palette.TextSecondary, Padding = new Padding(16, 2, 16, 2) };
+        layout.Controls.Add(_streamPreview, 0, 2);
+        layout.Controls.Add(BuildChatComposer(), 0, 3);
         page.Controls.Add(layout);
         _sections[_localizer.Get("ui.tab.chat")] = page;
         ReplayChatHistory();
@@ -1009,6 +1026,7 @@ public sealed partial class SettingsForm : Form
         (Panel page, TableLayoutPanel stack) = CreateSection(_localizer.Get("ui.tab.voice"));
 
         AddRow(stack, SettingRowFactory.Heading(Text_("ui.voice.section")));
+        AddVoiceInputControls(stack);
 
         AddRow(stack, SettingRowFactory.ComboRow(
             Text_("ui.voice.voice"), Text_("ui.voice.voiceHint"), out _voiceCombo));
@@ -1138,7 +1156,8 @@ public sealed partial class SettingsForm : Form
         var cts = new CancellationTokenSource();
         _previewCts = cts;
 
-        var request = new SpeechRequest(Text_("ui.voice.previewText"), _model.BuildVoiceProfile(), _model.Culture);
+        var request = new SpeechRequest(_localizer.GetForCulture(_model.Culture, "ui.voice.previewText"), _model.BuildVoiceProfile(), _model.Culture)
+            { OutputDevice = _model.OutputDevice };
 
         try
         {
@@ -1187,6 +1206,11 @@ public sealed partial class SettingsForm : Form
     /// </summary>
     private async Task SaveAsync()
     {
+        if (_modelOperation is not null || _recordingStop is not null)
+        {
+            ShowTransientStatus(Text_("ui.models.working"));
+            return;
+        }
         CommitControlsToModel();
         CancelPreview();
 
@@ -1196,6 +1220,8 @@ public sealed partial class SettingsForm : Form
             _startupRegistration.SetEnabled(applied.StartWithWindows);
 
             _model = CreateModel(applied);
+            _localizer.SetCulture(applied.ResolveUiCulture());
+            if (_builtCulture != _localizer.Culture.Name) { RebuildInterface(); }
             ShowTransientStatus(_localizer.Get("ui.status.saved"));
 
             // Laura confirms the save out loud, with rotating wording so it never
@@ -1241,12 +1267,6 @@ public sealed partial class SettingsForm : Form
     {
         CommitControlsToModel();
 
-        if (!_model.GenerativeAiEnabled)
-        {
-            UpdateChatInputState();
-            return;
-        }
-
         string text = _chatInputBox.Text.Trim();
 
         if (text.Length == 0)
@@ -1255,6 +1275,8 @@ public sealed partial class SettingsForm : Form
         }
 
         _chatInputBox.Clear();
+        _streamedResponse.Clear();
+        _streamPreview.Text = string.Empty;
         await ApplyChatAiSettingsAsync().ConfigureAwait(true);
         await _engine.SubmitCommandAsync(text).ConfigureAwait(true);
     }
@@ -1282,7 +1304,7 @@ public sealed partial class SettingsForm : Form
     }
 
     /// <summary>
-    /// Enables typing only when generative AI is active.
+    /// Keeps built-in text commands available without a configured model.
     /// </summary>
     private void UpdateChatInputState()
     {
@@ -1291,16 +1313,13 @@ public sealed partial class SettingsForm : Form
             return;
         }
 
-        bool enabled = _aiToggle.Checked;
-        _chatInputBox.ReadOnly = !enabled;
-        _chatInputBox.BackColor = enabled ? Palette.Field : Palette.Surface;
-        _chatInputBox.ForeColor = enabled ? Palette.TextPrimary : Palette.TextSecondary;
-        _chatInputBox.PlaceholderText = enabled
-            ? Text_("ui.chat.input")
-            : Text_("ui.chat.inputDisabled");
-        _chatSendButton.Enabled = enabled;
-        _chatSendButton.IsPrimary = enabled;
-        _chatInputPanel.BackColor = enabled ? Palette.Field : Palette.Surface;
+        _chatInputBox.ReadOnly = false;
+        _chatInputBox.BackColor = Palette.Field;
+        _chatInputBox.ForeColor = Palette.TextPrimary;
+        _chatInputBox.PlaceholderText = Text_("ui.chat.input");
+        _chatSendButton.Enabled = true;
+        _chatSendButton.IsPrimary = true;
+        _chatInputPanel.BackColor = Palette.Field;
     }
 
     /// <summary>
@@ -1709,6 +1728,9 @@ public sealed partial class SettingsForm : Form
         _hourlyToggle.Checked = _model.AnnounceHourly;
         _startupToggle.Checked = _model.StartWithWindows;
         _rememberToggle.Checked = _model.RememberConversations;
+        _uiCultureCombo.SelectedIndex = _model.UiCulture == "pt-BR" ? 1 : 0;
+        _conversationCultureCombo.SelectedIndex = _model.Culture == "pt-BR" ? 1 : 0;
+        PopulateAudioDevices();
 
         _aiToggle.Checked = _model.GenerativeAiEnabled;
         _endpointBox.Text = _model.GenerativeAiEndpoint;
@@ -1723,7 +1745,11 @@ public sealed partial class SettingsForm : Form
     /// </summary>
     private void CommitControlsToModel()
     {
-        _model.Culture = LauraSettings.DefaultCulture;
+        _model.Culture = (_conversationCultureCombo.SelectedItem as ComboItem)?.Value ?? LauraSettings.DefaultCulture;
+        _model.UiCulture = (_uiCultureCombo.SelectedItem as ComboItem)?.Value ?? LauraSettings.DefaultCulture;
+        _model.MicrophoneMuted = _muteMic.Checked;
+        _model.InputDevice = int.Parse((_inputDeviceCombo.SelectedItem as ComboItem)?.Value ?? "-1", CultureInfo.InvariantCulture);
+        _model.OutputDevice = int.Parse((_outputDeviceCombo.SelectedItem as ComboItem)?.Value ?? "-1", CultureInfo.InvariantCulture);
 
         _model.UserNickname = _nicknameBox.Text.Trim();
 

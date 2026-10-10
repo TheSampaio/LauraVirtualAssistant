@@ -52,7 +52,7 @@ public sealed class LauraApplicationContext : ApplicationContext
         _shellController = services.GetRequiredService<WinFormsShellController>();
         _engine = services.GetRequiredService<IAssistantEngine>();
         _hourlyAnnouncer = services.GetRequiredService<HourlyAnnouncer>();
-        _localizer = services.GetRequiredService<ILocalizer>();
+        _localizer = services.GetRequiredService<IUiLocalizer>();
         _logger = services.GetRequiredService<ILogger<LauraApplicationContext>>();
 
         _trayIcon = new TrayIcon(_localizer, ShowSettings, ExitApplication);
@@ -98,6 +98,7 @@ public sealed class LauraApplicationContext : ApplicationContext
         try
         {
             await _services.GetRequiredService<ISettingsService>().LoadAsync().ConfigureAwait(true);
+            _localizer.SetCulture(_services.GetRequiredService<ISettingsService>().Current.ResolveUiCulture());
             await _engine.StartAsync().ConfigureAwait(true);
             _hourlyAnnouncer.Start();
 
@@ -173,6 +174,7 @@ public sealed class LauraApplicationContext : ApplicationContext
         try
         {
             await _engine.StopAsync().ConfigureAwait(true);
+            await _services.GetRequiredService<ILocalInferenceEngine>().UnloadAsync(CancellationToken.None).ConfigureAwait(true);
             await _hourlyAnnouncer.DisposeAsync().ConfigureAwait(true);
         }
         catch (Exception exception)

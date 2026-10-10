@@ -116,6 +116,10 @@ public sealed class IniSettingsStore : ISettingsStore
         return new LauraSettings
         {
             Culture = document.GetString(GeneralSection, "Language", defaults.Culture),
+            UiCulture = document.GetString(GeneralSection, "UiLanguage", defaults.UiCulture),
+            InputDevice = document.GetInt32(VoiceSection, "InputDevice", defaults.InputDevice),
+            OutputDevice = document.GetInt32(VoiceSection, "OutputDevice", defaults.OutputDevice),
+            MicrophoneMuted = document.GetBoolean(VoiceSection, "MicrophoneMuted", defaults.MicrophoneMuted),
             RememberConversations = document.GetBoolean(GeneralSection, "RememberConversations", defaults.RememberConversations),
             GreetOnStartup = document.GetBoolean(GeneralSection, "GreetOnStartup", defaults.GreetOnStartup),
             AnnounceHourly = document.GetBoolean(GeneralSection, "AnnounceHourly", defaults.AnnounceHourly),
@@ -158,6 +162,10 @@ public sealed class IniSettingsStore : ISettingsStore
         var document = new IniDocument();
 
         document.Set(GeneralSection, "Language", settings.Culture);
+        document.Set(GeneralSection, "UiLanguage", settings.UiCulture);
+        document.SetNumber(VoiceSection, "InputDevice", settings.InputDevice);
+        document.SetNumber(VoiceSection, "OutputDevice", settings.OutputDevice);
+        document.SetBoolean(VoiceSection, "MicrophoneMuted", settings.MicrophoneMuted);
         document.SetBoolean(GeneralSection, "RememberConversations", settings.RememberConversations);
         document.SetBoolean(GeneralSection, "GreetOnStartup", settings.GreetOnStartup);
         document.SetBoolean(GeneralSection, "AnnounceHourly", settings.AnnounceHourly);

@@ -38,6 +38,10 @@ public sealed class SettingsEditModel
         _modelCatalog = modelCatalog;
 
         Culture = settings.Culture;
+        UiCulture = settings.UiCulture;
+        InputDevice = settings.InputDevice;
+        OutputDevice = settings.OutputDevice;
+        MicrophoneMuted = settings.MicrophoneMuted;
         RememberConversations = settings.RememberConversations;
         UserNickname = settings.UserNickname;
         VoiceName = settings.Voice.VoiceName;
@@ -58,6 +62,15 @@ public sealed class SettingsEditModel
 
     /// <summary>Gets or sets the speech and response culture, as a BCP-47 tag.</summary>
     public string Culture { get; set; }
+
+    /// <summary>Gets or sets the independent presentation language.</summary>
+    public string UiCulture { get; set; }
+    /// <summary>Gets or sets the selected microphone.</summary>
+    public int InputDevice { get; set; }
+    /// <summary>Gets or sets the selected output device.</summary>
+    public int OutputDevice { get; set; }
+    /// <summary>Gets or sets microphone privacy.</summary>
+    public bool MicrophoneMuted { get; set; }
 
     /// <summary>Gets or sets whether conversation history persists.</summary>
     public bool RememberConversations { get; set; }
@@ -160,6 +173,10 @@ public sealed class SettingsEditModel
     public LauraSettings ToSettings() => new()
     {
         Culture = Culture,
+        UiCulture = UiCulture,
+        InputDevice = InputDevice,
+        OutputDevice = OutputDevice,
+        MicrophoneMuted = MicrophoneMuted,
         RememberConversations = RememberConversations,
         UserNickname = UserNickname,
         Voice = BuildVoiceProfile(),

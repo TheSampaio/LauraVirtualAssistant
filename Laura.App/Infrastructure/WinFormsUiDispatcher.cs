@@ -4,7 +4,7 @@ namespace Laura.App.Infrastructure;
 
 /// <summary>
 /// Implementation of <see cref="IUiDispatcher"/> over <see cref="SynchronizationContext"/>
-/// da thread da interface.
+/// on the presentation thread.
 /// </summary>
 public sealed class WinFormsUiDispatcher : IUiDispatcher
 {
@@ -23,7 +23,7 @@ public sealed class WinFormsUiDispatcher : IUiDispatcher
     {
         _synchronizationContext = SynchronizationContext.Current
             ?? throw new InvalidOperationException(
-                "O WinFormsUiDispatcher precisa ser criado na thread da interface.");
+                "WinFormsUiDispatcher must be created on the UI thread.");
     }
 
     /// <inheritdoc />

@@ -215,7 +215,7 @@
   "ui.voice.section": "Timbre",
   "ui.voice.voice": "Voice",
   "ui.voice.automatic": "Automatic (recommended)",
-  "ui.voice.voiceHint": "Only Microsoft Natural voices are shown. Install Microsoft Aria or Microsoft Francisca under Windows Settings > Time & language > Speech.",
+  "ui.voice.voiceHint": "Select an installed voice matching your conversation language. Missing voices are reported; no cloud voice is used.",
   "ui.voice.rate": "Rate",
   "ui.voice.pitch": "Pitch",
   "ui.voice.volume": "Volume",
@@ -284,5 +284,52 @@
   "ui.memory.search": "Search memories",
   "ui.tab.memory": "Memory",
   "ui.memory.save": "Save memory",
-  "ui.memory.key": "Memory name"
+  "ui.memory.key": "Memory name",
+  "ui.voice.noSpeech": "No speech recognized.",
+  "ui.voice.review": "Review the recognized text, then press Send.",
+  "ui.voice.wait": "Wait until Laura finishes speaking or use Stop response before recording.",
+  "ui.general.languageHint": "Independent from the interface. Offline speech requires a matching installed Windows recognizer and voice.",
+  "ui.general.conversationLanguage": "Conversation and speech language",
+  "ui.voice.wakeUnavailable": "Hey Laura detection is unavailable until a suitable model is validated. Use Record voice.",
+  "ui.voice.output": "Playback device",
+  "ui.voice.defaultDevice": "System default",
+  "ui.voice.finish": "Finish recording",
+  "ui.voice.microphone": "Microphone",
+  "ui.voice.muted": "Unmute the microphone on the Voice page to record.",
+  "ui.general.language": "Interface language",
+  "ui.voice.localInput": "Audio stays on this computer. Capture starts only when you choose Record, for at most 15 seconds.",
+  "ui.voice.muteMic": "Mute microphone",
+  "ui.voice.talk": "Record voice",
+  "ui.voice.failed": "Voice input unavailable: {0}",
+  "ui.voice.installSpeech": "Download multilingual speech model",
+  "ui.voice.speechModelInfo": "Whisper Base: 141 MiB, MIT license. English and Portuguese transcription run on CPU. Download requires HTTPS; microphone audio stays local.",
+  "tools.saved": "Saved locally: {0}",
+  "tools.filesEmpty": "The assistant file workspace is empty.",
+  "phrases.undo": [
+    "undo last file"
+  ],
+  "tools.denied": "Action cancelled.",
+  "phrases.readClipboard": [
+    "read clipboard"
+  ],
+  "tools.undone": "The last file creation was undone.",
+  "tools.clipboardEmpty": "The clipboard contains no text.",
+  "ui.tools.confirm.Undo": "Delete the most recent file created by Laura? Undo is refused if the file has changed.",
+  "ui.tools.confirm.CaptureScreen": "Save a screenshot of the primary screen in Laura's local workspace? It will not be uploaded.",
+  "phrases.listFiles": [
+    "list assistant files"
+  ],
+  "phrases.captureScreen": [
+    "capture screen",
+    "take a screenshot"
+  ],
+  "tools.nothingToUndo": "No unchanged file is available to undo.",
+  "phrases.saveNote": [
+    "save note"
+  ],
+  "ui.tools.confirm.ReadClipboard": "Read clipboard text into the local conversation? It may contain private information.",
+  "phrases.sequencePrefix": [
+    "run steps:"
+  ],
+  "tools.sequenceInvalid": "Use up to four known commands separated by semicolons. No step ran."
 }

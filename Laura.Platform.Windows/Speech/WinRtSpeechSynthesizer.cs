@@ -51,7 +51,6 @@ public sealed class WinRtSpeechSynthesizer : ISpeechSynthesizer
         try
         {
             return [.. SpeechSynthesizer.AllVoices
-                .Where(IsSelectableNaturalVoice)
                 .OrderBy(PreferredVoiceSortKey)
                 .ThenBy(static voice => voice.Language, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static voice => voice.DisplayName, StringComparer.OrdinalIgnoreCase)
@@ -92,7 +91,7 @@ public sealed class WinRtSpeechSynthesizer : ISpeechSynthesizer
                 .AsTask(cancellationToken)
                 .ConfigureAwait(false);
 
-            await PlayAsync(stream, cancellationToken).ConfigureAwait(false);
+            await PlayAsync(stream, request.OutputDevice, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is InvalidOperationException or NAudio.MmException)
         {
@@ -154,7 +153,7 @@ public sealed class WinRtSpeechSynthesizer : ISpeechSynthesizer
     /// Returns:
     ///     A task that completes when playback ends or is cancelled.
     /// </summary>
-    private async Task PlayAsync(SpeechSynthesisStream synthStream, CancellationToken cancellationToken)
+    private async Task PlayAsync(SpeechSynthesisStream synthStream, int outputDevice, CancellationToken cancellationToken)
     {
         using var buffer = new MemoryStream();
 
@@ -166,7 +165,7 @@ public sealed class WinRtSpeechSynthesizer : ISpeechSynthesizer
         buffer.Position = 0;
 
         using var reader = new WaveFileReader(buffer);
-        using var output = new WaveOutEvent();
+        using var output = new WaveOutEvent { DeviceNumber = outputDevice < WaveOut.DeviceCount ? outputDevice : -1 };
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         output.PlaybackStopped += (_, _) => completion.TrySetResult();
@@ -211,15 +210,22 @@ public sealed class WinRtSpeechSynthesizer : ISpeechSynthesizer
 
         if (desired is null)
         {
-            return;
+            throw new InvalidOperationException("No installed speech voice matches the requested language.");
         }
 
         VoiceInformation? voice = SpeechSynthesizer.AllVoices
             .FirstOrDefault(candidate => string.Equals(candidate.Id, desired, StringComparison.Ordinal));
 
-        if (voice is not null)
+        if (voice is not null && voice.Language.StartsWith(request.Culture.Split('-')[0], StringComparison.OrdinalIgnoreCase))
         {
             _synthesizer.Voice = voice;
+        }
+        else
+        {
+            string? fallback = FindPreferredVoiceId(request.Culture);
+            VoiceInformation? matching = SpeechSynthesizer.AllVoices.FirstOrDefault(candidate => candidate.Id == fallback);
+            if (matching is null) { throw new InvalidOperationException("No installed speech voice matches the requested language."); }
+            _synthesizer.Voice = matching;
         }
     }
 
