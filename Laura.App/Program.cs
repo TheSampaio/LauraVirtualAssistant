@@ -2,6 +2,7 @@ using System.Threading;
 using System.Windows.Forms;
 using Laura.App.Composition;
 using Laura.App.Shell;
+using Laura.Platform.Windows.System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -35,6 +36,8 @@ internal static class Program
         // This must run before any control exists on the thread; after that,
         // Windows Forms refuses to change the mode.
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+
+        NativeRuntimeBootstrap.Initialize();
 
         ApplicationConfiguration.Initialize();
 
