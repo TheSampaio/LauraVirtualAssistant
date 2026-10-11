@@ -9,8 +9,43 @@ bin/
 obj/
 [Bb]in/
 [Oo]bj/
+TestResults/
+*.exe
+*.dll
+*.pdb
+*.zip
+*.7z
+
+# Local assistant data and credentials (including interrupted writes/backups)
+google-key.dat*
+api_keys.json*
+settings.ini*
+memory.db*
+reminders.json*
+/Workspace/
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.key
+
+# Downloaded local model weights are not source assets
+*.gguf
+*.ggml
+*.onnx
+*.safetensors
+*.pt
+*.pth
 
 # User and temporary files
 *.user
 *.suo
 *.cache
+*.log
+*.tmp
+*.bak
+*.dmp
+*.trx
+*.coverage
+*.coveragexml

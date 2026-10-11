@@ -1,4 +1,4 @@
-# This local script is embedded in LauraSetup.exe with the checked package.
+﻿# This local script is embedded in LauraSetup.exe with the checked package.
 [CmdletBinding()]
 param([string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA 'Programs/Laura'), [switch]$SkipShortcut, [switch]$Launch)
 $ErrorActionPreference = 'Stop'
@@ -40,38 +40,17 @@ try {
     } finally { $zip.Dispose() }
     if (!(Test-Path -LiteralPath (Join-Path $staging 'Laura.exe'))) { throw 'Laura.exe is missing from the package.' }
     if ($Launch) {
-        Add-Type -AssemblyName System.Windows.Forms
-        $dialog = New-Object Windows.Forms.Form
-        $dialog.Text = 'Laura Setup'
-        $dialog.Width = 760
-        $dialog.Height = 620
-        $dialog.StartPosition = 'CenterScreen'
-        $text = New-Object Windows.Forms.TextBox
-        $text.Multiline = $true
-        $text.ReadOnly = $true
-        $text.ScrollBars = 'Vertical'
-        $text.Dock = 'Fill'
-        $text.Text = 'Laura includes Microsoft C++ runtime components under the following terms. Other components retain their bundled licenses.' + [Environment]::NewLine + [Environment]::NewLine + (Get-Content -LiteralPath (Join-Path $staging 'licenses/VisualCpp-Runtime-LICENSE.txt') -Raw)
-        $footer = New-Object Windows.Forms.FlowLayoutPanel
-        $footer.Dock = 'Bottom'
-        $footer.Height = 90
-        $accept = New-Object Windows.Forms.CheckBox
-        $accept.Text = 'I accept the Microsoft runtime license terms.'
-        $accept.Width = 700
-        $install = New-Object Windows.Forms.Button
-        $install.Text = 'Install Laura'
-        $install.Enabled = $false
-        $install.Width = 140
-        $install.DialogResult = 'OK'
-        $cancel = New-Object Windows.Forms.Button
-        $cancel.Text = 'Cancel'
-        $cancel.DialogResult = 'Cancel'
-        $accept.Add_CheckedChanged({ $install.Enabled = $accept.Checked })
-        $footer.Controls.AddRange(@($accept, $install, $cancel))
-        $dialog.Controls.AddRange(@($text, $footer))
-        $dialog.CancelButton = $cancel
-        try { if ($dialog.ShowDialog() -ne 'OK') { return } }
-        finally { $dialog.Dispose() }
+        Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class LauraInstallerDialog {
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)]
+    public static extern int MessageBox(IntPtr owner, string text, string caption, uint flags);
+}
+"@
+        $terms = 'Laura includes Microsoft C++ runtime components under the terms below. Do you accept these terms and install Laura?' + [Environment]::NewLine + [Environment]::NewLine + (Get-Content -LiteralPath (Join-Path $staging 'licenses/VisualCpp-Runtime-LICENSE.txt') -Raw)
+        if ([LauraInstallerDialog]::MessageBox([IntPtr]::Zero, $terms, 'Laura Setup', 0x124) -ne 6) { return }
+
     }
     Set-Content -LiteralPath (Join-Path $staging '.laura-install') -Value 'Laura per-user installation' -Encoding ascii
     if (Test-Path -LiteralPath $destination) { Move-Item -LiteralPath (Assert-Child $destination $parent) -Destination $backup }
@@ -90,7 +69,7 @@ try {
     if ($Launch) { Start-Process -FilePath (Join-Path $destination 'Laura.exe') -ArgumentList '--show' -WorkingDirectory $destination -WindowStyle Hidden }
     Write-Output "Laura installed: $destination"
 } catch {
-    if ($Launch) { Add-Type -AssemblyName System.Windows.Forms; [Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Laura installation', 'OK', 'Error') | Out-Null }
+    if ($Launch -and ('LauraInstallerDialog' -as [type])) { [LauraInstallerDialog]::MessageBox([IntPtr]::Zero, $_.Exception.Message, 'Laura installation', 0x10) | Out-Null }
     throw
 } finally {
     if ($staging -and (Test-Path -LiteralPath $staging)) { Remove-Item -LiteralPath (Assert-Child $staging $parent) -Recurse -Force }

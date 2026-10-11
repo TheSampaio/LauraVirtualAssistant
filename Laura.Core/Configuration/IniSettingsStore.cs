@@ -144,6 +144,9 @@ public sealed class IniSettingsStore : ISettingsStore
                 Endpoint = document.GetString(GenerativeAiSection, "Endpoint", defaults.GenerativeAi.Endpoint),
                 Model = document.GetString(GenerativeAiSection, "Model", defaults.GenerativeAi.Model),
                 Persona = document.GetString(GenerativeAiSection, "Persona", defaults.GenerativeAi.Persona),
+                LiveVoice = document.GetString(GenerativeAiSection, "LiveVoice", defaults.GenerativeAi.LiveVoice),
+                ContinuousListening = document.GetBoolean(GenerativeAiSection, "ContinuousListening", false),
+                SilenceDurationMs = document.GetInt32(GenerativeAiSection, "SilenceDurationMs", defaults.GenerativeAi.SilenceDurationMs),
             },
         };
     }
@@ -183,6 +186,9 @@ public sealed class IniSettingsStore : ISettingsStore
         document.Set(GenerativeAiSection, "Endpoint", settings.GenerativeAi.Endpoint);
         document.Set(GenerativeAiSection, "Model", settings.GenerativeAi.Model);
         document.Set(GenerativeAiSection, "Persona", settings.GenerativeAi.Persona);
+        document.Set(GenerativeAiSection, "LiveVoice", settings.GenerativeAi.LiveVoice);
+        document.SetBoolean(GenerativeAiSection, "ContinuousListening", settings.GenerativeAi.ContinuousListening);
+        document.SetNumber(GenerativeAiSection, "SilenceDurationMs", settings.GenerativeAi.SilenceDurationMs);
 
         return document;
     }

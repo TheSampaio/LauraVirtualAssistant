@@ -65,12 +65,14 @@ public static class ServiceConfiguration
         services.AddSingleton<IUserContext, UserContext>();
 
         string settingsPath = storageDirectory is null ? IniSettingsStore.GetDefaultFilePath() : Path.Combine(storageDirectory, "settings.ini");
+        services.AddSingleton(new AssistantStorage(Path.GetDirectoryName(Path.GetFullPath(settingsPath))!));
         services.AddSingleton<ISettingsStore>(provider => new IniSettingsStore(
             settingsPath,
             provider.GetRequiredService<ILogger<IniSettingsStore>>()));
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IConversationMemory>(_ => new SqliteConversationMemory(
             Path.Combine(Path.GetDirectoryName(settingsPath)!, "memory.db")));
+        services.AddSingleton<IApiKeyStore>(_ => new ProtectedApiKeyStore(Path.GetDirectoryName(settingsPath)!));
         services.AddSingleton(_ => new UserFileWorkspace(Path.Combine(Path.GetDirectoryName(settingsPath)!, "Workspace")));
 
         services.AddSingleton<ILocalizer>(provider => new JsonLocalizer(
@@ -79,23 +81,23 @@ public static class ServiceConfiguration
         services.AddSingleton<IUiLocalizer>(provider => new JsonLocalizer(
             GetLocalesDirectory(), provider.GetRequiredService<ILogger<JsonLocalizer>>()));
 
-        services.AddSingleton<ILocalModelManager>(_ => new LocalModelManager(
-            Path.Combine(Path.GetDirectoryName(settingsPath)!, "Models"),
-            new HttpClient { Timeout = TimeSpan.FromMinutes(60) }, SupportedModels.All));
-        services.AddSingleton<IModelCatalog>(provider => provider.GetRequiredService<ILocalModelManager>());
 
         // A short timeout keeps a slow network from making the weather skill hang.
         services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromSeconds(8) });
         services.AddSingleton<IWeatherProvider, WttrWeatherProvider>();
 
-        services.AddSingleton<EmbeddedConversationEngine>();
-        services.AddSingleton<ILocalInferenceEngine>(provider => provider.GetRequiredService<EmbeddedConversationEngine>());
-        services.AddSingleton<OllamaConversationEngine>();
-        services.AddSingleton<IConversationEngine, ConversationRouter>();
+        services.AddSingleton<GeminiLiveClient>();
+        services.AddSingleton<MarkLvConfigurationImporter>();
+        services.AddSingleton<IConversationEngine>(provider => provider.GetRequiredService<GeminiLiveClient>());
+        services.AddSingleton<WindowsApplicationCatalog>();
+        services.AddSingleton<WindowsResourceMonitor>();
+        services.AddSingleton<WindowsGpuMonitor>();
+        services.AddSingleton<IAssistantTools, MauiAssistantTools>();
+        services.AddSingleton<ReminderScheduler>();
         services.AddSingleton<GreetingComposer>();
 
         AddSkills(services);
-        services.AddSingleton<ISkillDispatcher, SkillDispatcher>();
+        services.AddSingleton<ISkillDispatcher, GeminiSkillDispatcher>();
 
         services.AddSingleton<IAssistantEngine, AssistantEngine>();
         services.AddSingleton<HourlyAnnouncer>();
@@ -131,39 +133,27 @@ public static class ServiceConfiguration
     /// </summary>
     private static void AddPlatform(IServiceCollection services)
     {
-        services.AddSingleton<WinRtSpeechSynthesizer>();
-        services.AddSingleton<ISpeechInput, WindowsSpeechInput>();
-        services.AddSingleton<ISpeechSynthesizer>(provider => new SherpaOnnxSpeechSynthesizer(
-            provider.GetRequiredService<WinRtSpeechSynthesizer>(),
-            GetTtsModelDirectory(),
-            provider.GetRequiredService<ILogger<SherpaOnnxSpeechSynthesizer>>()));
+        services.AddSingleton<ISpeechSynthesizer, SpeechRouter>();
         services.AddSingleton<ISystemController, WindowsSystemController>();
         services.AddSingleton<IProcessLauncher, WindowsProcessLauncher>();
         services.AddSingleton<IStartupRegistration, RegistryStartupRegistration>();
     }
 
     /// <summary>
-    /// Registers the Windows Forms presentation layer.
+    /// Registers the native MAUI presentation layer.
     ///
     /// Args:
     ///     services: Service collection.
     /// </summary>
     private static void AddPresentation(IServiceCollection services)
     {
-        services.AddSingleton<IUiDispatcher, WinFormsUiDispatcher>();
-        services.AddSingleton<IDesktopTools, WinFormsDesktopTools>();
-        services.AddSingleton<WinFormsShellController>();
-        services.AddSingleton<IShellController>(provider => provider.GetRequiredService<WinFormsShellController>());
-        services.AddSingleton<SettingsForm>(provider =>
-        {
-            SettingsForm form = ActivatorUtilities.CreateInstance<SettingsForm>(provider);
-            form.BindInference(provider.GetRequiredService<ILocalInferenceEngine>());
-            form.BindMemory(provider.GetRequiredService<IConversationMemory>());
-            form.BindSpeechInput(provider.GetRequiredService<ISpeechInput>());
-            form.BindOllamaCatalog(new OllamaModelCatalog(OllamaModelCatalog.GetDefaultLibraryDirectory(),
-                provider.GetRequiredService<ILogger<OllamaModelCatalog>>()));
-            return form;
-        });
+        services.AddSingleton<IUiDispatcher, MauiUiDispatcher>();
+        services.AddSingleton<IDesktopTools, MauiDesktopTools>();
+        services.AddSingleton<MauiShellController>();
+        services.AddSingleton<Laura.Core.Abstractions.IShellController>(provider => provider.GetRequiredService<MauiShellController>());
+        services.AddSingleton<MainPage>();
+        services.AddTransient<SetupPage>();
+        services.AddTransient<MemoryPage>();
     }
 
     /// <summary>
@@ -175,6 +165,4 @@ public static class ServiceConfiguration
     private static string GetLocalesDirectory() =>
         Path.Combine(AppContext.BaseDirectory, "Localization", "Locales");
 
-    private static string GetTtsModelDirectory() =>
-        Path.Combine(AppContext.BaseDirectory, "Data", "Tts", "kokoro-en");
 }

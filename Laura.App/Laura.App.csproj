@@ -1,50 +1,45 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <!-- Matches Laura.Platform.Windows so the WinRT speech APIs flow through. -->
-    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <RootNamespace>Laura.App</RootNamespace>
     <AssemblyName>Laura</AssemblyName>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <MauiVersion>10.0.20</MauiVersion>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <!-- A portable JIT build avoids a separate ReadyToRun crossgen toolchain at publish time. -->
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <ApplicationTitle>Laura Virtual Assistant</ApplicationTitle>
+    <ApplicationId>com.laura.assistant</ApplicationId>
+    <ApplicationDisplayVersion>2.0.0</ApplicationDisplayVersion>
+    <ApplicationVersion>2</ApplicationVersion>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <ImplicitUsings>enable</ImplicitUsings>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <AnalysisLevel>9.0-recommended</AnalysisLevel>
-    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <UseWindowsForms>true</UseWindowsForms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationIcon>..\Data\icon.ico</ApplicationIcon>
-    <!-- Required by the LibraryImport generator used by the global hotkey and dark window frame. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <!--
-      WFO1000/CA1859: rules aimed at the visual designer and micro-optimization of
-      UI constructors; this interface is built entirely in code.
-    -->
-    <NoWarn>$(NoWarn);CA1848;CA1716;WFO1000;CA1859</NoWarn>
-    <Description>Tray application and settings interface for the Laura assistant.</Description>
+    <!-- CA1859: UI helpers deliberately return shared MAUI abstractions. -->
+    <NoWarn>$(NoWarn);CA1848;CA1716;CA1859</NoWarn>
   </PropertyGroup>
-
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.20" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\Laura.Core\Laura.Core.csproj" />
     <ProjectReference Include="..\Laura.Platform.Windows\Laura.Platform.Windows.csproj" />
+    <Content Include="..\Data\icon.ico" Link="Assets\icon.ico" CopyToOutputDirectory="PreserveNewest" />
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" Color="#100C11" />
   </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="..\Data\icon.ico" Link="Assets\icon.ico">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
 </Project>

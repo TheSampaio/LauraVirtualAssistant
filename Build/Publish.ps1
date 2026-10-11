@@ -21,7 +21,7 @@ Push-Location $root
 try {
     & dotnet restore Laura.sln --locked-mode
     if ($LASTEXITCODE -ne 0) { throw 'Locked dependency restore failed.' }
-    & dotnet publish Laura.App/Laura.App.csproj -c Release -r win-x64 --self-contained true --no-restore -p:PublishSingleFile=false -o $publish
+    & dotnet publish Laura.App/Laura.App.csproj -c Release -f net10.0-windows10.0.19041.0 -r win-x64 --self-contained true --no-restore -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=false -o $publish
     if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
     # App-local CRT/OpenMP avoids a separate system-wide prerequisite installation.
     # The builder must have redistribution rights under the supplied Microsoft terms.

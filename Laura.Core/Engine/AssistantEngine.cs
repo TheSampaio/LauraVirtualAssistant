@@ -296,7 +296,7 @@ public sealed class AssistantEngine : IAssistantEngine
         bool willUseGenerativeAi = _settings.Current.GenerativeAi.Enabled
             && _dispatcher.CanUseGenerativeFallback(request);
 
-        if (willUseGenerativeAi)
+        if (willUseGenerativeAi && _settings.Current.GenerativeAi.Provider != "gemini")
         {
             await SpeakInternalAsync(_localizer.Get(LocalizationKeys.Assistant.Thinking), cancellationToken)
                 .ConfigureAwait(false);

@@ -6,7 +6,7 @@ Guidelines for working in this repository. Read this before changing code.
 
 Laura is a personal assistant for Windows inspired by Jarvis, in a feminine version.
 She lives in the system tray, speaks responses, accepts typed chat commands, and
-shows the settings window with **Alt + L**. Migrated from Python to **C# / .NET 9**.
+shows the settings window with **Alt + L**. Migrated from Python to **C# / .NET 10 and MAUI**.
 
 English (en-US) is the default; Brazilian Portuguese (pt-BR) is optional. Keep interface and conversation language independently configurable through centralized resources.
 
@@ -40,9 +40,9 @@ Dependencies flow in only one direction: `App -> Platform.Windows -> Core`.
 
 | Project | Role | May Depend On |
 | --- | --- | --- |
-| `Laura.Core` | Pure domain (net9.0): engine, skills, settings, localization | no platform |
-| `Laura.Platform.Windows` | SAPI and Win32 adapters | `Core` |
-| `Laura.App` | Tray + Windows Forms UI | `Core`, `Platform.Windows` |
+| `Laura.Core` | Pure domain (net10.0): engine, skills, settings, localization | no platform |
+| `Laura.Platform.Windows` | Gemini audio and Win32/WinRT adapters | `Core` |
+| `Laura.App` | Native MAUI / WinUI UI + Win32 tray | `Core`, `Platform.Windows` |
 | `Laura.Core.Tests` | xUnit tests | `Core` |
 
 Rules:
@@ -54,13 +54,12 @@ Rules:
 - For the domain to act on the UI (open a window, exit), use `IShellController`;
   never reference Windows Forms from `Core`.
 
-## UI: Windows Forms, Not WPF or MAUI
+## UI: .NET MAUI
 
-This is the project owner's decision. **Do not migrate to WPF or MAUI.** For a
-Windows-only tray app with a global hotkey, WinForms is the right fit (native
-`NotifyIcon`, trivial hidden window). The UI is built **in code** (no designer). All
-logic lives in `Core`, so the presentation can be replaced without touching the
-domain.
+The owner requested the MAUI migration. Use native MAUI controls and GraphicsView
+for the counter-rotating reactor rings; do not restore Windows Forms or the face.
+The initial supported platform remains Windows. The domain stays UI independent.
+Tray, global hotkey and desktop capture use Win32/WinRT adapters, without Forms.
 
 ## Concurrency Model - Do Not Block the UI
 
@@ -95,12 +94,22 @@ Never hard-code spoken text or fixed triggers in a skill.
 - Keys accessed by the domain must exist in `LocalizationKeys` (typos become compile
   errors).
 
-## Generative AI Is Optional
+## AI Providers and Voice
 
-A command not recognized by any skill **may** go to a model through
-`IConversationEngine`, with embedded CPU inference as the default provider; generation stays disabled until configured.
-**Laura must work 100% offline.** Never make generative AI a required path; it is an
-extra mode enabled in settings.
+Google AI Studio / Gemini Live is the sole conversation/voice provider. A key and an
+explicit enabled setting are required before cloud conversation is available.
+Use native Live AUDIO output and input/output transcriptions; the supported voices
+are Charon, Puck, Kore, Fenrir and Aoede. Credentials live in a separate DPAPI file,
+never INI, logs, screenshots or repository files. Importing a Mark-LV configuration
+must leave the source file unchanged. No reference code or assets are bundled.
+
+Do not restore Ollama, local model inference or Windows/offline voice pickers.
+Native tools use explicit structured arguments and report actual results.
+Consequential operations use trusted MAUI confirmation. Capture requires an
+explicit listening button or held Ctrl+Space chord and an unmuted setting;
+muting, stopping, early key release and shutdown close capture. Continuous
+listening uses automatic speech-end detection. Brazilian conversation settings
+must request Brazilian vocabulary and accent.
 
 ## Code Style
 
@@ -134,28 +143,20 @@ instead of breaking reads); `IniSettingsStore` maps INI <-> `LauraSettings`. Do 
 go back to JSON or AppData. The default language is **en-US** (a feminine English
 voice sounds more natural).
 
-## Windows Forms UI - Solved Pitfalls (Do Not Regress)
+## MAUI UI Verification
 
-- Custom controls (`Slider`, `ToggleSwitch`) paint over an **opaque background**
-  (`Palette.Surface`/`Field`), never `Color.Transparent`; transparency in WinForms
-  repaints the parent on every frame and **flickers** while dragging.
-- Every content `Label` uses `UseMnemonic = false`; otherwise `&` in text such as
-  "Time & language" becomes an access key and disappears from the screen.
-- Input fields go through `InputFactory`/`ThemedComboBox` so they do not show the
-  system's bright border and arrow over the dark theme.
-- A slider's value label is initialized by reading `slider.Value`, not the range
-  minimum.
-- `Application.SetUnhandledExceptionMode` must be called **before** any control
-  exists (at the start of `Main`), or it throws at runtime.
-- Card layout: `TableLayoutPanel` with `Dock = Fill` in a 100% column, so every row
-  has the same width.
+Use the shared Theme helpers for native controls. Centralize translated UI text in
+the EN/PT catalogs and keep conversation language independent from UI language.
+Use explicit grid coordinates when reparenting views during responsive layout.
+Pause the animation timer while the HUD is off screen. The --ui-smoke option
+renders the app itself with isolated storage; it must never capture a microphone.
 
 ## Tests
 
 - New domain logic (normalization, phrase matching, sanitization, dispatch) needs a
   test in `Laura.Core.Tests`.
 - Use the fakes in `TestDoubles/` instead of mocking frameworks.
-- The platform layer (SAPI, Win32) and UI are not covered by unit tests; keep logic
+- The platform layer (audio, Win32) and UI are not covered by unit tests; keep logic
   testable in `Core`.
 
 ## Git

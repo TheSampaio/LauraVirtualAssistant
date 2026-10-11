@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- The Windows 10 target unlocks the WinRT speech APIs (natural OneCore voices). -->
-    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <!-- The Windows 10 target unlocks WinRT capture and native desktop APIs. -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <RootNamespace>Laura.Platform.Windows</RootNamespace>
     <LangVersion>latest</LangVersion>
@@ -17,18 +17,13 @@
     <NoWarn>$(NoWarn);CA1848;CA1716</NoWarn>
     <!-- Required by the LibraryImport generator used for the Windows API calls. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Windows adapters (SAPI, WinRT speech, Ollama, Win32) for the Laura.Core abstractions.</Description>
+    <Description>Google Live audio, protected credentials and Windows desktop adapters for Laura.Core.</Description>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="LLamaSharp" Version="0.27.0" />
-    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.27.0" />
-    <PackageReference Include="Whisper.net" Version="1.9.1" />
-    <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
-    <PackageReference Include="NAudio" Version="2.2.1" />
-    <PackageReference Include="OllamaSharp" Version="4.0.11" />
-    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.4" />
-    <PackageReference Include="System.Speech" Version="9.0.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.13" />
+    <PackageReference Include="NAudio.Core" Version="2.2.1" />
+    <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
   </ItemGroup>
 
   <ItemGroup>
