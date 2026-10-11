@@ -1,11 +1,7 @@
 namespace Laura.App.Infrastructure;
 
 /// <summary>
-/// Executa trabalho na thread da interface.
-///
-/// Assistant engine events arrive on background threads; touching
-/// Windows Forms controls from them would throw, so everything that changes the
-/// interface passa por aqui.
+/// Dispatches work to the MAUI UI thread when domain events arrive from background workers.
 /// </summary>
 public interface IUiDispatcher
 {

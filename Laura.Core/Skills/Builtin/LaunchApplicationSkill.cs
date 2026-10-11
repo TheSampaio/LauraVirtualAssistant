@@ -69,8 +69,8 @@ public sealed class LaunchApplicationSkill : PhraseSkillBase
 
         if (target is null)
         {
-            return Task.FromResult(SkillResponse.Speak(
-                Localizer.Get(LocalizationKeys.Skills.LaunchNotFound, applicationName)));
+            return Task.FromResult(SkillResponse.Speak(Localizer.Get(
+                _launcher.TryStart(applicationName) ? LocalizationKeys.Skills.LaunchResponse : LocalizationKeys.Skills.LaunchNotFound, applicationName)));
         }
 
         return Task.FromResult(Launch(target)

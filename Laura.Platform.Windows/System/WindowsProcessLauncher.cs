@@ -14,6 +14,7 @@ namespace Laura.Platform.Windows.System;
 public sealed class WindowsProcessLauncher : IProcessLauncher
 {
     private readonly ILogger<WindowsProcessLauncher> _logger;
+    private readonly WindowsApplicationCatalog _applications;
 
     /// <summary>
     /// Initializes the launcher.
@@ -21,10 +22,11 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
     /// Args:
     ///     logger: Destination for diagnostic logs.
     /// </summary>
-    public WindowsProcessLauncher(ILogger<WindowsProcessLauncher> logger)
+    public WindowsProcessLauncher(ILogger<WindowsProcessLauncher> logger, WindowsApplicationCatalog applications)
     {
         ArgumentNullException.ThrowIfNull(logger);
         _logger = logger;
+        _applications = applications;
     }
 
     /// <inheritdoc />
@@ -39,13 +41,16 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
 
-        var startInfo = new ProcessStartInfo(fileName)
+        if (_applications.Applications.Count == 0) { _applications.RefreshAsync().GetAwaiter().GetResult(); }
+        IReadOnlyList<InstalledApplication> matches = File.Exists(fileName) ? [] : _applications.Find(fileName);
+        string target = matches.Count > 0 ? matches[0].Target : fileName;
+        var startInfo = new ProcessStartInfo(target)
         {
             UseShellExecute = true,
             Arguments = arguments ?? string.Empty,
         };
 
-        return TryStartProcess(startInfo, fileName);
+        return TryStartProcess(startInfo, target);
     }
 
     /// <summary>

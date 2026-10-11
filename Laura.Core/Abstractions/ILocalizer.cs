@@ -10,6 +10,8 @@ namespace Laura.Core.Abstractions;
 /// </summary>
 public interface ILocalizer
 {
+    /// <summary>Gets a specific culture's text without changing the active language; defaults to ordinary lookup for simple adapters.</summary>
+    string GetForCulture(string culture, string key) => Get(key);
     /// <summary>
     /// Occurs after the active language changes.
     /// </summary>

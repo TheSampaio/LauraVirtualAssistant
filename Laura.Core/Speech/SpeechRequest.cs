@@ -8,4 +8,8 @@ namespace Laura.Core.Speech;
 /// <param name="Text">Text to speak, in natural language and without markup.</param>
 /// <param name="Voice">Voice profile - timbre, rate, pitch, and volume - to apply.</param>
 /// <param name="Culture">Text culture, in BCP-47 format, used for pronunciation.</param>
-public sealed record SpeechRequest(string Text, VoiceProfile Voice, string Culture);
+public sealed record SpeechRequest(string Text, VoiceProfile Voice, string Culture)
+{
+    /// <summary>Gets the playback device, or -1 for the default.</summary>
+    public int OutputDevice { get; init; } = -1;
+}

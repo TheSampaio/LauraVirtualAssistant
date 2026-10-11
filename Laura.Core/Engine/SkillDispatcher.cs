@@ -22,6 +22,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
     private readonly ISettingsService _settings;
     private readonly IUserContext _userContext;
     private readonly ILogger<SkillDispatcher> _logger;
+    private readonly IConversationMemory? _memory;
 
     /// <summary>
     /// Initializes the dispatcher by ordering the registered skills.
@@ -41,7 +42,8 @@ public sealed class SkillDispatcher : ISkillDispatcher
         IConversationEngine conversationEngine,
         ISettingsService settings,
         IUserContext userContext,
-        ILogger<SkillDispatcher> logger)
+        ILogger<SkillDispatcher> logger,
+        IConversationMemory? memory = null)
     {
         ArgumentNullException.ThrowIfNull(skills);
         ArgumentNullException.ThrowIfNull(localizer);
@@ -56,6 +58,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
         _settings = settings;
         _userContext = userContext;
         _logger = logger;
+        _memory = memory;
     }
 
     /// <inheritdoc />
@@ -64,6 +67,25 @@ public sealed class SkillDispatcher : ISkillDispatcher
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        IReadOnlyList<string>? steps = CommandSequence.Parse(request.RawText, _localizer.GetPhrases("phrases.sequencePrefix"));
+        if (steps is not null)
+        {
+            SkillRequest[] requests = [.. steps.Select(text => SkillRequest.Create(text, request.Culture, request.Timestamp, request.Source))];
+            if (requests.Length == 0 || requests.Any(step => !_skills.Any(skill => skill.CanHandle(step))))
+            {
+                return SkillResponse.Speak(_localizer.Get("tools.sequenceInvalid"));
+            }
+            var answers = new List<string>();
+            foreach (SkillRequest step in requests)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                SkillResponse response = await DispatchAsync(step, cancellationToken).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(response.SpokenText)) { answers.Add(response.SpokenText); }
+                if (response.RequestsShutdown) { return response; }
+            }
+            return SkillResponse.Speak(string.Join(" ", answers));
+        }
 
         foreach (ISkill skill in _skills)
         {
@@ -150,6 +172,19 @@ public sealed class SkillDispatcher : ISkillDispatcher
         }
 
         var turn = new ConversationTurn(request.RawText, request.Culture, _userContext.DisplayName);
+        if (_memory is not null && _settings.Current.RememberConversations)
+        {
+            try
+            {
+                var history = _memory.ReadRecent(8).ToList();
+                if (history.LastOrDefault() is { Source: ConversationMessageSource.UserTyped } last && last.Text == request.RawText)
+                {
+                    history.RemoveAt(history.Count - 1);
+                }
+                turn = turn with { History = history, Memories = [.. _memory.Search("").Take(3).Select(static fact => fact.Text)] };
+            }
+            catch (Exception exception) { _logger.LogWarning(exception, "Context memory unavailable."); }
+        }
         string? answer = await _conversationEngine.AskAsync(turn, cancellationToken).ConfigureAwait(false);
 
         return string.IsNullOrWhiteSpace(answer)

@@ -1,0 +1,21 @@
+{
+  "LLamaSharp-LICENSE": "https://raw.githubusercontent.com/SciSharp/LLamaSharp/7cbbc45e421d55794d5050d126e0b96511007007/LICENSE",
+  "llama.cpp-LICENSE": "https://raw.githubusercontent.com/ggml-org/llama.cpp/3f7c29d318e317b63f54c558bc69803963d7d88c/LICENSE",
+  "sherpa-onnx-LICENSE": "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/142807252687d81b40d6315f23470a1512a00de3/LICENSE",
+  "onnxruntime-LICENSE": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.27.0/LICENSE",
+  "onnxruntime-ThirdPartyNotices.txt": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.27.0/ThirdPartyNotices.txt",
+  "SQLitePCLRaw-LICENSE": "https://raw.githubusercontent.com/ericsink/SQLitePCL.raw/v2.1.10/LICENSE.TXT",
+  "dotnet-runtime-LICENSE": "https://raw.githubusercontent.com/dotnet/runtime/v9.0.20/LICENSE.TXT",
+  "dotnet-windowsdesktop-LICENSE": "https://raw.githubusercontent.com/dotnet/winforms/v9.0.10/LICENSE.TXT",
+  "efcore-LICENSE": "https://raw.githubusercontent.com/dotnet/efcore/v9.0.10/LICENSE.txt",
+  "reactive-LICENSE": "https://raw.githubusercontent.com/dotnet/reactive/main/LICENSE",
+  "Whisper-model-LICENSE": "https://raw.githubusercontent.com/openai/whisper/v20250625/LICENSE",
+  "whisper.cpp-LICENSE": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/f24588a272ae8e23280d9c220536437164e6ed28/LICENSE",
+  "dotnet-runtime-NOTICES": "https://raw.githubusercontent.com/dotnet/runtime/v9.0.20/THIRD-PARTY-NOTICES.TXT",
+  "Qwen-model-LICENSE": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/resolve/main/LICENSE",
+  "llama.cpp-jsonhpp-LICENSE": "https://raw.githubusercontent.com/ggml-org/llama.cpp/3f7c29d318e317b63f54c558bc69803963d7d88c/licenses/LICENSE-jsonhpp",
+  "llama.cpp-httplib-LICENSE": "https://raw.githubusercontent.com/ggml-org/llama.cpp/3f7c29d318e317b63f54c558bc69803963d7d88c/vendor/cpp-httplib/LICENSE",
+  "VisualCpp-Runtime-LICENSE.docx": "https://visualstudio.microsoft.com/wp-content/uploads/2025/10/Visual-C-V14-License-Redistributable_and_Runtime_ENU.docx",
+  "VisualStudio-Community-2026-LICENSE.docx": "https://visualstudio.microsoft.com/wp-content/uploads/2025/10/Visual_Studio_2026-License-Community_ENU.docx",
+  "VisualStudio-2026-REDIST.html": "https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution"
+}

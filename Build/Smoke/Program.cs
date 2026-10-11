@@ -1,0 +1,87 @@
+using System.Globalization;
+using System.Text.Json;
+using Laura.Core.Abstractions;
+using Laura.Core.Configuration;
+using Laura.Core.Conversation;
+using Laura.Core.Memory;
+using Laura.Core.Models;
+using Laura.Core.Skills;
+using Laura.Platform.Windows.Conversation;
+using Laura.Platform.Windows.System;
+using Laura.Platform.Windows.Speech;
+using Microsoft.Extensions.Logging.Abstractions;
+
+// Explicit smoke tests use isolated storage and never open the microphone.
+if (args.Length == 0) { Console.Error.WriteLine("Usage: Laura.Smoke <isolated-directory> --gemini --key-file <Mark-LV api_keys.json> [--quick] [--vad]"); return 2; }
+string directory = Path.GetFullPath(args[0]);
+Directory.CreateDirectory(directory);
+using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+using var settings = new SettingsService(new IniSettingsStore(Path.Combine(directory, "settings.ini"), NullLogger<IniSettingsStore>.Instance), NullLogger<SettingsService>.Instance);
+await settings.LoadAsync(timeout.Token);
+var memory = new SqliteConversationMemory(Path.Combine(directory, "memory.db"));
+memory.Initialize();
+if (args.Contains("--gemini", StringComparer.Ordinal))
+{
+    int index = Array.IndexOf(args, "--key-file");
+    if (index < 0 || index + 1 >= args.Length) { Console.Error.WriteLine("Provide the existing credential file with --key-file. No credential is printed."); return 2; }
+    using JsonDocument config = JsonDocument.Parse(await File.ReadAllTextAsync(args[index + 1], timeout.Token));
+    var keys = new ProtectedApiKeyStore(directory);
+    keys.Save(config.RootElement.GetProperty("gemini_api_key").GetString() ?? "");
+    await using var live = new GeminiLiveClient(settings, keys, memory, Array.Empty<ISkill>(), new SmokeShell());
+    live.StatusChanged += (_, status) => Console.WriteLine("Live state: " + status);
+    IReadOnlyList<string> selectedVoices = args.Contains("--quick", StringComparer.Ordinal) ? ["Charon"] : GeminiLiveOptions.Voices;
+    foreach (string voice in selectedVoices)
+    {
+        await settings.UpdateAsync(settings.Current with { GreetOnStartup = false, AnnounceHourly = false, RememberConversations = false, Voice = settings.Current.Voice with { Volume = 0 }, GenerativeAi = settings.Current.GenerativeAi with { Enabled = true, Provider = "gemini", Model = GeminiLiveOptions.Model, LiveVoice = voice } }, timeout.Token);
+        await live.ReconfigureAsync();
+        string? answer = await live.AskAsync(new ConversationTurn("Say only: Hello, I am Laura.", CultureInfo.GetCultureInfo("en-US"), "Tester"), timeout.Token);
+        if (string.IsNullOrWhiteSpace(answer) || live.AudioBytesReceived == 0) { throw new InvalidOperationException("Live returned no transcript or PCM for " + voice); }
+        Console.WriteLine($"Voice {voice}: transcript and {live.AudioBytesReceived} PCM bytes received.");
+        if (voice == "Charon")
+        {
+            long before = live.AudioBytesReceived;
+            string? followup = await live.AskAsync(new ConversationTurn("Say only: Ready.", CultureInfo.GetCultureInfo("en-US"), "Tester"), timeout.Token);
+            if (string.IsNullOrWhiteSpace(followup) || live.AudioBytesReceived <= before) { throw new InvalidOperationException("Persistent second turn failed."); }
+            live.Interrupt();
+            string? recovery = await live.AskAsync(new ConversationTurn("Diga apenas: Olá, sou a Laura.", CultureInfo.GetCultureInfo("pt-BR"), "Tester"), timeout.Token);
+            if (string.IsNullOrWhiteSpace(recovery)) { throw new InvalidOperationException("Live recovery failed."); }
+            Console.WriteLine("Persistent conversation and reconnect passed.");
+        }
+    }
+    if (args.Contains("--vad", StringComparer.Ordinal))
+    {
+        await settings.UpdateAsync(settings.Current with { Culture = "pt-BR" }, timeout.Token);
+        await live.ReconfigureAsync();
+        using var recording = new MemoryStream();
+        void Capture(object? sender, byte[] pcm) => recording.Write(pcm);
+        live.AudioOutputReceived += Capture;
+        await live.SpeakAsync("Quanto é dois mais dois?", timeout.Token);
+        live.AudioOutputReceived -= Capture;
+        Console.WriteLine("Synthetic read-aloud transcript: " + live.LastReadAloudTranscript);
+        byte[] source = recording.ToArray();
+        if (source.Length == 0) { throw new InvalidOperationException("Synthetic speech returned no PCM."); }
+        int count = source.Length / 2 * 2 / 3; byte[] input = new byte[count * 2];
+        for (int sample = 0; sample < count; sample++)
+        {
+            int sourceSample = sample * 3 / 2;
+            short value = System.Buffers.Binary.BinaryPrimitives.ReadInt16LittleEndian(source.AsSpan(sourceSample * 2));
+            System.Buffers.Binary.BinaryPrimitives.WriteInt16LittleEndian(input.AsSpan(sample * 2), value);
+        }
+        string answer = await live.AskAudioAsync(input, timeout.Token);
+        Console.WriteLine("Automatic input transcript: " + live.LastAudioInputTranscript);
+        Console.WriteLine("Automatic answer: " + answer);
+        if (!answer.Contains("quatro", StringComparison.OrdinalIgnoreCase) && !answer.Contains('4')) { throw new InvalidOperationException("Automatic audio turn did not answer the synthetic question: " + answer); }
+        Console.WriteLine("Automatic VAD answered Brazilian Portuguese synthetic speech after silence, without an explicit stop signal.");
+    }
+    keys.Save("");
+    Console.WriteLine("Selected reference voices passed; no microphone capture occurred.");
+}
+Console.WriteLine("Smoke verification completed.");
+return 0;
+
+internal sealed class SmokeShell : IShellController
+{
+    public void ShowSettings() { }
+    public void ToggleSettings() { }
+    public void Shutdown() { }
+}

@@ -11,139 +11,436 @@
     "There you go, changes applied."
   ],
   "assistant.skillFailed": "I tried, but something went wrong on my side.",
-  "assistant.thinking": [ "Thinking.", "Pondering.", "One moment.", "Working on it." ],
-
-  "greeting.morning": [ "Good morning, {0}.", "Good morning, {0}. Ready when you are." ],
-  "greeting.afternoon": [ "Good afternoon, {0}.", "Good afternoon, {0}. How can I help?" ],
-  "greeting.evening": [ "Good evening, {0}.", "Good evening, {0}. I'm here." ],
+  "assistant.thinking": [
+    "Thinking.",
+    "Pondering.",
+    "One moment.",
+    "Working on it."
+  ],
+  "greeting.morning": [
+    "Good morning, {0}.",
+    "Good morning, {0}. Ready when you are."
+  ],
+  "greeting.afternoon": [
+    "Good afternoon, {0}.",
+    "Good afternoon, {0}. How can I help?"
+  ],
+  "greeting.evening": [
+    "Good evening, {0}.",
+    "Good evening, {0}. I'm here."
+  ],
   "greeting.summary": "Today is {0:dddd, MMMM d, yyyy}, and it's {0:h:mm tt}.",
   "greeting.hourlyChime": "It's now {0:h tt}.",
   "greeting.midnight": "It's now midnight.",
   "greeting.noon": "It's now noon.",
-
   "phrases.time": [
-    "what time is it", "whats the time", "what s the time", "tell me the time",
-    "do you have the time", "got the time", "the current time", "the time please", "the time"
+    "what time is it",
+    "whats the time",
+    "what s the time",
+    "tell me the time",
+    "do you have the time",
+    "got the time",
+    "the current time",
+    "the time please",
+    "the time"
   ],
-  "skill.time.response": [ "It's {0:h:mm tt}.", "It is now {0:h:mm tt}." ],
-
+  "skill.time.response": [
+    "It's {0:h:mm tt}.",
+    "It is now {0:h:mm tt}."
+  ],
   "phrases.date": [
-    "what day is it", "what day is it today", "whats the date", "what s the date",
-    "whats todays date", "what is the date today", "todays date", "what is today",
+    "what day is it",
+    "what day is it today",
+    "whats the date",
+    "what s the date",
+    "whats todays date",
+    "what is the date today",
+    "todays date",
+    "what is today",
     "what day of the week is it"
   ],
   "skill.date.response": "Today is {0:dddd, MMMM d, yyyy}.",
-
   "phrases.weather": [
-    "whats the weather", "what is the weather", "hows the weather", "how is the weather",
-    "whats the weather today", "whats the weather now", "whats the weather like",
-    "the weather", "weather", "is it hot outside", "is it cold outside", "is it raining"
+    "whats the weather",
+    "what is the weather",
+    "hows the weather",
+    "how is the weather",
+    "whats the weather today",
+    "whats the weather now",
+    "whats the weather like",
+    "the weather",
+    "weather",
+    "is it hot outside",
+    "is it cold outside",
+    "is it raining"
   ],
   "skill.weather.response": [
     "It's {0} and {1} in {3}, feeling like {2}.",
     "Right now in {3} it's {0}, {1}, and it feels like {2}."
   ],
   "skill.weather.unavailable": "I couldn't reach the weather service just now.",
-
-  "phrases.greeting": [ "good morning", "good afternoon", "good evening", "hello", "hi", "how are you" ],
-  "skill.greeting.response": [ "Hello, {0}.", "Hi, {0}. All good here." ],
-
-  "phrases.help": [ "what can you do", "help me", "help", "what are your commands" ],
+  "phrases.greeting": [
+    "good morning",
+    "good afternoon",
+    "good evening",
+    "hello",
+    "hi",
+    "how are you"
+  ],
+  "skill.greeting.response": [
+    "Hello, {0}.",
+    "Hi, {0}. All good here."
+  ],
+  "phrases.help": [
+    "what can you do",
+    "help me",
+    "help",
+    "what are your commands"
+  ],
   "skill.help.response": "I can tell the time, date and weather, search the web, open applications, adjust the volume, lock the computer and open my settings. Open the chat with Alt + L and type what you need.",
-
-  "phrases.farewell": [ "bye laura", "goodbye", "thanks laura", "that s all", "shut down laura" ],
-  "skill.farewell.response": [ "See you, {0}.", "I'll be here if you need me." ],
-
-  "phrases.search": [ "search for", "search", "look up", "google", "find" ],
+  "phrases.farewell": [
+    "bye laura",
+    "goodbye",
+    "thanks laura",
+    "that s all",
+    "shut down laura"
+  ],
+  "skill.farewell.response": [
+    "See you, {0}.",
+    "I'll be here if you need me."
+  ],
+  "phrases.search": [
+    "search for",
+    "search",
+    "look up",
+    "google",
+    "find"
+  ],
   "skill.search.response": "Searching for {0}.",
   "skill.search.missingQuery": "What would you like me to search for?",
-
-  "phrases.launch": [ "open", "launch", "start", "run" ],
+  "phrases.launch": [
+    "open",
+    "launch",
+    "start",
+    "run"
+  ],
   "skill.launch.response": "Opening {0}.",
   "skill.launch.notFound": "I don't know how to open {0}.",
-
-  "phrases.lock": [ "lock the computer", "lock my computer", "lock the screen", "lock workstation" ],
+  "phrases.lock": [
+    "lock the computer",
+    "lock my computer",
+    "lock the screen",
+    "lock workstation"
+  ],
   "skill.lock.response": "Locking the computer.",
-
-  "phrases.volumeUp": [ "turn the volume up", "volume up", "louder", "raise the volume" ],
-  "phrases.volumeDown": [ "turn the volume down", "volume down", "quieter", "lower the volume" ],
-  "phrases.volumeMute": [ "mute", "silence", "no sound", "unmute" ],
-  "skill.volume.response": [ "Done.", "There you go." ],
-
-  "phrases.settings": [ "open settings", "open your settings", "settings panel", "show your settings" ],
+  "phrases.volumeUp": [
+    "turn the volume up",
+    "volume up",
+    "louder",
+    "raise the volume"
+  ],
+  "phrases.volumeDown": [
+    "turn the volume down",
+    "volume down",
+    "quieter",
+    "lower the volume"
+  ],
+  "phrases.volumeMute": [
+    "mute",
+    "silence",
+    "no sound",
+    "unmute"
+  ],
+  "skill.volume.response": [
+    "Done.",
+    "There you go."
+  ],
+  "phrases.settings": [
+    "open settings",
+    "open your settings",
+    "settings panel",
+    "show your settings"
+  ],
   "skill.settings.response": "Opening my settings.",
-
-  "application.notepad": [ "notepad", "text editor" ],
-  "application.calculator": [ "calculator", "calc" ],
-  "application.explorer": [ "file explorer", "explorer", "my files", "file manager" ],
-  "application.taskManager": [ "task manager" ],
-  "application.paint": [ "paint" ],
-  "application.terminal": [ "terminal", "command prompt", "powershell" ],
-  "application.browser": [ "browser", "the internet", "web browser" ],
-  "application.windowsSettings": [ "windows settings", "system settings", "control panel" ],
-
+  "application.notepad": [
+    "notepad",
+    "text editor"
+  ],
+  "application.calculator": [
+    "calculator",
+    "calc"
+  ],
+  "application.explorer": [
+    "file explorer",
+    "explorer",
+    "my files",
+    "file manager"
+  ],
+  "application.taskManager": [
+    "task manager"
+  ],
+  "application.paint": [
+    "paint"
+  ],
+  "application.terminal": [
+    "terminal",
+    "command prompt",
+    "powershell"
+  ],
+  "application.browser": [
+    "browser",
+    "the internet",
+    "web browser"
+  ],
+  "application.windowsSettings": [
+    "windows settings",
+    "system settings",
+    "control panel"
+  ],
   "ai.unavailable": "The generative mode didn't answer just now.",
-
   "ui.window.title": "Laura Virtual Assistant",
   "ui.window.subtitle": "Tune how I speak and behave.",
   "ui.tab.general": "General",
   "ui.tab.chat": "Chat",
   "ui.tab.user": "User",
   "ui.tab.voice": "Voice",
-
   "ui.chat.section": "Chat & Generative AI",
   "ui.chat.empty": "Laura's conversation history appears here.",
   "ui.chat.input": "Write to Laura",
   "ui.chat.inputDisabled": "Enable Generative AI to write to Laura",
   "ui.chat.send": "Send",
-  "ui.chat.stop": "Stop speech",
+  "ui.chat.stop": "Stop response",
   "ui.chat.aiOff": "AI off",
   "ui.chat.aiOptions": "Chat and AI options",
-
   "ui.voice.section": "Timbre",
   "ui.voice.voice": "Voice",
   "ui.voice.automatic": "Automatic (recommended)",
-  "ui.voice.voiceHint": "Only Microsoft Natural voices are shown. Install Microsoft Aria or Microsoft Francisca under Windows Settings > Time & language > Speech.",
+  "ui.voice.voiceHint": "Select an installed voice matching your conversation language. Missing voices are reported; no cloud voice is used.",
   "ui.voice.rate": "Rate",
   "ui.voice.pitch": "Pitch",
   "ui.voice.volume": "Volume",
   "ui.voice.preview": "Preview voice",
   "ui.voice.previewText": "Hello, I'm Laura. This is how I sound with these settings.",
-
   "ui.general.section": "Behaviour",
   "ui.general.greetOnStartup": "Greet me on startup",
   "ui.general.announceHourly": "Announce every full hour",
   "ui.general.startWithWindows": "Start with Windows",
-
   "ui.user.section": "About you",
   "ui.user.nickname": "What should I call you?",
   "ui.user.nicknameHint": "Leave empty to use your Windows account name ({0}).",
-
   "ui.ai.enabled": "Answer with generative AI when I don't recognise the command",
-  "ui.ai.hint": "Extra feature. Turned off, I run fully offline.",
+  "ui.ai.hint": "Uses the selected local backend. No cloud API key is required.",
   "ui.ai.endpoint": "Service endpoint",
-  "ui.ai.endpointHint": "Address of your local Ollama server.",
+  "ui.ai.endpointHint": "Optional Ollama address; only loopback HTTP/HTTPS is allowed.",
   "ui.ai.model": "Model",
-  "ui.ai.modelHint": "Models Ollama has pulled on this machine.",
+  "ui.ai.modelHint": "Installed local GGUF models. Download and load a model on the Models page.",
   "ui.ai.modelEmpty": "No models found",
   "ui.ai.persona": "Persona",
   "ui.ai.personaHint": "The system instruction that shapes how I answer.",
   "ui.ai.notConfigured": "The generative mode is off by default — I work fully offline without it.",
-
   "ui.actions.save": "Save",
   "ui.actions.cancel": "Cancel",
   "ui.actions.restoreDefaults": "Restore defaults",
   "ui.actions.close": "Close",
-
   "ui.status.idle": "Ready",
   "ui.status.thinking": "Working…",
   "ui.status.speaking": "Speaking…",
   "ui.status.stopped": "Stopped",
   "ui.status.saved": "Settings saved.",
   "ui.status.saveFailed": "I couldn't save the settings.",
-
   "ui.footer.hotkey": "Alt + L opens and closes this window",
   "ui.tray.open": "Open settings",
   "ui.tray.exit": "Quit Laura",
-  "ui.tray.tooltip": "Laura Virtual Assistant"
+  "ui.tray.tooltip": "Laura Virtual Assistant",
+  "ui.models.install": "Download / resume",
+  "ui.models.working": "Working…",
+  "ui.models.done": "Ready.",
+  "ui.ai.provider": "Inference backend",
+  "ui.models.limited": "Available resources are below the recommendation. Free memory or disk space before installing.",
+  "ui.ai.embedded": "Local (built into Laura)",
+  "ui.models.catalog": "Available models",
+  "ui.tab.models": "Models",
+  "ui.models.network": "Install downloads weights from Hugging Face over HTTPS. Chat stays on this computer.",
+  "ui.models.compatible": "This model fits the measured resources. Generation quality and speed vary.",
+  "ui.models.hardwareUnavailable": "Hardware information is unavailable.",
+  "ui.models.intro": "Set up local AI",
+  "ui.models.load": "Load and use",
+  "ui.models.installed": "Installed models",
+  "ui.models.details": "Download: {0} MiB | {1} | model context: {2} tokens. CPU cores: {3}; RAM: {4:F1} GiB total / {5:F1} GiB free; disk: {6:F1} GiB free. Recommended RAM: {7} GiB. License: {8}. Laura uses a 2048-token context on CPU; GPU and VRAM are not probed.",
+  "ui.models.cancelled": "Cancelled. A partial download can be resumed.",
+  "ui.models.unload": "Unload",
+  "ui.models.delete": "Delete model",
+  "ui.models.deleteConfirm": "Delete these model weights? You can download them again.",
+  "ui.models.failed": "Operation failed: {0}",
+  "ui.models.verifying": "Verifying SHA256…",
+  "ui.memory.clearConfirm": "Delete saved chat history? The current session stays visible until restart.",
+  "ui.memory.explicit": "Only memories you save here are stored as facts. No background extraction or cloud upload.",
+  "ui.memory.clear": "Delete saved conversation history",
+  "ui.memory.text": "Fact or preference",
+  "ui.memory.privacy": "History is stored locally in SQLite. Turning this off stops new storage and recall; existing data remains until deleted.",
+  "ui.memory.delete": "Delete selected memory",
+  "ui.memory.done": "Memory updated.",
+  "ui.memory.remember": "Remember conversations on this computer",
+  "ui.memory.search": "Search memories",
+  "ui.tab.memory": "Memory",
+  "ui.memory.save": "Save memory",
+  "ui.memory.key": "Memory name",
+  "ui.voice.noSpeech": "No speech recognized.",
+  "ui.voice.review": "Review the recognized text, then press Send.",
+  "ui.voice.wait": "Wait until Laura finishes speaking or use Stop response before recording.",
+  "ui.general.languageHint": "Independent from the interface. Offline speech requires a matching installed Windows recognizer and voice.",
+  "ui.general.conversationLanguage": "Conversation and speech language",
+  "ui.voice.wakeUnavailable": "Hey Laura detection is unavailable until a suitable model is validated. Use Record voice.",
+  "ui.voice.output": "Playback device",
+  "ui.voice.defaultDevice": "System default",
+  "ui.voice.finish": "Finish recording",
+  "ui.voice.microphone": "Microphone",
+  "ui.voice.muted": "Unmute the microphone on the Voice page to record.",
+  "ui.general.language": "Interface language",
+  "ui.voice.localInput": "Audio stays on this computer. Capture starts only when you choose Record, for at most 15 seconds.",
+  "ui.voice.muteMic": "Mute microphone",
+  "ui.voice.talk": "Record voice",
+  "ui.voice.failed": "Voice input unavailable: {0}",
+  "ui.voice.installSpeech": "Download multilingual speech model",
+  "ui.voice.speechModelInfo": "Whisper Base: 141 MiB, MIT license. English and Portuguese transcription run on CPU. Download requires HTTPS; microphone audio stays local.",
+  "tools.saved": "Saved locally: {0}",
+  "tools.filesEmpty": "The assistant file workspace is empty.",
+  "phrases.undo": [
+    "undo last file"
+  ],
+  "tools.denied": "Action cancelled.",
+  "phrases.readClipboard": [
+    "read clipboard"
+  ],
+  "tools.undone": "The last file creation was undone.",
+  "tools.clipboardEmpty": "The clipboard contains no text.",
+  "ui.tools.confirm.Undo": "Delete the most recent file created by Laura? Undo is refused if the file has changed.",
+  "ui.tools.confirm.CaptureScreen": "Save a screenshot of the primary screen in Laura's local workspace? It will not be uploaded.",
+  "phrases.listFiles": [
+    "list assistant files"
+  ],
+  "phrases.captureScreen": [
+    "capture screen",
+    "take a screenshot"
+  ],
+  "tools.nothingToUndo": "No unchanged file is available to undo.",
+  "phrases.saveNote": [
+    "save note"
+  ],
+  "ui.tools.confirm.ReadClipboard": "Read clipboard text into the local conversation? It may contain private information.",
+  "phrases.sequencePrefix": [
+    "run steps:"
+  ],
+  "tools.sequenceInvalid": "Use up to four known commands separated by semicolons. No step ran.",
+  "ui.errors.network": "Check your internet connection and retry the download.",
+  "ui.errors.native": "The local engine could not start on this machine. Check the installation and CPU compatibility.",
+  "ui.errors.storage": "Check free disk space and file permissions, then retry. Existing data is preserved on failure.",
+  "ui.errors.invalid": "Check the selected device, model and entered values, then retry.",
+  "ui.errors.unexpected": "The operation could not finish. Check your settings and installed models, then retry. Technical details are recorded in the diagnostic log.",
+  "ui.hud.setup": "Setup",
+  "ui.hud.controls": "Controls",
+  "ui.hud.subtitle": "PERSONAL AI ASSISTANT",
+  "ui.hud.monitor": "SYSTEM MONITOR",
+  "ui.hud.cpu": "LAURA CPU / THREADS",
+  "ui.hud.ram": "SYSTEM MEMORY",
+  "ui.hud.disk": "APP DISK · FREE",
+  "ui.hud.backend": "INFERENCE BACKEND",
+  "ui.hud.uptime": "SESSION UPTIME",
+  "ui.hud.system": "PLATFORM",
+  "ui.hud.privacy": "MICROPHONE",
+  "ui.hud.local": "Push to talk only",
+  "ui.hud.core": "ASSISTANT CORE",
+  "ui.hud.awaiting": "STATE DISPLAY",
+  "ui.hud.ready": "Ready when you are.",
+  "ui.hud.prompt": "Type a command or use push to talk.",
+  "ui.hud.ai": "AI",
+  "ui.hud.back": "Back to HUD",
+  "ui.hud.activity": "ACTIVITY / COMMANDS",
+  "ui.hud.interrupt": "Interrupt",
+  "ui.hud.microphone": "Toggle mic",
+  "ui.hud.micReady": "Mic ready",
+  "ui.hud.micMuted": "Mic muted",
+  "ui.hud.hotkey": "Alt + L · show / hide",
+  "ui.hud.recording": "Recording voice",
+  "ui.maui.setup": "Setup",
+  "ui.maui.googleIntro": "Connect Laura to Google AI Studio for native Gemini Live conversations and the same voices as Mark-LV.",
+  "ui.maui.provider": "AI provider",
+  "ui.maui.enabled": "Enable AI conversations",
+  "ui.maui.key": "Google AI Studio API key",
+  "ui.maui.keyPlaceholder": "Paste a new key to save or replace it",
+  "ui.maui.importMark": "Import key and voice from Mark-LV",
+  "ui.maui.removeKey": "Remove saved key",
+  "ui.maui.liveVoice": "Gemini Live voice",
+  "ui.maui.continuous": "Continuous listening after pressing Start listening",
+  "ui.maui.cloudPrivacy": "Conversation, requested context and microphone audio while listening go to Google. Capture starts only through the listening button or while Ctrl + Space is held. Stop or mute closes capture.",
+  "ui.maui.ollamaEndpoint": "Ollama endpoint (local provider)",
+  "ui.maui.input": "Microphone",
+  "ui.maui.output": "Playback device",
+  "ui.maui.muted": "Microphone muted",
+  "ui.maui.offlineVoice": "Offline voice",
+  "ui.maui.prosodyHint": "Rate and pitch apply to offline voices. Gemini uses the selected native voice and conversational prosody. Volume applies to both.",
+  "ui.maui.general": "General",
+  "ui.maui.uiLanguage": "Interface language",
+  "ui.maui.language": "Conversation language",
+  "ui.maui.nickname": "Your name",
+  "ui.maui.greeting": "Greet on startup",
+  "ui.maui.hourly": "Announce full hours",
+  "ui.maui.autostart": "Start with Windows",
+  "ui.maui.save": "Save settings",
+  "ui.maui.saved": "Settings saved.",
+  "ui.maui.noKey": "No key saved. Paste or import your Google AI Studio key.",
+  "ui.maui.keySaved": "Key saved and protected for your Windows account.",
+  "ui.maui.validatingKey": "Checking the key with Gemini Live…",
+  "ui.maui.invalidKey": "Could not validate this key. Check the key, model, quota and connection. Your saved key was preserved.",
+  "ui.maui.unavailable": "Unavailable",
+  "ui.maui.noImportKey": "This file has no Gemini API key.",
+  "ui.maui.imported": "Key and voice imported. Press Save settings to apply.",
+  "ui.maui.systemDefault": "System default",
+  "ui.maui.localIntro": "Optional offline AI models. Gemini Live does not require these downloads.",
+  "ui.maui.cancel": "Cancel",
+  "ui.maui.delete": "Delete",
+  "ui.maui.edit": "Edit",
+  "ui.maui.memoryPrivacy": "History and preferences are stored on this computer. With Gemini enabled, recent history and selected preferences are sent as context when remembering is enabled.",
+  "ui.maui.stopRecording": "Stop listening",
+  "ui.maui.startListening": "Start listening",
+  "ui.maui.record": "Record voice",
+  "ui.maui.streaming": "Microphone audio is being sent to Google",
+  "ui.maui.micReady": "Microphone ready · capture off",
+  "ui.maui.unmuteFirst": "Unmute the microphone before starting capture.",
+  "ui.maui.listening": "Listening",
+  "ui.hud.compose": "Write to Laura",
+  "ui.state.ready": "Ready",
+  "ui.state.speaking": "Speaking",
+  "ui.state.working": "Working",
+  "ui.yes": "Yes",
+  "ui.no": "No",
+  "ui.maui.core": "Assistant core",
+  "ui.maui.activity": "Activity / commands",
+  "ui.maui.monitor": "System monitor",
+  "ui.maui.interrupt": "Interrupt",
+  "ui.maui.toggleMic": "Toggle mic",
+  "ui.maui.savePreview": "Save and preview voice",
+  "ui.maui.connectionTab": "Connection",
+  "ui.maui.preferencesTab": "Preferences",
+  "ui.maui.appsTab": "Applications",
+  "ui.maui.brazilianAccent": "Portuguese uses Brazilian pronunciation and vocabulary.",
+  "ui.maui.silence": "Pause before responding",
+  "ui.maui.listeningHelp": "Start listening once: Laura detects the end of your speech automatically. Hold Ctrl + Space for push-to-talk. M toggles mute when you are not typing.",
+  "ui.maui.shortcutHelp": "Hold Ctrl + Space · talk\nEsc · interrupt   M · mute   F11 · fullscreen",
+  "ui.maui.appsIntro": "Laura discovers Start Menu shortcuts, registered applications and portable emulators. Search to verify the program name and actual launch path.",
+  "ui.maui.searchApps": "Search applications",
+  "ui.maui.refreshApps": "Refresh applications",
+  "ui.maui.ram": "MEMORY",
+  "ui.maui.disk": "DISK",
+  "ui.maui.network": "NETWORK / INTERNET",
+  "ui.maui.free": "free",
+  "ui.maui.offline": "Disconnected",
+  "ui.maui.networkHint": "Traffic relative to adapter link capacity.",
+  "ui.maui.configureGoogle": "Configure a Google AI Studio key in settings to use Laura.",
+  "ui.maui.liveFailed": "Gemini could not complete the operation. Check the connection and account quota.",
+  "ui.maui.confirmCamera": "Capture one camera frame and send it to Google for analysis?",
+  "ui.maui.confirmSystem": "Apply the following system action: {0}?",
+  "ui.maui.confirmFile": "Allow this file action: {0}\n{1}?",
+  "ui.maui.confirmProgram": "Run this program?\n{0} {1}\nWorking folder: {2}",
+  "ui.maui.confirmRead": "Read this file and send its contents to Google for analysis?\n{0}"
 }

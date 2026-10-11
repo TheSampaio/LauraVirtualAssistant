@@ -10,8 +10,7 @@ public sealed record LauraSettings
     /// <summary>
     /// Culture used when nothing has been configured.
     ///
-    /// Laura is English-only, so persisted values from older multilingual builds are
-    /// normalized back to this culture.
+    /// English remains the default; unsupported language tags fall back to it.
     /// </summary>
     public const string DefaultCulture = "en-US";
 
@@ -24,6 +23,18 @@ public sealed record LauraSettings
     /// Gets the speech and response culture, as a BCP-47 tag.
     /// </summary>
     public string Culture { get; init; } = DefaultCulture;
+
+    /// <summary>Gets the independently selected interface language.</summary>
+    public string UiCulture { get; init; } = DefaultCulture;
+    /// <summary>Gets the microphone index, or -1 for the system default.</summary>
+    public int InputDevice { get; init; } = -1;
+    /// <summary>Gets the playback index, or -1 for the system default.</summary>
+    public int OutputDevice { get; init; } = -1;
+    /// <summary>Gets whether microphone capture is disabled.</summary>
+    public bool MicrophoneMuted { get; init; } = true;
+
+    /// <summary>Gets whether local conversation history should persist across sessions.</summary>
+    public bool RememberConversations { get; init; } = true;
 
     /// <summary>
     /// Gets the name Laura uses to address the user.
@@ -63,9 +74,19 @@ public sealed record LauraSettings
     /// </summary>
     public CultureInfo ResolveCulture()
     {
-        _ = Culture;
-        return CultureInfo.GetCultureInfo(DefaultCulture);
+        return CultureInfo.GetCultureInfo(SanitizeCulture(Culture));
     }
+
+    /// <summary>Resolves the independent presentation language with English fallback.</summary>
+    public CultureInfo ResolveUiCulture() => CultureInfo.GetCultureInfo(SanitizeCulture(UiCulture));
+
+    /// <summary>Normalizes supported locales without interpreting arbitrary external tags.</summary>
+    public static string SanitizeCulture(string? name) => name?.Trim().ToLowerInvariant() switch
+    {
+        "pt-br" => "pt-BR",
+        "en-us" => "en-US",
+        _ => DefaultCulture,
+    };
 
     /// <summary>
     /// Returns a copy with every section sanitized.
@@ -77,7 +98,10 @@ public sealed record LauraSettings
     {
         return this with
         {
-            Culture = DefaultCulture,
+            Culture = SanitizeCulture(Culture),
+            UiCulture = SanitizeCulture(UiCulture),
+            InputDevice = Math.Max(-1, InputDevice),
+            OutputDevice = Math.Max(-1, OutputDevice),
             UserNickname = UserNickname.Trim(),
             Voice = Voice.Sanitized(),
             GenerativeAi = GenerativeAi.Sanitized(),

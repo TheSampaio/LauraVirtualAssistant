@@ -19,7 +19,12 @@ public sealed class IniSettingsStoreTests : IDisposable
     {
         LauraSettings original = new LauraSettings
         {
-            Culture = "en-US",
+            Culture = "pt-BR",
+            UiCulture = "en-US",
+            RememberConversations = false,
+            MicrophoneMuted = false,
+            InputDevice = 2,
+            OutputDevice = 1,
             GreetOnStartup = false,
             AnnounceHourly = true,
             StartWithWindows = true,
@@ -27,8 +32,11 @@ public sealed class IniSettingsStoreTests : IDisposable
             GenerativeAi = new GenerativeAiOptions
             {
                 Enabled = true,
+                Provider = "gemini",
+                LiveVoice = "Kore",
+                ContinuousListening = true,
                 Endpoint = "http://localhost:11434",
-                Model = "llama3.2",
+                Model = "gemini-3.1-flash-live-preview",
                 Persona = "Be brief.",
             },
         }.Sanitized();
@@ -38,6 +46,14 @@ public sealed class IniSettingsStoreTests : IDisposable
         LauraSettings loaded = (await store.LoadAsync()).Sanitized();
 
         Assert.Equal(original.Culture, loaded.Culture);
+        Assert.Equal(original.GenerativeAi.LiveVoice, loaded.GenerativeAi.LiveVoice);
+        Assert.Equal(original.GenerativeAi.ContinuousListening, loaded.GenerativeAi.ContinuousListening);
+        Assert.Equal(original.GenerativeAi.Provider, loaded.GenerativeAi.Provider);
+        Assert.Equal(original.UiCulture, loaded.UiCulture);
+        Assert.Equal(original.RememberConversations, loaded.RememberConversations);
+        Assert.Equal(original.MicrophoneMuted, loaded.MicrophoneMuted);
+        Assert.Equal(original.InputDevice, loaded.InputDevice);
+        Assert.Equal(original.OutputDevice, loaded.OutputDevice);
         Assert.Equal(original.GreetOnStartup, loaded.GreetOnStartup);
         Assert.Equal(original.AnnounceHourly, loaded.AnnounceHourly);
         Assert.Equal(original.StartWithWindows, loaded.StartWithWindows);

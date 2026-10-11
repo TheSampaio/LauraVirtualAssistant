@@ -29,10 +29,14 @@ public sealed class RecordingConversationEngine : IConversationEngine
     /// <summary>Gets how many times the engine was queried.</summary>
     public int CallCount { get; private set; }
 
+    /// <summary>Gets the actual last request for language and context assertions.</summary>
+    public ConversationTurn? LastTurn { get; private set; }
+
     /// <inheritdoc />
     public Task<string?> AskAsync(ConversationTurn turn, CancellationToken cancellationToken = default)
     {
         CallCount++;
+        LastTurn = turn;
         return Task.FromResult(_answer);
     }
 }

@@ -116,6 +116,11 @@ public sealed class IniSettingsStore : ISettingsStore
         return new LauraSettings
         {
             Culture = document.GetString(GeneralSection, "Language", defaults.Culture),
+            UiCulture = document.GetString(GeneralSection, "UiLanguage", defaults.UiCulture),
+            InputDevice = document.GetInt32(VoiceSection, "InputDevice", defaults.InputDevice),
+            OutputDevice = document.GetInt32(VoiceSection, "OutputDevice", defaults.OutputDevice),
+            MicrophoneMuted = document.GetBoolean(VoiceSection, "MicrophoneMuted", defaults.MicrophoneMuted),
+            RememberConversations = document.GetBoolean(GeneralSection, "RememberConversations", defaults.RememberConversations),
             GreetOnStartup = document.GetBoolean(GeneralSection, "GreetOnStartup", defaults.GreetOnStartup),
             AnnounceHourly = document.GetBoolean(GeneralSection, "AnnounceHourly", defaults.AnnounceHourly),
             StartWithWindows = document.GetBoolean(GeneralSection, "StartWithWindows", defaults.StartWithWindows),
@@ -139,6 +144,9 @@ public sealed class IniSettingsStore : ISettingsStore
                 Endpoint = document.GetString(GenerativeAiSection, "Endpoint", defaults.GenerativeAi.Endpoint),
                 Model = document.GetString(GenerativeAiSection, "Model", defaults.GenerativeAi.Model),
                 Persona = document.GetString(GenerativeAiSection, "Persona", defaults.GenerativeAi.Persona),
+                LiveVoice = document.GetString(GenerativeAiSection, "LiveVoice", defaults.GenerativeAi.LiveVoice),
+                ContinuousListening = document.GetBoolean(GenerativeAiSection, "ContinuousListening", false),
+                SilenceDurationMs = document.GetInt32(GenerativeAiSection, "SilenceDurationMs", defaults.GenerativeAi.SilenceDurationMs),
             },
         };
     }
@@ -157,6 +165,11 @@ public sealed class IniSettingsStore : ISettingsStore
         var document = new IniDocument();
 
         document.Set(GeneralSection, "Language", settings.Culture);
+        document.Set(GeneralSection, "UiLanguage", settings.UiCulture);
+        document.SetNumber(VoiceSection, "InputDevice", settings.InputDevice);
+        document.SetNumber(VoiceSection, "OutputDevice", settings.OutputDevice);
+        document.SetBoolean(VoiceSection, "MicrophoneMuted", settings.MicrophoneMuted);
+        document.SetBoolean(GeneralSection, "RememberConversations", settings.RememberConversations);
         document.SetBoolean(GeneralSection, "GreetOnStartup", settings.GreetOnStartup);
         document.SetBoolean(GeneralSection, "AnnounceHourly", settings.AnnounceHourly);
         document.SetBoolean(GeneralSection, "StartWithWindows", settings.StartWithWindows);
@@ -173,6 +186,9 @@ public sealed class IniSettingsStore : ISettingsStore
         document.Set(GenerativeAiSection, "Endpoint", settings.GenerativeAi.Endpoint);
         document.Set(GenerativeAiSection, "Model", settings.GenerativeAi.Model);
         document.Set(GenerativeAiSection, "Persona", settings.GenerativeAi.Persona);
+        document.Set(GenerativeAiSection, "LiveVoice", settings.GenerativeAi.LiveVoice);
+        document.SetBoolean(GenerativeAiSection, "ContinuousListening", settings.GenerativeAi.ContinuousListening);
+        document.SetNumber(GenerativeAiSection, "SilenceDurationMs", settings.GenerativeAi.SilenceDurationMs);
 
         return document;
     }
