@@ -22,7 +22,7 @@ public sealed class WindowsShortcutHost : IDisposable
         _timer = window.Dispatcher.CreateTimer(); _timer.Interval = TimeSpan.FromMilliseconds(33); _timer.Tick += Tick; _timer.Start();
     }
     /// <summary>Toggles a true native fullscreen presenter and restores the normal window on exit.</summary>
-    public void ToggleFullscreen() => _native.AppWindow.SetPresenter(_native.AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen ? AppWindowPresenterKind.Overlapped : AppWindowPresenterKind.FullScreen);
+    public void ToggleFullscreen() => WindowsWindowTheme.ToggleFullscreen(_native);
     /// <summary>Dispatches only debounced transitions; plain M is ignored while editing text.</summary>
     private void Tick(object? sender, EventArgs args)
     {

@@ -16,7 +16,11 @@ public static class WindowsConfirmation
                 var native = (Microsoft.UI.Xaml.Window)Application.Current!.Windows[0].Handler!.PlatformView!;
                 var dialog = new Microsoft.UI.Xaml.Controls.ContentDialog
                 {
-                    Title = "Laura", Content = message, PrimaryButtonText = yes, CloseButtonText = no,
+                    Title = "Laura", Content = new Microsoft.UI.Xaml.Controls.ScrollViewer
+                    {
+                        MaxHeight = 420, HorizontalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Disabled,
+                        Content = new Microsoft.UI.Xaml.Controls.TextBlock { Text = message, TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap, IsTextSelectionEnabled = true, MaxWidth = 540 },
+                    }, PrimaryButtonText = yes, CloseButtonText = no,
                     DefaultButton = Microsoft.UI.Xaml.Controls.ContentDialogButton.Close,
                     XamlRoot = native.Content.XamlRoot, RequestedTheme = Microsoft.UI.Xaml.ElementTheme.Dark,
                 };

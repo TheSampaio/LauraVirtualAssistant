@@ -103,6 +103,19 @@ public sealed class SqliteConversationMemory : IConversationMemory
         return facts;
     }
 
+    /// <summary>Reads all legacy facts for a lossless one-time Markdown migration, without modifying their source rows.</summary>
+    public IReadOnlyList<MemoryFact> ReadAllFacts()
+    {
+        Initialize();
+        using SqliteConnection connection = Open();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT key,text,stamp FROM facts ORDER BY key";
+        using SqliteDataReader reader = command.ExecuteReader();
+        var facts = new List<MemoryFact>();
+        while (reader.Read()) { facts.Add(new(reader.GetString(0), reader.GetString(1), DateTimeOffset.Parse(reader.GetString(2), CultureInfo.InvariantCulture))); }
+        return facts;
+    }
+
     /// <inheritdoc />
     public void SetFact(string key, string text)
     {

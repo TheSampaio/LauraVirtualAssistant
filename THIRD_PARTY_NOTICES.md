@@ -9,6 +9,8 @@ Laura retains its existing LICENSE. No endorsement by the reference projects is 
 
 ## Application dependencies
 
+The HUD bundles selected Lucide SVG icons from https://github.com/lucide-icons/lucide, downloaded on 2026-10-12. Only stroke colors are adapted to Laura's palette. The ISC license and Feather-derived MIT notice are preserved in `licenses/Lucide-License.txt`; no icon package or runtime dependency is added.
+
 | Component | Pinned version | License / source |
 | --- | --- | --- |
 | .NET runtime / Microsoft.Extensions.* | .NET 10; exact resolved packages in inventory | MIT, https://github.com/dotnet/runtime |
@@ -17,6 +19,9 @@ Laura retains its existing LICENSE. No endorsement by the reference projects is 
 | Windows SDK APIs | target 10.0.19041.0 | Windows platform terms |
 | NAudio.Core / NAudio.WinMM | 2.2.1 | MIT, https://github.com/naudio/NAudio |
 | Microsoft.Data.Sqlite | 9.0.10 | MIT, https://github.com/dotnet/efcore |
+| Markdig | 1.4.0 | BSD-2-Clause, https://github.com/xoofx/markdig; included license |
+| YamlDotNet | 18.1.0 | MIT, https://github.com/aaubry/YamlDotNet; included license |
+| Microsoft.ML.OnnxRuntime / Managed | 1.31.0 | MIT, https://github.com/microsoft/onnxruntime; included license and third-party notices |
 | SQLitePCLRaw | 2.1.12 | Apache-2.0; bundled SQLite public domain, https://www.sqlite.org/copyright.html |
 | ProtectedData | 9.0.13 | MIT, https://github.com/dotnet/runtime |
 | xUnit (development only) | 2.9.2 / runner 2.8.2 | Apache-2.0, https://github.com/xunit/xunit |

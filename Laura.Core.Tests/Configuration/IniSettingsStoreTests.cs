@@ -23,6 +23,8 @@ public sealed class IniSettingsStoreTests : IDisposable
             UiCulture = "en-US",
             RememberConversations = false,
             MicrophoneMuted = false,
+            ClapWakeEnabled = true,
+            ClapWakeSensitivity = 67,
             InputDevice = 2,
             OutputDevice = 1,
             GreetOnStartup = false,
@@ -52,6 +54,8 @@ public sealed class IniSettingsStoreTests : IDisposable
         Assert.Equal(original.UiCulture, loaded.UiCulture);
         Assert.Equal(original.RememberConversations, loaded.RememberConversations);
         Assert.Equal(original.MicrophoneMuted, loaded.MicrophoneMuted);
+        Assert.Equal(original.ClapWakeEnabled, loaded.ClapWakeEnabled);
+        Assert.Equal(original.ClapWakeSensitivity, loaded.ClapWakeSensitivity);
         Assert.Equal(original.InputDevice, loaded.InputDevice);
         Assert.Equal(original.OutputDevice, loaded.OutputDevice);
         Assert.Equal(original.GreetOnStartup, loaded.GreetOnStartup);
@@ -59,6 +63,20 @@ public sealed class IniSettingsStoreTests : IDisposable
         Assert.Equal(original.StartWithWindows, loaded.StartWithWindows);
         Assert.Equal(original.Voice, loaded.Voice);
         Assert.Equal(original.GenerativeAi, loaded.GenerativeAi);
+    }
+
+    [Fact]
+    public async Task BrainOptionsRoundTripOutsideTheVaultAndBoundInvalidRankingValues()
+    {
+        var options = new Laura.Core.Brain.BrainOptions { Directory = "C:/Synthetic/brain", EmbeddingModel = "C:/Synthetic/model.onnx", EmbeddingVocabulary = "C:/Synthetic/vocab.txt", AutoLearn = false,
+            ContextCharacters = 2200, GraphLimit = 200, LexicalWeight = .6, SemanticWeight = .2, GraphWeight = .1, TemporalWeight = .1, TrustedSkills = ["fictional-id:fictional-hash"] };
+        IniSettingsStore store = CreateStore(); await store.SaveAsync(LauraSettings.Default with { Brain = options });
+        var loaded = (await store.LoadAsync()).Brain;
+        Assert.Equal(options.Directory, loaded.Directory); Assert.Equal(options.EmbeddingModel, loaded.EmbeddingModel); Assert.Equal(options.EmbeddingVocabulary, loaded.EmbeddingVocabulary);
+        Assert.False(loaded.AutoLearn); Assert.Equal(2200, loaded.ContextCharacters); Assert.Equal(200, loaded.GraphLimit); Assert.Equal(options.TrustedSkills, loaded.TrustedSkills);
+        Assert.Equal(.6, loaded.LexicalWeight); Assert.Equal(.2, loaded.SemanticWeight); Assert.Equal(.1, loaded.GraphWeight); Assert.Equal(.1, loaded.TemporalWeight);
+        var bounded = options with { ContextCharacters = -1, GraphLimit = int.MaxValue, SemanticWeight = double.NaN };
+        Assert.Equal(500, bounded.Sanitized().ContextCharacters); Assert.Equal(1000, bounded.Sanitized().GraphLimit); Assert.Equal(.3, bounded.Sanitized().SemanticWeight);
     }
 
     [Fact]

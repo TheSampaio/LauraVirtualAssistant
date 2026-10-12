@@ -20,6 +20,11 @@ if (!(Test-Path -LiteralPath $sentinel)) { throw 'Update changed unrelated perso
 foreach ($relative in @('Laura.exe', 'hostfxr.dll', 'hostpolicy.dll', 'coreclr.dll', 'Microsoft.Maui.Controls.dll', 'Microsoft.UI.Xaml.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'vcomp140.dll', 'e_sqlite3.dll', 'NAudio.Core.dll', 'NAudio.WinMM.dll', 'Localization/Locales/en-US.json', 'Localization/Locales/pt-BR.json', 'licenses/dependency-inventory.json')) {
     if (!(Test-Path -LiteralPath (Join-Path $installed $relative))) { throw "Missing packaged dependency: $relative" }
 }
+foreach ($brainDependency in @('YamlDotNet.dll', 'Markdig.dll', 'Microsoft.ML.OnnxRuntime.dll', 'onnxruntime.dll', 'licenses/YamlDotNet-18.1.0-LICENSE.txt', 'licenses/Markdig-1.4.0-LICENSE.txt', 'licenses/OnnxRuntime-1.31.0-LICENSE.txt', 'licenses/OnnxRuntime-1.31.0-ThirdPartyNotices.txt')) {
+    if (!(Test-Path -LiteralPath (Join-Path $installed $brainDependency))) { throw "Missing Brain dependency or license: $brainDependency" }
+}
+if (Get-ChildItem -LiteralPath $installed -Recurse -Directory | Where-Object { $_.Name -eq 'brain' }) { throw 'Personal Brain folders must not be distributed.' }
+if (Get-ChildItem -LiteralPath $installed -Recurse -File -Filter '*.onnx') { throw 'Optional user model weights must not be distributed.' }
 foreach ($removed in @('System.Windows.Forms.dll', 'System.Speech.dll', 'OllamaSharp.dll', 'LLamaSharp.dll', 'Whisper.net.dll', 'whisper.dll', 'llama.dll', 'sherpa-onnx-c-api.dll')) {
     if (Get-ChildItem -LiteralPath $installed -Recurse -File -Filter $removed) { throw "Removed integration must not ship: $removed" }
 }

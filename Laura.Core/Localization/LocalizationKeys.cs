@@ -6,6 +6,20 @@ namespace Laura.Core.Localization;
 /// </summary>
 public static class LocalizationKeys
 {
+    /// <summary>Local listening controls and the verified wake briefing request.</summary>
+    public static class Listening
+    {
+        /// <summary>Whole-command standby phrases.</summary>
+        public const string RestPhrases = "phrases.rest";
+        /// <summary>Standby confirmation.</summary>
+        public const string RestConfirmation = "assistant.rest";
+        /// <summary>Instructions for summarizing explicitly collected briefing data.</summary>
+        public const string BriefingRequest = "assistant.wakeBriefing";
+        /// <summary>Concise history label for the wake gesture.</summary>
+        public const string BriefingTitle = "assistant.wakeTitle";
+        /// <summary>Short varied clap acknowledgments, optionally including the owner's name.</summary>
+        public const string WakeGreeting = "assistant.clapGreeting";
+    }
     /// <summary>Messages spoken by the engine itself, outside any skill.</summary>
     public static class Assistant
     {
@@ -133,6 +147,18 @@ public static class LocalizationKeys
 
     }
 
+    /// <summary>Localized conservative Brain-learning patterns and attributed entity text.</summary>
+    public static class Brain
+    {
+        /// <summary>Prefix of durable declaration pattern keys.</summary>
+        public const string LearningPrefix = "brain.learn.";
+        /// <summary>Explicit project-use relationship pattern.</summary>
+        public const string ProjectUse = "brain.learn.projectUse";
+        /// <summary>Attribution for a named entity, without inventing a definition.</summary>
+        public const string EntityContext = "brain.entityContext";
+        /// <summary>Whole-request patterns for an explicit overview of the owner's existing Brain knowledge.</summary>
+        public const string OverviewPattern = "brain.recallOverview";
+    }
     /// <summary>Friendly names for the applications Laura can open.</summary>
     public static class Applications
     {

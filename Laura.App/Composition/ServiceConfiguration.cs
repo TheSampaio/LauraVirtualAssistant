@@ -8,6 +8,7 @@ using Laura.Core.Engine;
 using Laura.Core.Localization;
 using Laura.Core.Models;
 using Laura.Core.Memory;
+using Laura.Core.Brain;
 using Laura.Core.Files;
 using Laura.Core.Skills.Builtin;
 using Laura.Core.Weather;
@@ -70,8 +71,17 @@ public static class ServiceConfiguration
             settingsPath,
             provider.GetRequiredService<ILogger<IniSettingsStore>>()));
         services.AddSingleton<ISettingsService, SettingsService>();
-        services.AddSingleton<IConversationMemory>(_ => new SqliteConversationMemory(
+        services.AddSingleton<SqliteConversationMemory>(_ => new SqliteConversationMemory(
             Path.Combine(Path.GetDirectoryName(settingsPath)!, "memory.db")));
+        services.AddSingleton<IBrainEmbedding, OnnxBrainEmbedding>();
+        string brainCache = storageDirectory is null ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Laura", "BrainCache") : Path.Combine(storageDirectory, "BrainCache");
+        services.AddSingleton(provider => new BrainIndex(brainCache, provider.GetRequiredService<IBrainEmbedding>()));
+        services.AddSingleton<Func<string, IBrainStorage>>(_ => location => new FileBrainStorage(location));
+        services.AddSingleton<BrainService>();
+        services.AddSingleton<BrainLearning>();
+        services.AddSingleton<BrainSkills>();
+        services.AddSingleton<BrainConversationMemory>();
+        services.AddSingleton<IConversationMemory>(provider => provider.GetRequiredService<BrainConversationMemory>());
         services.AddSingleton<IApiKeyStore>(_ => new ProtectedApiKeyStore(Path.GetDirectoryName(settingsPath)!));
         services.AddSingleton(_ => new UserFileWorkspace(Path.Combine(Path.GetDirectoryName(settingsPath)!, "Workspace")));
 
@@ -87,10 +97,18 @@ public static class ServiceConfiguration
         services.AddSingleton<IWeatherProvider, WttrWeatherProvider>();
 
         services.AddSingleton<GeminiLiveClient>();
+        services.AddSingleton<ListeningControl>();
+        services.AddSingleton<WindowsClapListener>();
+        services.AddSingleton<WakeBriefing>();
+        services.AddSingleton<IBriefingContributor, NewsBriefingContributor>();
+        services.AddSingleton<IBriefingContributor, CurrencyBriefingContributor>();
+        services.AddSingleton<IBriefingContributor, ReminderBriefingContributor>();
+        services.AddSingleton<ClapWakeCoordinator>();
         services.AddSingleton<MarkLvConfigurationImporter>();
         services.AddSingleton<IConversationEngine>(provider => provider.GetRequiredService<GeminiLiveClient>());
         services.AddSingleton<WindowsApplicationCatalog>();
         services.AddSingleton<WindowsResourceMonitor>();
+        services.AddSingleton<WindowsDiskMonitor>();
         services.AddSingleton<WindowsGpuMonitor>();
         services.AddSingleton<IAssistantTools, MauiAssistantTools>();
         services.AddSingleton<ReminderScheduler>();

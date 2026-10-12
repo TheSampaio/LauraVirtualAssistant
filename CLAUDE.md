@@ -104,10 +104,23 @@ never INI, logs, screenshots or repository files. Importing a Mark-LV configurat
 must leave the source file unchanged. No reference code or assets are bundled.
 
 Do not restore Ollama, local model inference or Windows/offline voice pickers.
+The Brain may use optional local CPU ONNX sentence embeddings, as requested by the
+owner; these provide retrieval vectors, not a local conversation or voice engine.
+Brain Markdown is authoritative. FTS5/vector caches live outside its shared root,
+are rebuildable, and must never become the source of durable facts. New vaults
+must be Git-protected before writes. Never log note bodies or YAML parse contents.
+
+Use `Brain` for the default vault and capitalize the first letter of every newly
+created Brain folder (for example `Knowledge/Facts`, `Owner/Preferences`, `Skills`
+and `Archive/Revisions`). Preserve existing folder spelling, document filenames,
+stable identities and links; do not rename user-authored vault contents implicitly.
 Native tools use explicit structured arguments and report actual results.
 Consequential operations use trusted MAUI confirmation. Capture requires an
-explicit listening button or held Ctrl+Space chord and an unmuted setting;
-muting, stopping, early key release and shutdown close capture. Continuous
+explicit listening button, held Ctrl+Space chord, or the user's opt-in double-clap
+wake setting, and an unmuted setting. The clap stream is local only, without
+recording or cloud transmission, until wake starts a conversation. Disabling the
+option closes local detection. Muting, stopping, early key release and shutdown
+close cloud capture. Continuous
 listening uses automatic speech-end detection. Brazilian conversation settings
 must request Brazilian vocabulary and accent.
 
@@ -147,6 +160,10 @@ voice sounds more natural).
 
 Use the shared Theme helpers for native controls. Centralize translated UI text in
 the EN/PT catalogs and keep conversation language independent from UI language.
+Use `Theme.PageHeading` and `Theme.BackButton` for secondary workspace navigation,
+and `Theme.ActionButton`/`Theme.SetSelected` for consistent action and tab styling.
+Share spacing, typography and pointer/keyboard states instead of duplicating them
+inside pages. Preserve workspace-specific layouts and navigation guards.
 Use explicit grid coordinates when reparenting views during responsive layout.
 Pause the animation timer while the HUD is off screen. The --ui-smoke option
 renders the app itself with isolated storage; it must never capture a microphone.

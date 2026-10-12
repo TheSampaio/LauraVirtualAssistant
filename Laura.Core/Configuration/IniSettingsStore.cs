@@ -120,7 +120,21 @@ public sealed class IniSettingsStore : ISettingsStore
             InputDevice = document.GetInt32(VoiceSection, "InputDevice", defaults.InputDevice),
             OutputDevice = document.GetInt32(VoiceSection, "OutputDevice", defaults.OutputDevice),
             MicrophoneMuted = document.GetBoolean(VoiceSection, "MicrophoneMuted", defaults.MicrophoneMuted),
+            ClapWakeEnabled = document.GetBoolean(VoiceSection, "ClapWakeEnabled", defaults.ClapWakeEnabled),
+            ClapWakeSensitivity = document.GetInt32(VoiceSection, "ClapWakeSensitivity", defaults.ClapWakeSensitivity),
             RememberConversations = document.GetBoolean(GeneralSection, "RememberConversations", defaults.RememberConversations),
+            Brain = new Laura.Core.Brain.BrainOptions
+            {
+                Directory = document.GetString("Brain", "Directory", ""),
+                AutoLearn = document.GetBoolean("Brain", "AutoLearn", true),
+                ContextCharacters = document.GetInt32("Brain", "ContextCharacters", 5000),
+                EmbeddingModel = document.GetString("Brain", "EmbeddingModel", ""),
+                EmbeddingVocabulary = document.GetString("Brain", "EmbeddingVocabulary", ""),
+                LexicalWeight = document.GetDouble("Brain", "LexicalWeight", .45), SemanticWeight = document.GetDouble("Brain", "SemanticWeight", .3),
+                GraphWeight = document.GetDouble("Brain", "GraphWeight", .15), TemporalWeight = document.GetDouble("Brain", "TemporalWeight", .1),
+                GraphLimit = document.GetInt32("Brain", "GraphLimit", 400)
+                , TrustedSkills = document.GetString("Brain", "TrustedSkills", "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            },
             GreetOnStartup = document.GetBoolean(GeneralSection, "GreetOnStartup", defaults.GreetOnStartup),
             AnnounceHourly = document.GetBoolean(GeneralSection, "AnnounceHourly", defaults.AnnounceHourly),
             StartWithWindows = document.GetBoolean(GeneralSection, "StartWithWindows", defaults.StartWithWindows),
@@ -169,7 +183,20 @@ public sealed class IniSettingsStore : ISettingsStore
         document.SetNumber(VoiceSection, "InputDevice", settings.InputDevice);
         document.SetNumber(VoiceSection, "OutputDevice", settings.OutputDevice);
         document.SetBoolean(VoiceSection, "MicrophoneMuted", settings.MicrophoneMuted);
+        document.SetBoolean(VoiceSection, "ClapWakeEnabled", settings.ClapWakeEnabled);
+        document.SetNumber(VoiceSection, "ClapWakeSensitivity", settings.ClapWakeSensitivity);
         document.SetBoolean(GeneralSection, "RememberConversations", settings.RememberConversations);
+        document.Set("Brain", "Directory", settings.Brain.Directory);
+        document.SetBoolean("Brain", "AutoLearn", settings.Brain.AutoLearn);
+        document.SetNumber("Brain", "ContextCharacters", settings.Brain.ContextCharacters);
+        document.Set("Brain", "EmbeddingModel", settings.Brain.EmbeddingModel);
+        document.Set("Brain", "EmbeddingVocabulary", settings.Brain.EmbeddingVocabulary);
+        document.SetNumber("Brain", "LexicalWeight", settings.Brain.LexicalWeight);
+        document.SetNumber("Brain", "SemanticWeight", settings.Brain.SemanticWeight);
+        document.SetNumber("Brain", "GraphWeight", settings.Brain.GraphWeight);
+        document.SetNumber("Brain", "TemporalWeight", settings.Brain.TemporalWeight);
+        document.SetNumber("Brain", "GraphLimit", settings.Brain.GraphLimit);
+        document.Set("Brain", "TrustedSkills", string.Join(';', settings.Brain.TrustedSkills));
         document.SetBoolean(GeneralSection, "GreetOnStartup", settings.GreetOnStartup);
         document.SetBoolean(GeneralSection, "AnnounceHourly", settings.AnnounceHourly);
         document.SetBoolean(GeneralSection, "StartWithWindows", settings.StartWithWindows);

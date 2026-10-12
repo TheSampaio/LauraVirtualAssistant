@@ -66,6 +66,9 @@ public sealed class GreetingComposer
     public string ComposeStartupBriefing() =>
         $"{ComposeGreeting()} {_localizer.Get(LocalizationKeys.Greeting.Summary, _clock.Now)}";
 
+    /// <summary>Composes a short localized acknowledgment of an explicit clap wake, optionally addressing the owner.</summary>
+    public string ComposeWakeGreeting() => _localizer.Get(LocalizationKeys.Listening.WakeGreeting, _userContext.DisplayName);
+
     /// <summary>
     /// Composes the announcement of a full hour.
     ///

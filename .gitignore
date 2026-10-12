@@ -23,6 +23,12 @@ settings.ini*
 memory.db*
 reminders.json*
 /Workspace/
+/brain/
+# Custom vaults receive exact Git exclusions from FileBrainStorage.
+brain-index*.db*
+brain-vectors*.db*
+/.brain-cache/
+brain-backup*.zip
 .env
 .env.*
 !.env.example

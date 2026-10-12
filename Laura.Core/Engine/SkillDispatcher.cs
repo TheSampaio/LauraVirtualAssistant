@@ -68,6 +68,9 @@ public sealed class SkillDispatcher : ISkillDispatcher
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        if (request.Source == SkillRequestSource.Context)
+        { return await AskConversationEngineAsync(request, cancellationToken).ConfigureAwait(false); }
+
         IReadOnlyList<string>? steps = CommandSequence.Parse(request.RawText, _localizer.GetPhrases("phrases.sequencePrefix"));
         if (steps is not null)
         {
@@ -113,7 +116,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
 
         return _settings.Current.GenerativeAi.Enabled
             && _conversationEngine.IsAvailable
-            && !_skills.Any(skill => skill.CanHandle(request));
+            && (request.Source == SkillRequestSource.Context || !_skills.Any(skill => skill.CanHandle(request)));
     }
 
     /// <summary>
