@@ -32,9 +32,15 @@ public sealed record LauraSettings
     public int OutputDevice { get; init; } = -1;
     /// <summary>Gets whether microphone capture is disabled.</summary>
     public bool MicrophoneMuted { get; init; } = true;
+    /// <summary>Gets whether the user explicitly enabled local double-clap microphone detection.</summary>
+    public bool ClapWakeEnabled { get; init; }
+    /// <summary>Gets local clap sensitivity from zero to one hundred.</summary>
+    public int ClapWakeSensitivity { get; init; } = 50;
 
     /// <summary>Gets whether local conversation history should persist across sessions.</summary>
     public bool RememberConversations { get; init; } = true;
+    /// <summary>Gets portable Brain location, learning, retrieval and local embedding options.</summary>
+    public Laura.Core.Brain.BrainOptions Brain { get; init; } = new();
 
     /// <summary>
     /// Gets the name Laura uses to address the user.
@@ -102,9 +108,11 @@ public sealed record LauraSettings
             UiCulture = SanitizeCulture(UiCulture),
             InputDevice = Math.Max(-1, InputDevice),
             OutputDevice = Math.Max(-1, OutputDevice),
+            ClapWakeSensitivity = Math.Clamp(ClapWakeSensitivity, 0, 100),
             UserNickname = UserNickname.Trim(),
             Voice = Voice.Sanitized(),
             GenerativeAi = GenerativeAi.Sanitized(),
+            Brain = Brain.Sanitized(),
         };
     }
 }

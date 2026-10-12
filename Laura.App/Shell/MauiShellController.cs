@@ -8,8 +8,11 @@ public sealed class MauiShellController : Laura.Core.Abstractions.IShellControll
     private Action? _show;
     private Action? _toggle;
     private Action? _shutdown;
+    private Action? _reveal;
     /// <summary>Binds window actions after MAUI has created the native handle.</summary>
-    public void Bind(Action show, Action toggle, Action shutdown) { _show = show; _toggle = toggle; _shutdown = shutdown; }
+    public void Bind(Action show, Action toggle, Action shutdown, Action reveal) { _show = show; _toggle = toggle; _shutdown = shutdown; _reveal = reveal; }
+    /// <summary>Reveals the current page for a requested native approval without navigating away from unsaved work; call on the UI thread.</summary>
+    public void RevealForConfirmation() => _reveal?.Invoke();
     /// <inheritdoc />
     public void ShowSettings() => MainThread.BeginInvokeOnMainThread(() => _show?.Invoke());
     /// <inheritdoc />

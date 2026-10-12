@@ -5,6 +5,8 @@ namespace Laura.App.Controls;
 /// <summary>Draws concentric counter-rotating reactor rings with no face or raster asset.</summary>
 public sealed class AssistantCoreDrawable : IDrawable
 {
+    /// <summary>Gets the common period for ring speeds 1, 1.3, .7 and .35 and both pulse periods.</summary>
+    public const float CycleDegrees = 7200;
     /// <summary>Gets or sets the animation angle in degrees.</summary>
     public float Angle { get; set; }
     /// <summary>Gets or sets whether the core is speaking or processing.</summary>
@@ -89,4 +91,6 @@ public enum ReactorMode
     Speaking,
     /// <summary>Processing a request.</summary>
     Working,
+    /// <summary>Preparing a generated response or verified wake briefing.</summary>
+    Thinking,
 }

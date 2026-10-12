@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using Laura.App.Controls;
+using Laura.App.Infrastructure;
 using Laura.App.Theming;
 using Laura.Core.Abstractions;
 using Laura.Core.Conversation;
@@ -7,6 +7,8 @@ using Laura.Core.Engine;
 using Laura.Platform.Windows.Conversation;
 using Laura.Platform.Windows.System;
 using Microsoft.Extensions.DependencyInjection;
+using System.Diagnostics;
+using System.Collections.ObjectModel;
 
 namespace Laura.App.Views;
 
@@ -20,20 +22,24 @@ public sealed class MainPage : ContentPage, IDisposable
     private readonly GeminiLiveClient _live;
     private readonly AssistantCoreDrawable _core = new();
     private readonly GraphicsView _reactor;
-    private readonly Grid _body = new() { ColumnSpacing = 18, RowSpacing = 18 };
-    private readonly VerticalStackLayout _messages = new() { Spacing = 12 };
-    private readonly ScrollView _chat;
+    private readonly Grid _body = new() { ColumnSpacing = 16, RowSpacing = 16 };
+    private readonly ObservableCollection<ConversationMessage> _messages = [];
+    private readonly CollectionView _chat;
     private readonly Entry _draft = Theme.Entry();
     private readonly Label _status = Theme.Label("Ready", 15, Theme.Accent);
     private readonly Label _provider = Theme.Label("", 12, Theme.Muted);
     private readonly Label _clock = Theme.Label("", 22, Theme.Accent);
-    private readonly Label _metrics = Theme.Label("", 12, Theme.Muted);
-    private readonly ResourceMeter _cpuMeter = new(Theme.Accent), _memoryMeter = new(Theme.Listening), _diskMeter = new(Color.FromArgb("#B594DF")), _networkMeter = new(Color.FromArgb("#65CDBD"));
-    private readonly ResourceMeter _gpuMeter = new(Theme.Accent);
+    private readonly Label _metrics = Theme.Label("", 11, Theme.Muted);
+    private readonly ResourceMeter _cpuMeter = new("cpu"), _memoryMeter = new("memory_stick"), _networkMeter = new("ethernet");
+    private readonly ResourceMeter _gpuMeter = new("gpu"), _vramMeter = new("memory_stick");
+    private readonly VerticalStackLayout _diskRows = new() { Spacing = 0 };
+    private readonly Dictionary<uint, ResourceMeter> _diskMeters = [];
+    private readonly Label _diskUnavailable = Theme.Label("", 12, Theme.Muted);
     private readonly Label _shortcutHint = Theme.Label("", 11, Theme.Muted);
     private readonly WindowsResourceMonitor _resources;
+    private readonly WindowsClapListener _clapListener;
     private readonly Label _micStatus = Theme.Label("", 12, Theme.Muted);
-    private readonly Button _listen;
+    private readonly ImageButton _listen;
     private readonly Border _monitor;
     private readonly Border _center;
     private readonly Border _activity;
@@ -49,75 +55,204 @@ public sealed class MainPage : ContentPage, IDisposable
     private readonly Label _monitorTitle;
     private readonly Label _coreTitle;
     private readonly Label _activityTitle;
-    private readonly Button _setupButton;
+    private readonly ImageButton _setupButton;
     private readonly Button _memoryButton;
-    private readonly Button _interruptButton;
-    private readonly Button _microphoneButton;
+    private readonly ImageButton _interruptButton;
+    private readonly ImageButton _microphoneButton;
+    private readonly ImageButton _sendButton;
+    private readonly ImageButton _monitorButton;
+    private readonly Label _subtitle = Theme.Label("", 10, Theme.Muted);
+    private readonly Label _deviceTitle = Theme.Caption("");
+    private readonly Label _devices = Theme.Label("", 11, Theme.Muted);
+    private readonly Label _platform = Theme.Label("", 12);
+    private readonly Label _emptyTitle = Theme.Label("", 16);
+    private readonly Label _emptyHint = Theme.Label("", 13, Theme.Muted);
+    private readonly View _emptyState;
+    private readonly Label _voiceHint = Theme.Label("", 12, Theme.Muted);
+    private readonly Image _micIcon = Theme.Icon("mic_off", size: 16);
+    private readonly ScrollView _monitorScroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Always, HorizontalScrollBarVisibility = ScrollBarVisibility.Never };
+    private long _lastFrame;
+    private SetupPage? _setupPage;
+    private MemoryPage? _brainPage;
+    private string _chatCulture = "";
+    private float? _smokeAngle;
+    private bool _showMonitor;
+    private bool _scrollQueued;
+    private bool _samplingMetrics;
+    private bool _followConversation = true;
+    private ReactorMode _visualMode;
+    private string _reportedStatus = "Ready";
+    private readonly global::Windows.UI.ViewManagement.UISettings _accessibility = new();
 
     /// <summary>Composes the HUD and subscribes to domain and Live events through the UI dispatcher.</summary>
-    public MainPage(IServiceProvider services, IAssistantEngine engine, ISettingsService settings, IUiLocalizer ui, GeminiLiveClient live, WindowsResourceMonitor resources)
+    public MainPage(IServiceProvider services, IAssistantEngine engine, ISettingsService settings, IUiLocalizer ui, GeminiLiveClient live, WindowsResourceMonitor resources, WindowsClapListener clapListener)
     {
-        _services = services; _engine = engine; _settings = settings; _ui = ui; _live = live; _resources = resources;
+        using var performance = PerformanceTrace.Measure("hud.construct");
+        _services = services; _engine = engine; _settings = settings; _ui = ui; _live = live; _resources = resources; _clapListener = clapListener;
         BackgroundColor = Theme.Background;
         NavigationPage.SetHasNavigationBar(this, false);
-        _reactor = new GraphicsView { Drawable = _core, MinimumHeightRequest = 300, VerticalOptions = LayoutOptions.Fill };
-        _chat = new ScrollView { Content = _messages, VerticalOptions = LayoutOptions.Fill };
-        _listen = Theme.Button("", ToggleListeningAsync);
+        _reactor = new GraphicsView { Drawable = _core, MinimumHeightRequest = 180, VerticalOptions = LayoutOptions.Fill };
+        SemanticProperties.SetDescription(_reactor, "Laura");
+        _chat = new CollectionView { ItemsSource = _messages, SelectionMode = SelectionMode.None, ItemsUpdatingScrollMode = ItemsUpdatingScrollMode.KeepScrollOffset, VerticalOptions = LayoutOptions.Fill, BackgroundColor = Theme.Surface };
+        _chat.ItemTemplate = new DataTemplate(() =>
+        {
+            var cell = new ContentView { Padding = new Thickness(0, 4, 4, 8) };
+            cell.BindingContextChanged += (_, _) => { if (cell.BindingContext is ConversationMessage message) { cell.Content = new ConversationBubble(message, Author(message)); } };
+            return cell;
+        });
+        _chat.Scrolled += (_, args) => { if (Math.Abs(args.VerticalDelta) > .1) { _followConversation = args.LastVisibleItemIndex >= _messages.Count - 2; } };
+        _chat.Loaded += (_, _) => RequestConversationScroll(); _chat.SizeChanged += (_, _) => RequestConversationScroll();
+        _listen = Theme.IconButton("audio_lines", ToggleListeningAsync);
         _monitorTitle = Theme.Caption(""); _coreTitle = Theme.Caption(""); _activityTitle = Theme.Caption("");
-        _setupButton = Theme.Button("\uE713", OpenSetupAsync); _setupButton.FontFamily = "Segoe MDL2 Assets"; _setupButton.FontSize = 22; _setupButton.WidthRequest = 46; _setupButton.Padding = 4;
-        SemanticProperties.SetDescription(_setupButton, ui.Get("ui.maui.setup"));
-        _memoryButton = Theme.Button("", () => OpenPageAsync<MemoryPage>()); _interruptButton = Theme.Button("", InterruptAsync);
-        _microphoneButton = Theme.Button("", ToggleMicrophoneAsync);
-        var header = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Auto)], Margin = new Thickness(0, 0, 0, 18) };
-        header.Add(Theme.Stack(new Label { Text = "L A U R A", FontSize = 26, FontAttributes = FontAttributes.Bold, TextColor = Theme.Accent }, Theme.Label("PERSONAL AI ASSISTANT", 10, Theme.Muted)));
-        var actions = new HorizontalStackLayout { Spacing = 10, VerticalOptions = LayoutOptions.Center };
-        actions.Add(_clock); actions.Add(_setupButton); header.Add(actions, 1);
-        _monitor = Theme.Card(Theme.Stack(_monitorTitle, _cpuMeter, _memoryMeter, _diskMeter, _networkMeter, _gpuMeter, _metrics,
-            Theme.Label("WINDOWS · .NET MAUI", 11, Theme.Muted), Theme.Label("Alt + L", 14, Theme.Accent)), 18);
-        var centerGrid = new Grid { RowDefinitions = [new(GridLength.Auto), new(GridLength.Star), new(GridLength.Auto)] };
-        centerGrid.Add(_coreTitle); centerGrid.Add(_reactor, 0, 1);
-        var footer = Theme.Stack(_status, _provider);
-        var shortcuts = new HorizontalStackLayout { Spacing = 10, Margin = new Thickness(0, 8, 0, 0) };
-        shortcuts.Add(_memoryButton);
-        footer.Add(shortcuts); centerGrid.Add(footer, 0, 2); _center = Theme.Card(centerGrid);
-        var chatGrid = new Grid { RowDefinitions = [new(GridLength.Auto), new(GridLength.Star), new(GridLength.Auto)], RowSpacing = 14 };
-        chatGrid.Add(_activityTitle); chatGrid.Add(_chat, 0, 1);
+        _setupButton = Theme.IconButton("settings_2", OpenSetupAsync);
+        _memoryButton = Theme.ActionButton("", "brain", OpenBrainAsync);
+        _interruptButton = Theme.IconButton("square", InterruptAsync);
+        _microphoneButton = Theme.IconButton("mic_off", ToggleMicrophoneAsync);
+        _sendButton = Theme.IconButton("send", SendAsync, true, CanSend);
+        _monitorButton = Theme.IconButton("activity", () => { _showMonitor = !_showMonitor; SetLayout(_narrow); return Task.CompletedTask; });
+        var header = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Auto)], Margin = new Thickness(0, 0, 0, 20) };
+        var brand = Theme.Stack(new Label { Text = "L A U R A", FontSize = 26, FontAttributes = FontAttributes.Bold, TextColor = Theme.Accent }, _subtitle); brand.Spacing = 4;
+        header.Add(brand);
+        _clock.FontSize = 18; _clock.Margin = new Thickness(0, 0, 8, 0); _clock.VerticalOptions = LayoutOptions.Center;
+        var actions = new HorizontalStackLayout { Spacing = 8, VerticalOptions = LayoutOptions.Center };
+        actions.Add(_clock); actions.Add(_monitorButton); actions.Add(_setupButton); header.Add(actions, 1);
+        _monitor = BuildMonitor();
+        var centerGrid = new Grid { RowDefinitions = [new(GridLength.Auto), new(GridLength.Star), new(GridLength.Auto)], RowSpacing = 12 };
+        centerGrid.Add(SectionHeader("audio_lines", _coreTitle)); centerGrid.Add(_reactor, 0, 1);
+        var footer = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Auto)], ColumnSpacing = 12 };
+        var state = Theme.Stack(_status, _provider); state.Spacing = 4; state.VerticalOptions = LayoutOptions.Center;
+        footer.Add(state); footer.Add(_memoryButton, 1); centerGrid.Add(footer, 0, 2); _center = Theme.Card(centerGrid, 20);
+        _center.BackgroundColor = Theme.Background;
+        var chatGrid = new Grid { RowDefinitions = [new(GridLength.Auto), new(GridLength.Star), new(GridLength.Auto)], RowSpacing = 16 };
+        chatGrid.Add(SectionHeader("activity", _activityTitle));
+        var conversation = new Grid(); conversation.Add(_chat);
+        var empty = Theme.Stack(Theme.Icon("audio_lines", true, 32), _emptyTitle, _emptyHint); empty.Spacing = 12;
+        empty.HorizontalOptions = LayoutOptions.Center; empty.VerticalOptions = LayoutOptions.Center; empty.Padding = 16;
+        _emptyTitle.HorizontalTextAlignment = TextAlignment.Center; _emptyHint.HorizontalTextAlignment = TextAlignment.Center;
+        _emptyState = empty; conversation.Add(empty); chatGrid.Add(conversation, 0, 1);
         var compose = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Auto)], ColumnSpacing = 8 };
-        compose.Add(_draft); compose.Add(Theme.Button("➤", SendAsync, true), 1);
+        _draft.BackgroundColor = Colors.Transparent;
+        compose.Add(_draft); compose.Add(_sendButton, 1);
+        var input = Theme.Card(compose, 4); input.BackgroundColor = Theme.Field; input.StrokeShape = new Microsoft.Maui.Controls.Shapes.RoundRectangle { CornerRadius = Theme.ControlRadius };
+        _draft.HandlerChanged += (_, _) =>
+        { if (_draft.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.TextBox native) { native.BorderThickness = new Microsoft.UI.Xaml.Thickness(0); } };
+        _draft.Focused += (_, _) => { input.Stroke = Theme.Accent; input.StrokeThickness = 1.5; };
+        _draft.Unfocused += (_, _) => { input.Stroke = Theme.Line; input.StrokeThickness = 1; };
         _draft.Completed += async (_, _) => await SendAsync().ConfigureAwait(true);
-        chatGrid.Add(Theme.Stack(compose, _listen, _interruptButton, _micStatus, _microphoneButton, _shortcutHint), 0, 2);
-        _activity = Theme.Card(chatGrid);
-        var root = new Grid { Padding = 22, RowDefinitions = [new(GridLength.Auto), new(GridLength.Star)] };
+        _draft.TextChanged += (_, _) => UpdateSendAction();
+        var voiceActions = new Grid { ColumnDefinitions = [new(GridLength.Auto), new(GridLength.Auto), new(GridLength.Auto), new(GridLength.Star)], ColumnSpacing = 8 };
+        voiceActions.Add(_microphoneButton); voiceActions.Add(_listen, 1); voiceActions.Add(_interruptButton, 2);
+        _voiceHint.VerticalOptions = LayoutOptions.Center; _voiceHint.HorizontalTextAlignment = TextAlignment.End; voiceActions.Add(_voiceHint, 3);
+        var controls = Theme.Stack(voiceActions, input, _shortcutHint); controls.Spacing = 12;
+        chatGrid.Add(controls, 0, 2); _activity = Theme.Card(chatGrid, 20);
+        var root = new Grid { Padding = 24, RowDefinitions = [new(GridLength.Auto), new(GridLength.Star)] };
         root.Add(header); root.Add(_body, 0, 1); Content = root;
         SetLayout(false);
-        SizeChanged += (_, _) => { bool narrow = Width < 1080; if (narrow != _narrow) { SetLayout(narrow); } };
+        SizeChanged += (_, _) => { if (Width <= 0) { return; } bool narrow = Width < 1220; if (narrow != _narrow) { SetLayout(narrow); } };
         engine.ConversationMessageReceived += (_, message) => MainThread.BeginInvokeOnMainThread(() => AddMessage(message));
         engine.StateChanged += (_, state) => MainThread.BeginInvokeOnMainThread(() => SetState(state.ToString()));
         live.MessageReceived += (_, message) => MainThread.BeginInvokeOnMainThread(() => AddMessage(message));
         live.StatusChanged += (_, state) => MainThread.BeginInvokeOnMainThread(() => SetState(state));
         settings.Changed += (_, _) => MainThread.BeginInvokeOnMainThread(Reload);
+        clapListener.CaptureChanged += (_, _) => MainThread.BeginInvokeOnMainThread(RefreshFeedback);
+    }
+    /// <summary>Pairs a restrained section caption with the shared icon set.</summary>
+    private static View SectionHeader(string icon, Label title)
+    { var header = new HorizontalStackLayout { Spacing = 12, MinimumHeightRequest = 28 }; header.Add(Theme.Icon(icon, true, 18)); header.Add(title); return header; }
+    /// <summary>Keeps real metrics and device information scrollable at short window heights.</summary>
+    private Border BuildMonitor()
+    {
+        var content = Theme.Stack(_cpuMeter, _memoryMeter, _gpuMeter, _vramMeter, _diskRows, _networkMeter); content.Spacing = 0;
+        content.Padding = new Thickness(0, 0, 16, 8);
+        content.Add(new BoxView { Color = Theme.Line, HeightRequest = 1, Margin = new Thickness(0, 12) });
+        content.Add(_deviceTitle);
+        var microphone = new Grid { ColumnDefinitions = [new(new GridLength(16)), new(GridLength.Star)], ColumnSpacing = 8, Margin = new Thickness(0, 12, 0, 8) };
+        microphone.Add(_micIcon); microphone.Add(_micStatus, 1); content.Add(microphone);
+        content.Add(_devices);
+        content.Add(new BoxView { Color = Theme.Line, HeightRequest = 1, Margin = new Thickness(0, 16) });
+        content.Add(SectionHeader("monitor", _platform)); content.Add(_metrics);
+        var panel = new Grid { RowDefinitions = [new(GridLength.Auto), new(GridLength.Star)], RowSpacing = 12, Padding = new Thickness(20, 20, 4, 20) };
+        _monitorScroll.Content = content;
+        var header = SectionHeader("activity", _monitorTitle); header.Margin = new Thickness(0, 0, 16, 0);
+        panel.Add(header); panel.Add(_monitorScroll, 0, 1);
+        return Theme.Card(panel, 0);
     }
     /// <summary>Refreshes settings-driven labels and restores bounded history once.</summary>
     public void Reload()
     {
+        using var performance = PerformanceTrace.Measure("hud.reload");
+        if (_chatCulture != _ui.Culture.Name) { _chatCulture = _ui.Culture.Name; _chat.ItemsSource = null; _chat.ItemsSource = _messages; }
         _draft.Placeholder = _ui.Get("ui.hud.compose");
+        _subtitle.Text = _ui.Get("ui.hud.subtitle");
         _monitorTitle.Text = _ui.Get("ui.maui.monitor").ToUpperInvariant(); _coreTitle.Text = _ui.Get("ui.maui.core").ToUpperInvariant(); _activityTitle.Text = _ui.Get("ui.maui.activity").ToUpperInvariant();
-        SemanticProperties.SetDescription(_setupButton, _ui.Get("ui.maui.setup")); ToolTipProperties.SetText(_setupButton, _ui.Get("ui.maui.setup")); _memoryButton.Text = _ui.Get("ui.tab.memory");
-        _interruptButton.Text = _ui.Get("ui.maui.interrupt"); _microphoneButton.Text = _ui.Get("ui.maui.toggleMic");
+        Theme.DescribeAction(_setupButton, _ui.Get("ui.maui.setup")); _memoryButton.Text = _ui.Get("ui.tab.memory");
+        Theme.DescribeAction(_memoryButton, _ui.Get("ui.tab.memory"));
+        Theme.DescribeAction(_interruptButton, _ui.Get("ui.maui.interrupt") + " · Esc");
+        Theme.DescribeAction(_monitorButton, _ui.Get(_showMonitor ? "ui.maui.core" : "ui.maui.monitor")); Theme.DescribeAction(_sendButton, _ui.Get("ui.hud.send"));
+        SemanticProperties.SetDescription(_draft, _ui.Get("ui.hud.compose"));
+        _deviceTitle.Text = _ui.Get("ui.hud.devices").ToUpperInvariant();
+        _platform.Text = $"Windows · {Environment.OSVersion.Version.Build}";
+        _devices.Text = DeviceSummary();
         _provider.Text = "GEMINI LIVE · " + _settings.Current.GenerativeAi.LiveVoice;
-        _listen.Text = _live.IsListening ? _ui.Get("ui.maui.stopRecording") : _ui.Get("ui.maui.startListening");
-        _shortcutHint.Text = _ui.Get("ui.maui.shortcutHelp");
-        _micStatus.Text = _settings.Current.MicrophoneMuted ? _ui.Get("ui.maui.muted") : _live.IsListening ? _ui.Get("ui.maui.streaming") : _ui.Get("ui.maui.micReady");
-        if (!_loaded && _engine.State != AssistantState.Stopped) { _messages.Clear(); foreach (ConversationMessage message in _engine.ConversationHistory) { AddMessage(message); } _loaded = true; }
+        _emptyTitle.Text = _ui.Get("ui.hud.ready"); _emptyHint.Text = _ui.Get("ui.hud.prompt");
+        _shortcutHint.Text = _ui.Get("ui.hud.talkHint"); ToolTipProperties.SetText(_shortcutHint, _ui.Get("ui.maui.shortcutHelp") + "\n" + _ui.Get("ui.hud.hotkey"));
+        ToolTipProperties.SetText(_networkMeter, _ui.Get("ui.maui.networkHint"));
+        _diskUnavailable.Text = _ui.Get("ui.hud.disksUnavailable");
+        RefreshFeedback(); UpdateSendAction(); _nextMetrics = 0;
+        if (!_loaded && _windowVisible && _pageVisible && _engine.State != AssistantState.Stopped) { _messages.Clear(); foreach (ConversationMessage message in _engine.ConversationHistory) { _messages.Add(message); } _loaded = true; RequestConversationScroll(); }
+        _emptyState.IsVisible = _messages.Count == 0;
     }
+    /// <summary>Names the configured audio endpoints without inventing device availability.</summary>
+    private string DeviceSummary()
+    {
+        int input = _settings.Current.InputDevice, output = _settings.Current.OutputDevice;
+        string microphone = input < 0 ? _ui.Get("ui.maui.systemDefault") : AudioDeviceNames.Input(input, _ui.Get("ui.maui.unavailable"));
+        string speaker = output < 0 ? _ui.Get("ui.maui.systemDefault") : AudioDeviceNames.Output(output, _ui.Get("ui.maui.unavailable"));
+        return _ui.Get("ui.maui.input") + " · " + microphone + "\n" + _ui.Get("ui.maui.output") + " · " + speaker;
+    }
+    /// <summary>Synchronizes voice controls and explicit capture feedback with current runtime state.</summary>
+    private void RefreshFeedback()
+    {
+        bool muted = _settings.Current.MicrophoneMuted, listening = _live.IsListening;
+        string micAction = _ui.Get(muted ? "ui.hud.unmute" : "ui.hud.mute");
+        _microphoneButton.Source = Theme.IconSource(muted ? "mic_off" : "mic"); _micIcon.Source = _microphoneButton.Source;
+        _microphoneButton.BackgroundColor = muted ? Theme.Field : Theme.AssistantSurface;
+        Theme.DescribeAction(_microphoneButton, micAction + " · M");
+        Theme.DescribeAction(_listen, _ui.Get(listening ? "ui.maui.stopRecording" : "ui.maui.startListening"));
+        _listen.BackgroundColor = listening ? Theme.Accent : Theme.Field;
+        _micStatus.Text = _ui.Get(muted ? "ui.maui.muted" : listening && _live.IsSpeaking ? "ui.hud.capturePaused" : listening ? "ui.maui.streaming" : _clapListener.IsCapturing ? "ui.hud.clapLocal" : "ui.maui.micReady");
+        _voiceHint.Text = _ui.Get(muted ? "ui.hud.micMuted" : listening ? "ui.maui.listening" : _clapListener.IsCapturing ? "ui.hud.clapArmed" : "ui.hud.micReady");
+        _voiceHint.TextColor = listening ? Theme.Accent : Theme.Muted;
+        string state = _visualMode switch { ReactorMode.Speaking => "Speaking", ReactorMode.Thinking => "Thinking", ReactorMode.Listening => "Listening", ReactorMode.Working => "Working", _ => _reportedStatus };
+        _status.Text = state switch { "Ready" => _ui.Get("ui.state.ready"), "Speaking" => _ui.Get("ui.state.speaking"), "Thinking" => _ui.Get("ui.state.thinking"), "Connecting" => _ui.Get("ui.state.connecting"), "Working" => _ui.Get("ui.state.working"), "Listening" => _ui.Get("ui.maui.listening"), "Stopped" => _ui.Get("ui.hud.stopped"), _ => state };
+        _status.TextColor = _visualMode == ReactorMode.Speaking ? Theme.Speaking : Theme.Accent;
+        SemanticProperties.SetDescription(_reactor, "Laura · " + _status.Text);
+    }
+    /// <summary>Enables sending only when a draft exists and the previous command has completed.</summary>
+    private void UpdateSendAction() => _sendButton.IsEnabled = CanSend();
+    /// <summary>Checks the same submission condition for typing and action completion.</summary>
+    private bool CanSend() => _command is null && !string.IsNullOrWhiteSpace(_draft.Text);
     /// <summary>Opens the native settings workspace.</summary>
-    public Task OpenSetupAsync() => OpenPageAsync<SetupPage>();
-    /// <summary>Resolves a fresh detail page through the composition root.</summary>
-    private Task OpenPageAsync<T>() where T : Page => Navigation.PushAsync(_services.GetRequiredService<T>());
+    public Task OpenSetupAsync()
+    {
+        using var performance = PerformanceTrace.Measure("settings.prepare");
+        if (Navigation.NavigationStack.Count > 0 && Navigation.NavigationStack[^1] is SetupPage) { return Task.CompletedTask; }
+        if (_setupPage is null || !_setupPage.CanReuse) { _setupPage = _services.GetRequiredService<SetupPage>(); }
+        else { _setupPage.ReloadFromSettings(); }
+        return NavigationMotion.PushAsync(Navigation, _setupPage);
+    }
+    /// <summary>Opens the Brain through the same native action used by diagnostics.</summary>
+    public Task OpenBrainAsync()
+    {
+        using var performance = PerformanceTrace.Measure("brain.prepare");
+        if (Navigation.NavigationStack[^1] is MemoryPage) { return Task.CompletedTask; }
+        if (_brainPage is null || !_brainPage.CanReuse) { _brainPage = _services.GetRequiredService<MemoryPage>(); }
+        return NavigationMotion.PushAsync(Navigation, _brainPage);
+    }
     /// <inheritdoc />
     protected override void OnAppearing()
     {
-        base.OnAppearing(); _pageVisible = true; Reload();
+        base.OnAppearing(); _pageVisible = true; _lastFrame = Stopwatch.GetTimestamp(); Reload(); _reactor.Invalidate();
         _timer ??= Dispatcher.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(33); _timer.Tick -= Tick; _timer.Tick += Tick;
         if (_windowVisible) { _timer.Start(); }
@@ -126,68 +261,135 @@ public sealed class MainPage : ContentPage, IDisposable
     protected override void OnDisappearing() { _pageVisible = false; _timer?.Stop(); base.OnDisappearing(); }
     /// <summary>Suspends vector animation while the native window is hidden in the tray.</summary>
     public void SetWindowVisible(bool visible)
-    { _windowVisible = visible; if (visible && _pageVisible) { _timer?.Start(); } else { _timer?.Stop(); } }
+    { _windowVisible = visible; _lastFrame = Stopwatch.GetTimestamp(); if (visible && _pageVisible) { Reload(); _reactor.Invalidate(); _timer?.Start(); } else { _timer?.Stop(); } }
     /// <summary>Animates vector rings and refreshes measured system statistics at one-second intervals.</summary>
     private void Tick(object? sender, EventArgs args)
     {
-        _core.Mode = _smokeMode ?? (_live.IsSpeaking ? ReactorMode.Speaking : _live.IsListening ? ReactorMode.Listening : _engine.State == AssistantState.Working ? ReactorMode.Working : ReactorMode.Idle);
-        _core.Level += ((_core.Mode == ReactorMode.Listening ? _live.InputLevel : _live.OutputLevel) - _core.Level) * .25f;
-        _core.Angle = (_core.Angle + (_core.Active ? 1.2f : .45f)) % 360;
-        _status.TextColor = _core.Mode == ReactorMode.Listening ? Theme.Listening : Theme.Speaking;
-        if (_core.Mode is ReactorMode.Listening or ReactorMode.Speaking) { _status.Text = _ui.Get(_core.Mode == ReactorMode.Listening ? "ui.maui.listening" : "ui.state.speaking"); }
-        _reactor.Invalidate();
+        _core.Mode = _smokeMode ?? (_live.IsSpeaking ? ReactorMode.Speaking : _live.IsThinking || _engine.State == AssistantState.Thinking ? ReactorMode.Thinking : _live.IsListening ? ReactorMode.Listening : _engine.State == AssistantState.Working ? ReactorMode.Working : ReactorMode.Idle);
+        if (_visualMode != _core.Mode) { _visualMode = _core.Mode; RefreshFeedback(); _reactor.Invalidate(); }
+        bool animate = _accessibility.AnimationsEnabled;
+        _core.Level = animate ? _core.Level + ((_core.Mode == ReactorMode.Listening ? _live.InputLevel : _live.OutputLevel) - _core.Level) * .25f : 0;
+        long frame = Stopwatch.GetTimestamp();
+        float seconds = (float)Math.Clamp(Stopwatch.GetElapsedTime(_lastFrame, frame).TotalSeconds, 0, .1); _lastFrame = frame;
+        if (_smokeAngle is { } angle) { _core.Angle = angle; _core.Level = 0; _reactor.Invalidate(); }
+        else if (animate) { _core.Angle = (_core.Angle + (_core.Active ? 36 : 14) * seconds) % AssistantCoreDrawable.CycleDegrees; _reactor.Invalidate(); }
         if (Environment.TickCount64 < _nextMetrics) { return; }
         _nextMetrics = Environment.TickCount64 + 1000;
         _clock.Text = DateTime.Now.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
-        ResourceSnapshot metrics = _resources.Sample(AppContext.BaseDirectory);
+        if (!_samplingMetrics) { _ = RefreshMetricsAsync(); }
+        if (!animate) { _reactor.Invalidate(); }
+    }
+    /// <summary>Samples native hardware off the UI thread and publishes one coherent dashboard update.</summary>
+    private async Task RefreshMetricsAsync()
+    {
+        _samplingMetrics = true;
+        try
+        {
+            ResourceSnapshot metrics = await Task.Run(() => _resources.Sample(AppContext.BaseDirectory)).ConfigureAwait(true);
+            RenderMetrics(metrics);
+        }
+        finally { _samplingMetrics = false; }
+    }
+    /// <summary>Applies measured CPU, RAM, GPU, VRAM, physical disks and wired traffic in display order.</summary>
+    private void RenderMetrics(ResourceSnapshot metrics)
+    {
         _cpuMeter.Update("CPU", $"{metrics.Cpu:P0}", metrics.Cpu);
-        _memoryMeter.Update(_ui.Get("ui.maui.ram"), $"{metrics.UsedMemory / 1073741824d:F1} / {metrics.TotalMemory / 1073741824d:F1} GB", metrics.Memory);
-        _diskMeter.Update(_ui.Get("ui.maui.disk"), $"{metrics.Disk:P0} · {metrics.FreeDisk / 1073741824d:F0} GB " + _ui.Get("ui.maui.free"), metrics.Disk);
-        _networkMeter.Update(_ui.Get("ui.maui.network"), metrics.NetworkConnected ? $"↓ {metrics.DownloadBytesPerSecond / 1024:F0}  ↑ {metrics.UploadBytesPerSecond / 1024:F0} KB/s" : _ui.Get("ui.maui.offline"), metrics.Network);
-        _gpuMeter.Update("GPU", metrics.Gpu is { } usage ? $"{usage:P0}" : _ui.Get("ui.maui.unavailable"), metrics.Gpu ?? 0);
-        _metrics.Text = _ui.Get("ui.maui.networkHint") + $"\n\nLAURA · {metrics.AppMemory / 1048576d:F0} MB\n{metrics.Uptime:hh\\:mm\\:ss}";
+        _memoryMeter.Update("RAM", $"{metrics.Memory:P0}", metrics.Memory, $"{metrics.UsedMemory / 1073741824d:F1} / {metrics.TotalMemory / 1073741824d:F1} GB");
+        _gpuMeter.Update("GPU", metrics.Gpu is { } usage ? $"{usage:P0}" : "—", metrics.Gpu, metrics.Gpu.HasValue ? "" : _ui.Get("ui.maui.unavailable"));
+        ToolTipProperties.SetText(_gpuMeter, metrics.Graphics?.Name ?? _ui.Get("ui.maui.unavailable"));
+        GpuSnapshot? graphics = metrics.Graphics;
+        double? vram = null;
+        string vramDetail = _ui.Get("ui.maui.unavailable");
+        if (graphics is { UsedDedicatedMemory: { } usedMemory, TotalDedicatedMemory: > 0 })
+        { vram = usedMemory / (double)graphics.TotalDedicatedMemory; vramDetail = $"{usedMemory / 1073741824d:F1} / {graphics.TotalDedicatedMemory / 1073741824d:F1} GB"; }
+        _vramMeter.Update("VRAM", vram.HasValue ? $"{vram:P0}" : "—", vram, vramDetail);
+        RenderDisks(metrics.Disks);
+        EthernetSnapshot ethernet = metrics.Ethernet;
+        double? traffic = ethernet.DownloadBytesPerSecond + ethernet.UploadBytesPerSecond;
+        double? utilization = ethernet.LinkBitsPerSecond > 0 ? traffic * 8 / ethernet.LinkBitsPerSecond : null;
+        _networkMeter.Update("Ethernet", traffic.HasValue ? $"{traffic / 1024:F0} KB/s" : "—", utilization,
+            traffic.HasValue ? $"↓ {ethernet.DownloadBytesPerSecond / 1024:F0}   ↑ {ethernet.UploadBytesPerSecond / 1024:F0} KB/s" : _ui.Get(ethernet.Connected ? "ui.maui.unavailable" : "ui.maui.offline"));
+        ToolTipProperties.SetText(_networkMeter, ethernet.Name + "\n" + _ui.Get("ui.maui.networkHint"));
+        _metrics.Text = $"LAURA {AppInfo.Current.VersionString} · {metrics.AppMemory / 1048576d:F0} MB\n" + _ui.Get("ui.hud.session") + $" · {metrics.Uptime:hh\\:mm\\:ss}";
+    }
+    /// <summary>Reconciles physical disk rows on hot-plug changes while preserving native disk numbers.</summary>
+    private void RenderDisks(IReadOnlyList<PhysicalDiskSnapshot> disks)
+    {
+        uint[] numbers = [.. disks.Select(disk => disk.Number)];
+        if (!_diskMeters.Keys.Order().SequenceEqual(numbers))
+        {
+            _diskRows.Clear(); _diskMeters.Clear();
+            foreach (uint number in numbers) { var meter = new ResourceMeter("hard_drive"); _diskMeters.Add(number, meter); _diskRows.Add(meter); }
+            if (numbers.Length == 0) { _diskRows.Add(_diskUnavailable); }
+        }
+        else if (numbers.Length == 0 && _diskRows.Count == 0) { _diskRows.Add(_diskUnavailable); }
+        foreach (PhysicalDiskSnapshot disk in disks)
+        {
+            string detail = disk.Capacity is { } size ? $"{size / 1073741824d:F0} GB" : _ui.Get("ui.maui.unavailable");
+            if (disk.Volumes.Length > 0) { detail += " · " + disk.Volumes; }
+            _diskMeters[disk.Number].Update(_ui.Get("ui.maui.disk") + " " + disk.Number, disk.Activity is { } activity ? $"{activity:P0}" : "—", disk.Activity, detail);
+            ToolTipProperties.SetText(_diskMeters[disk.Number], _ui.Get("ui.hud.diskActivity"));
+        }
     }
     /// <summary>Adapts the HUD to compact windows without overflowing the chat or settings controls.</summary>
     private void SetLayout(bool narrow)
     {
         _narrow = narrow; _body.Children.Clear(); _body.ColumnDefinitions.Clear(); _body.RowDefinitions.Clear();
-        _monitor.IsVisible = !narrow;
+        _monitorButton.IsVisible = narrow;
+        _monitorButton.Source = Theme.IconSource(_showMonitor ? "audio_lines" : "activity");
+        Theme.DescribeAction(_monitorButton, _ui.Get(_showMonitor ? "ui.maui.core" : "ui.maui.monitor"));
+        _monitorButton.BackgroundColor = _showMonitor ? Theme.AssistantSurface : Theme.Field;
+        _monitor.IsVisible = !narrow || _showMonitor; _center.IsVisible = !narrow || !_showMonitor;
         if (narrow)
         {
-            _body.ColumnDefinitions.Add(new(GridLength.Star)); _body.ColumnDefinitions.Add(new(GridLength.Star));
-            _body.Add(_center, 0, 0); _body.Add(_activity, 1, 0);
+            _body.ColumnDefinitions.Add(new(GridLength.Star)); _body.ColumnDefinitions.Add(new(new GridLength(1.1, GridUnitType.Star)));
+            _body.Add(_showMonitor ? _monitor : _center, 0, 0); _body.Add(_activity, 1, 0);
+            _memoryButton.ImageSource = null;
         }
         else
         {
-            _body.ColumnDefinitions.Add(new(new GridLength(205))); _body.ColumnDefinitions.Add(new(GridLength.Star)); _body.ColumnDefinitions.Add(new(new GridLength(360)));
+            _body.ColumnDefinitions.Add(new(new GridLength(256))); _body.ColumnDefinitions.Add(new(GridLength.Star)); _body.ColumnDefinitions.Add(new(new GridLength(368)));
             _body.Add(_monitor, 0, 0); _body.Add(_center, 1, 0); _body.Add(_activity, 2, 0);
+            _memoryButton.ImageSource = Theme.IconSource("brain");
         }
     }
     /// <summary>Adds a bounded chat bubble and scrolls it into view.</summary>
     private void AddMessage(ConversationMessage message)
     {
-        var label = Theme.Label(message.Text, 14);
-        var bubble = Theme.Card(Theme.Stack(label, Theme.Label(message.Timestamp.ToLocalTime().ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture), 10, Theme.Muted)), 12);
-        bubble.BackgroundColor = message.Source == ConversationMessageSource.Assistant ? Theme.Field : Color.FromArgb("#631829");
-        bubble.Margin = message.Source == ConversationMessageSource.Assistant ? new Thickness(0, 0, 20, 0) : new Thickness(20, 0, 0, 0);
-        _messages.Add(bubble); if (_messages.Count > 200) { _messages.RemoveAt(0); }
-        Dispatcher.Dispatch(() => _ = _chat.ScrollToAsync(0, _messages.Height, true));
+        if (_messages.Contains(message)) { return; }
+        _messages.Add(message); if (_messages.Count > 200) { _messages.RemoveAt(0); }
+        _emptyState.IsVisible = false;
+        RequestConversationScroll();
     }
+    /// <summary>Coalesces scrolling by position after layout, so queued work never references a removed bubble.</summary>
+    private void RequestConversationScroll()
+    {
+        if (!_followConversation || _scrollQueued) { return; }
+        _scrollQueued = true;
+        Dispatcher.Dispatch(() =>
+        {
+            _scrollQueued = false;
+            if (!_followConversation || !_pageVisible || _chat.Handler is null) { return; }
+            if (_messages.Count > 0) { _chat.ScrollTo(_messages.Count - 1, position: ScrollToPosition.End, animate: false); }
+        });
+    }
+    /// <summary>Resolves the message author's localized display name.</summary>
+    private string Author(ConversationMessage message) => message.Source == ConversationMessageSource.Assistant ? "LAURA" : _ui.Get("ui.hud.you");
     /// <summary>Updates state feedback and the core's animation speed.</summary>
     private void SetState(string state)
     {
-        _status.Text = state switch { "Ready" => _ui.Get("ui.state.ready"), "Speaking" => _ui.Get("ui.state.speaking"), "Working" => _ui.Get("ui.state.working"), "Listening" => _ui.Get("ui.maui.listening"), _ => state };
-        Reload();
+        _reportedStatus = state;
+        RefreshFeedback();
     }
     /// <summary>Submits a text command through the existing assistant queue.</summary>
     private async Task SendAsync()
     {
         string text = _draft.Text?.Trim() ?? "";
         if (text.Length == 0 || _command is not null) { return; }
-        _draft.Text = ""; _command = new CancellationTokenSource();
+        _command = new CancellationTokenSource(); _draft.Text = ""; UpdateSendAction();
         try { await _engine.SubmitCommandAsync(text, _command.Token).ConfigureAwait(true); }
         catch (OperationCanceledException) { }
-        finally { _command.Dispose(); _command = null; }
+        finally { _command.Dispose(); _command = null; UpdateSendAction(); }
     }
     /// <summary>Toggles automatic turn detection; a natural speech pause triggers a response without another click.</summary>
     private async Task ToggleListeningAsync()
@@ -200,7 +402,7 @@ public sealed class MainPage : ContentPage, IDisposable
     /// <summary>Stops microphone capture before persisting its muted state.</summary>
     public async Task ToggleMicrophoneAsync()
     {
-        if (!_settings.Current.MicrophoneMuted) { _holdLifetime?.Cancel(); await _live.StopListeningAsync().ConfigureAwait(true); }
+        if (!_settings.Current.MicrophoneMuted) { _holdLifetime?.Cancel(); await _clapListener.StopAsync().ConfigureAwait(true); await _live.StopListeningAsync().ConfigureAwait(true); }
         await _settings.UpdateAsync(_settings.Current with { MicrophoneMuted = !_settings.Current.MicrophoneMuted }).ConfigureAwait(true);
     }
     /// <summary>Cancels microphone input, native generation, local generation and playback.</summary>
@@ -224,6 +426,71 @@ public sealed class MainPage : ContentPage, IDisposable
     /// <summary>Previews colors for the isolated rendering harness without recording or playing sound.</summary>
     public void PreviewReactorForSmoke(ReactorMode? mode)
     { if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Visual preview is restricted to isolated smoke verification."); } _smokeMode = mode; _core.Level = .5f; }
+    /// <summary>Renders localized sample messages only in the isolated visual harness.</summary>
+    internal void PreviewConversationForSmoke()
+    {
+        EnsureSmoke(); _messages.Clear();
+        AddMessage(new(ConversationMessageSource.UserTyped, _ui.Get("ui.hud.prompt"), DateTimeOffset.Now));
+        AddMessage(new(ConversationMessageSource.Assistant, _ui.Get("ui.maui.listeningHelp"), DateTimeOffset.Now));
+        AddMessage(new(ConversationMessageSource.UserTyped, _ui.Get("ui.hud.compose"), DateTimeOffset.Now));
+        AddMessage(new(ConversationMessageSource.Assistant, _ui.Get("ui.maui.memoryPrivacy"), DateTimeOffset.Now));
+    }
+    /// <summary>Exercises the compact monitor switch without recording audio.</summary>
+    internal void PreviewMonitorForSmoke(bool visible)
+    { EnsureSmoke(); _showMonitor = visible; SetLayout(_narrow); }
+    /// <summary>Checks actual monitor scrolling and the reserved scrollbar gutter.</summary>
+    internal async Task VerifyMonitorScrollForSmokeAsync(bool bottom)
+    {
+        EnsureSmoke();
+        if (_monitorScroll.Content is not View content) { throw new InvalidOperationException("Monitor content is unavailable."); }
+        if (_cpuMeter.Width > _monitorScroll.Width - 15) { throw new InvalidOperationException("Monitor metrics overlap the native scrollbar gutter."); }
+        if (_monitor.Handler?.PlatformView is Microsoft.UI.Xaml.FrameworkElement nativeMonitor && _monitorScroll.Handler?.PlatformView is Microsoft.UI.Xaml.FrameworkElement nativeScroll)
+        {
+            var origin = nativeScroll.TransformToVisual(nativeMonitor).TransformPoint(new global::Windows.Foundation.Point(0, 0));
+            double edgeGap = nativeMonitor.ActualWidth - origin.X - nativeScroll.ActualWidth;
+            if (edgeGap > 10 || edgeGap < 0) { throw new InvalidOperationException("Monitor scrollbar is not near the panel edge."); }
+        }
+        await _monitorScroll.ScrollToAsync(0, bottom ? Math.Max(0, content.Height - _monitorScroll.Height) : 0, false).ConfigureAwait(true);
+        await Task.Delay(100).ConfigureAwait(true);
+        double expected = bottom ? Math.Max(0, content.Height - _monitorScroll.Height) : 0;
+        if (Math.Abs(_monitorScroll.ScrollY - expected) > 2) { throw new InvalidOperationException("Monitor cannot reach its requested scroll position."); }
+    }
+    /// <summary>Freezes the actual drawable for a boundary continuity render test without recording sound.</summary>
+    internal void PreviewReactorAngleForSmoke(float? angle)
+    { EnsureSmoke(); _smokeAngle = angle; if (angle.HasValue) { _core.Angle = angle.Value; _core.Level = 0; _reactor.Invalidate(); } }
+    /// <summary>Exposes only the reactor's native visual to isolated pixel verification.</summary>
+    internal Microsoft.UI.Xaml.UIElement ReactorVisualForSmoke()
+    { EnsureSmoke(); return (Microsoft.UI.Xaml.UIElement)_reactor.Handler!.PlatformView!; }
+    /// <summary>Reproduces queued scrolling after history replacement and verifies reading older messages.</summary>
+    internal async Task VerifyConversationScrollingForSmokeAsync()
+    {
+        EnsureSmoke(); _followConversation = true;
+        for (int index = 0; index < 205; index++)
+        { AddMessage(new(ConversationMessageSource.Assistant, _ui.Get("ui.maui.listeningHelp"), DateTimeOffset.Now)); }
+        if (_messages.Count != 200) { throw new InvalidOperationException("Conversation history must remain bounded."); }
+        PreviewConversationForSmoke(); PreviewConversationForSmoke();
+        await Task.Delay(300).ConfigureAwait(true);
+        _chat.ScrollTo(0, position: ScrollToPosition.Start, animate: false); await Task.Delay(200).ConfigureAwait(true);
+        _followConversation = false;
+        AddMessage(new(ConversationMessageSource.Assistant, _ui.Get("ui.maui.listeningHelp"), DateTimeOffset.Now));
+        await Task.Delay(150).ConfigureAwait(true);
+        if (_followConversation) { throw new InvalidOperationException("Reading earlier messages must not force scrolling to a new response."); }
+        _followConversation = true; PreviewConversationForSmoke(); await Task.Delay(200).ConfigureAwait(true);
+    }
+    /// <summary>Checks usable input geometry, accessible actions and actual microphone safety.</summary>
+    internal void VerifyHudForSmoke()
+    {
+        EnsureSmoke();
+        if (_live.IsListening) { throw new InvalidOperationException("UI verification must never capture microphone audio."); }
+        if (_draft.Width < 120 || _chat.Height < 100 || _sendButton.Height < Theme.TargetSize || _activity.Width < 280)
+        { throw new InvalidOperationException("The HUD must preserve readable chat and accessible input targets at every supported size."); }
+        foreach (View action in new View[] { _listen, _microphoneButton, _interruptButton, _sendButton, _setupButton, _monitorButton })
+        { if (string.IsNullOrWhiteSpace(SemanticProperties.GetDescription(action))) { throw new InvalidOperationException("Every icon action needs an accessible localized name."); } }
+        if (_sendButton.IsEnabled != CanSend()) { throw new InvalidOperationException("Send action does not match draft availability."); }
+    }
+    /// <summary>Restricts diagnostic state changes to an explicit isolated rendering run.</summary>
+    private static void EnsureSmoke()
+    { if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("HUD previews require isolated UI smoke verification."); } }
     /// <inheritdoc />
     public void Dispose() { _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this); }
 }

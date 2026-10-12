@@ -15,4 +15,8 @@ public sealed record ConversationTurn(string Prompt, CultureInfo Culture, string
 
     /// <summary>Gets explicit user notes as untrusted conversation data.</summary>
     public IReadOnlyList<string> Memories { get; init; } = [];
+    /// <summary>Gets installed skill discovery metadata; disabled entries carry no instruction approval.</summary>
+    public string SkillCatalogue { get; init; } = "";
+    /// <summary>Gets explicitly approved task guidance, separate from ordinary recalled facts and with no granted tools.</summary>
+    public string SkillGuidance { get; init; } = "";
 }

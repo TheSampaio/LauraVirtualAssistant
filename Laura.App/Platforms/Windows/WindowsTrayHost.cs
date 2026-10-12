@@ -13,7 +13,7 @@ public sealed class WindowsTrayHost : IDisposable
     private readonly Action<bool>? _visibility;
     private readonly nint _icon;
     private bool _exiting;
-    private bool _visible = true;
+    private bool _visible;
     private readonly uint _taskbarCreated;
     /// <summary>Registers the hotkey and attaches a notification icon to the existing MAUI handle.</summary>
     public WindowsTrayHost(nint window, Action toggle, Action exit, Action<bool>? visibility = null)
@@ -25,15 +25,18 @@ public sealed class WindowsTrayHost : IDisposable
         SetWindowSubclass(window, _procedure, 1, 0);
         RegisterHotKey(window, 1, 0x4001, 0x4C);
         AddIcon();
+        Hide();
     }
-    /// <summary>Shows the native window and gives it keyboard focus.</summary>
-    public void Show() { ShowWindow(_window, 9); SetForegroundWindow(_window); _visible = true; _visibility?.Invoke(true); }
+    /// <summary>Shows the native window centered on its display and gives it keyboard focus.</summary>
+    public void Show() { _visible = true; _visibility?.Invoke(true); ShowWindow(_window, 9); WindowsWindowTheme.CenterWindow(_window); SetForegroundWindow(_window); }
     /// <summary>Hides the window while the assistant remains available in the tray.</summary>
-    public void Hide() { ShowWindow(_window, 0); _visible = false; _visibility?.Invoke(false); }
+    public void Hide() { _visible = false; _visibility?.Invoke(false); ShowWindow(_window, 0); }
     /// <summary>Toggles native visibility for the tray and global hotkey.</summary>
     public void Toggle() { if (_visible) { Hide(); } else { Show(); } }
     /// <summary>Allows window destruction during an explicit application exit.</summary>
     public void AllowExit() => _exiting = true;
+    /// <summary>Gets actual native visibility for explicit startup diagnostics.</summary>
+    public bool IsVisible => IsWindowVisible(_window);
     /// <inheritdoc />
     public void Dispose()
     {
@@ -50,6 +53,13 @@ public sealed class WindowsTrayHost : IDisposable
     private nint WindowProcedure(nint window, uint message, nuint wParam, nint lParam, nuint id, nuint data)
     {
         if (message == 0x10 && !_exiting) { Hide(); return 0; }
+        if (message == 0x112 && (wParam & 0xfff0) is 0xf020 or 0xf030) { return 0; }
+        if (message == 0x46 && !_visible && !_exiting)
+        {
+            var position = Marshal.PtrToStructure<WindowPosition>(lParam);
+            position.Flags = (position.Flags & ~0x40u) | 0x80u;
+            Marshal.StructureToPtr(position, lParam, false);
+        }
         if (message == 0x312) { _toggle(); return 0; }
         if (message == _taskbarCreated) { AddIcon(); }
         if (message == TrayMessage)
@@ -85,12 +95,14 @@ public sealed class WindowsTrayHost : IDisposable
         internal uint InfoFlags; internal Guid Guid; internal nint BalloonIcon;
     }
     [StructLayout(LayoutKind.Sequential)] private struct NativePoint { internal int X; internal int Y; }
+    [StructLayout(LayoutKind.Sequential)] private struct WindowPosition { internal nint Window, InsertAfter; internal int X, Y, Width, Height; internal uint Flags; }
     [DllImport("comctl32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetWindowSubclass(nint window, SubclassProcedure proc, nuint id, nuint data);
     [DllImport("comctl32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool RemoveWindowSubclass(nint window, SubclassProcedure proc, nuint id);
     [DllImport("comctl32.dll")] private static extern nint DefSubclassProc(nint window, uint message, nuint wParam, nint lParam);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool RegisterHotKey(nint window, int id, uint modifiers, uint key);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool UnregisterHotKey(nint window, int id);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ShowWindow(nint window, int command);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindowVisible(nint window);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetForegroundWindow(nint window);
     [DllImport("shell32.dll", EntryPoint = "Shell_NotifyIconW", CharSet = CharSet.Unicode)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ShellNotifyIcon(uint message, ref NotifyIconData data);
     [DllImport("user32.dll", EntryPoint = "LoadImageW", CharSet = CharSet.Unicode)] private static extern nint LoadImage(nint instance, string name, uint type, int width, int height, uint flags);

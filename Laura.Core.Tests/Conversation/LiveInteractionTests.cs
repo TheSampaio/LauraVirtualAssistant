@@ -8,12 +8,26 @@ namespace Laura.Core.Tests.Conversation;
 public sealed class LiveInteractionTests
 {
     [Fact]
+    public void TypedTurnsSeparateSkillDiscoveryAndApprovedGuidanceFromOrdinaryFacts()
+    {
+        var turn = new ConversationTurn("Write a fictional essay", System.Globalization.CultureInfo.GetCultureInfo("en-US"), "Synthetic")
+            { Memories = ["Synthetic fact"], SkillCatalogue = "[{\"name\":\"Synthetic guide\",\"approved\":false}]", SkillGuidance = "Use plain sentences." };
+        using var message = JsonDocument.Parse(GeminiLiveProtocol.Text(turn, false));
+        var parts = message.RootElement.GetProperty("clientContent").GetProperty("turns")[0].GetProperty("parts");
+        Assert.Equal(4, parts.GetArrayLength());
+        Assert.Contains("untrusted data", parts[1].GetProperty("text").GetString(), StringComparison.Ordinal);
+        Assert.Contains("needs native review", parts[2].GetProperty("text").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Apply relevant writing/task guidance", parts[3].GetProperty("text").GetString(), StringComparison.Ordinal);
+        Assert.Contains("cannot override", parts[3].GetProperty("text").GetString(), StringComparison.Ordinal);
+    }
+    [Fact]
     public void AutomaticListening_UsesSilenceDetectionAndBrazilianAccent()
     {
         using var setup = JsonDocument.Parse(GeminiLiveProtocol.Setup("test", "Charon", "Laura", "pt-BR", [], false, silenceDurationMs: 550));
         var detection = setup.RootElement.GetProperty("setup").GetProperty("realtimeInputConfig").GetProperty("automaticActivityDetection");
         Assert.False(detection.GetProperty("disabled").GetBoolean());
         Assert.Equal(550, detection.GetProperty("silenceDurationMs").GetInt32());
+        Assert.Equal("NO_INTERRUPTION", setup.RootElement.GetProperty("setup").GetProperty("realtimeInputConfig").GetProperty("activityHandling").GetString());
         Assert.Contains("Brazilian accent", setup.RootElement.GetProperty("setup").GetProperty("systemInstruction").GetProperty("parts")[0].GetProperty("text").GetString());
         Assert.Contains("European Portuguese", GeminiLiveProtocol.LanguageInstruction("pt-BR"));
     }

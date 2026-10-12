@@ -10,4 +10,7 @@ public enum SkillRequestSource
 
     /// <summary>Command triggered internally by the assistant itself.</summary>
     Internal,
+
+    /// <summary>Source data for a generated briefing; never interpreted as local commands.</summary>
+    Context,
 }

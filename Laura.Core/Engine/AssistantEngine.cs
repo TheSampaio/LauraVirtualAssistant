@@ -26,6 +26,10 @@ public sealed class AssistantEngine : IAssistantEngine
     private readonly IClock _clock;
     private readonly ILogger<AssistantEngine> _logger;
     private readonly IConversationMemory? _memory;
+    private readonly WakeBriefing? _startupBriefing;
+    private CancellationTokenSource? _startupCancellation;
+    private int _startupScheduled;
+    private bool _operational;
 
     private readonly Channel<EngineMessage> _messages = Channel.CreateUnbounded<EngineMessage>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
@@ -54,6 +58,7 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <param name="clock">Source of date and time.</param>
     /// <param name="logger">Destination for diagnostic logs.</param>
     /// <param name="memory">Optional unified persistent history.</param>
+    /// <param name="startupBriefing">Optional verified news, currency and reminder sources for the first opening in this process.</param>
     public AssistantEngine(
         ISpeechSynthesizer synthesizer,
         ISkillDispatcher dispatcher,
@@ -63,7 +68,7 @@ public sealed class AssistantEngine : IAssistantEngine
         GreetingComposer greetingComposer,
         IClock clock,
         ILogger<AssistantEngine> logger,
-        IConversationMemory? memory = null)
+        IConversationMemory? memory = null, WakeBriefing? startupBriefing = null)
     {
         ArgumentNullException.ThrowIfNull(synthesizer);
         ArgumentNullException.ThrowIfNull(dispatcher);
@@ -83,6 +88,7 @@ public sealed class AssistantEngine : IAssistantEngine
         _clock = clock;
         _logger = logger;
         _memory = memory;
+        _startupBriefing = startupBriefing;
     }
 
     /// <inheritdoc />
@@ -132,16 +138,13 @@ public sealed class AssistantEngine : IAssistantEngine
         LauraSettings settings = _settings.Current;
         _localizer.SetCulture(settings.ResolveCulture());
 
-        if (settings.GreetOnStartup)
-        {
-            Enqueue(new SpeechRequested(_greetingComposer.ComposeStartupBriefing()));
-        }
-
         await EnqueueAndWaitAsync(
             completion => new SettingsApplied(settings) { Completion = completion },
             cancellationToken).ConfigureAwait(false);
 
         SetState(AssistantState.Ready);
+        _operational = true;
+        ScheduleStartup(settings);
         _logger.LogInformation("Assistant engine started.");
     }
 
@@ -180,7 +183,7 @@ public sealed class AssistantEngine : IAssistantEngine
         ArgumentNullException.ThrowIfNull(text);
 
         return EnqueueAndWaitAsync(
-            completion => new CommandSubmitted(text) { Completion = completion },
+            completion => new CommandSubmitted(text) { Completion = completion, RequestCancellation = cancellationToken },
             cancellationToken);
     }
 
@@ -190,13 +193,21 @@ public sealed class AssistantEngine : IAssistantEngine
         ArgumentNullException.ThrowIfNull(text);
 
         return EnqueueAndWaitAsync(
-            completion => new SpeechRequested(text) { Completion = completion },
+            completion => new SpeechRequested(text) { Completion = completion, RequestCancellation = cancellationToken },
             cancellationToken);
+    }
+    /// <inheritdoc />
+    public Task SubmitContextCommandAsync(string text, string displayText, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(text); ArgumentException.ThrowIfNullOrWhiteSpace(displayText);
+        return EnqueueAndWaitAsync(completion => new CommandSubmitted(text)
+            { Completion = completion, RequestCancellation = cancellationToken, DisplayText = displayText }, cancellationToken);
     }
 
     /// <inheritdoc />
     public void StopSpeaking()
     {
+        try { _startupCancellation?.Cancel(); } catch (ObjectDisposedException) { }
         _synthesizer.CancelSpeech();
         Enqueue(new StopRequested());
     }
@@ -242,19 +253,42 @@ public sealed class AssistantEngine : IAssistantEngine
     {
         try
         {
+            using var request = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, message.RequestCancellation);
+            request.Token.ThrowIfCancellationRequested();
             switch (message)
             {
                 case CommandSubmitted submitted:
-                    PublishConversation(ConversationMessageSource.UserTyped, submitted.Text);
-                    await ExecuteCommandAsync(submitted.Text, cancellationToken).ConfigureAwait(false);
+                    PublishConversation(ConversationMessageSource.UserTyped, submitted.DisplayText ?? submitted.Text);
+                    await ExecuteCommandAsync(submitted.Text,
+                        submitted.DisplayText is null ? SkillRequestSource.Text : SkillRequestSource.Context, request.Token).ConfigureAwait(false);
                     break;
 
                 case SpeechRequested requested:
-                    await SpeakInternalAsync(requested.Text, cancellationToken).ConfigureAwait(false);
+                    await SpeakInternalAsync(requested.Text, request.Token).ConfigureAwait(false);
+                    break;
+
+                case StartupRequested:
+                    using (var startup = CancellationTokenSource.CreateLinkedTokenSource(request.Token))
+                    {
+                        _startupCancellation = startup;
+                        try
+                        {
+                            if (_startupBriefing is null) { await SpeakInternalAsync(_greetingComposer.ComposeStartupBriefing(), startup.Token).ConfigureAwait(false); }
+                            else
+                            {
+                                SetState(AssistantState.Thinking);
+                                string prompt = await _startupBriefing.CreateRequestAsync(_greetingComposer.ComposeStartupBriefing(), startup.Token).ConfigureAwait(false);
+                                PublishConversation(ConversationMessageSource.UserTyped, _startupBriefing.DisplayTitle);
+                                await ExecuteCommandAsync(prompt, SkillRequestSource.Context, startup.Token).ConfigureAwait(false);
+                            }
+                        }
+                        finally { _startupCancellation = null; SetState(AssistantState.Ready); }
+                    }
                     break;
 
                 case SettingsApplied applied:
                     ApplySettings(applied.Settings);
+                    if (_operational) { ScheduleStartup(applied.Settings); }
                     break;
 
                 case StopRequested:
@@ -274,6 +308,7 @@ public sealed class AssistantEngine : IAssistantEngine
         catch (Exception exception)
         {
             _logger.LogError(exception, "Failed to handle {Message}.", message.GetType().Name);
+            SetState(AssistantState.Ready);
         }
         finally
         {
@@ -286,15 +321,17 @@ public sealed class AssistantEngine : IAssistantEngine
     /// </summary>
     /// <param name="text">Command text.</param>
     /// <param name="cancellationToken">Token that aborts execution.</param>
+    /// <param name="source">Distinguishes an actionable command from non-actionable briefing data.</param>
     /// <returns>A task completed when the response has finished being spoken.</returns>
-    private async Task ExecuteCommandAsync(string text, CancellationToken cancellationToken)
+    private async Task ExecuteCommandAsync(string text, SkillRequestSource source, CancellationToken cancellationToken)
     {
         SetState(AssistantState.Working);
 
-        SkillRequest request = SkillRequest.Create(text, _localizer.Culture, _clock.Now, SkillRequestSource.Text);
+        SkillRequest request = SkillRequest.Create(text, _localizer.Culture, _clock.Now, source);
 
         bool willUseGenerativeAi = _settings.Current.GenerativeAi.Enabled
             && _dispatcher.CanUseGenerativeFallback(request);
+        if (willUseGenerativeAi) { SetState(AssistantState.Thinking); }
 
         if (willUseGenerativeAi && _settings.Current.GenerativeAi.Provider != "gemini")
         {
@@ -452,6 +489,13 @@ public sealed class AssistantEngine : IAssistantEngine
     private void OnSettingsChanged(object? sender, LauraSettings settings) =>
         Enqueue(new SettingsApplied(settings));
 
+    /// <summary>Queues one startup opening after configuration, deferring until Gemini is available on a fresh installation.</summary>
+    private void ScheduleStartup(LauraSettings settings)
+    {
+        if (!settings.GreetOnStartup || (_startupBriefing is not null && !_dispatcher.CanUseGenerativeFallback(SkillRequest.Create("", settings.ResolveCulture(), _clock.Now, SkillRequestSource.Context)))) { return; }
+        if (Interlocked.CompareExchange(ref _startupScheduled, 1, 0) == 0) { Enqueue(new StartupRequested()); }
+    }
+
     /// <summary>
     /// Engine processing queue item.
     /// </summary>
@@ -462,13 +506,22 @@ public sealed class AssistantEngine : IAssistantEngine
         /// the message. Fire-and-forget messages leave it null.
         /// </summary>
         public TaskCompletionSource? Completion { get; init; }
+        /// <summary>Gets explicit cancellation for this command or speech request.</summary>
+        public CancellationToken RequestCancellation { get; init; }
     }
 
     /// <summary>Text command sent by the interface.</summary>
-    private sealed record CommandSubmitted(string Text) : EngineMessage;
+    private sealed record CommandSubmitted(string Text) : EngineMessage
+    {
+        /// <summary>Gets a concise user-visible label for a context-rich internal request.</summary>
+        public string? DisplayText { get; init; }
+    }
 
     /// <summary>Standalone speech request.</summary>
     private sealed record SpeechRequested(string Text) : EngineMessage;
+
+    /// <summary>First configured startup opening; subsequent settings changes cannot repeat it.</summary>
+    private sealed record StartupRequested : EngineMessage;
 
     /// <summary>Settings to apply to the language.</summary>
     private sealed record SettingsApplied(LauraSettings Settings) : EngineMessage;

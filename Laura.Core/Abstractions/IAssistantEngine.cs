@@ -66,6 +66,8 @@ public interface IAssistantEngine : IAsyncDisposable
     ///     A task completed when the command has finished processing.
     /// </summary>
     Task SubmitCommandAsync(string text, CancellationToken cancellationToken = default);
+    /// <summary>Queues briefing data exclusively for generation, bypassing local commands and using a concise history title.</summary>
+    Task SubmitContextCommandAsync(string text, string displayText, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Makes Laura speak text while respecting the configured voice profile.

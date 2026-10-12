@@ -16,4 +16,6 @@ public enum AssistantState
 
     /// <summary>Speaking.</summary>
     Speaking,
+    /// <summary>Waiting for a generated response or assembling a briefing.</summary>
+    Thinking,
 }
