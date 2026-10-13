@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Laura.App.Infrastructure;
 
 namespace Laura.App.Platforms.Windows;
 
@@ -15,6 +16,22 @@ public sealed class WindowsTrayHost : IDisposable
     private bool _exiting;
     private bool _visible;
     private readonly uint _taskbarCreated;
+    private Action? _approvals;
+    private int _approvalCount;
+    /// <summary>Attaches a durable access path even when native balloons are suppressed.</summary>
+    public void BindApprovals(Action show) => _approvals = show;
+    /// <summary>Updates the persistent tray tooltip without displaying private request details.</summary>
+    public void SetApprovalCount(int count) { _approvalCount = count; var data = IconData(); ShellNotifyIcon(1, ref data); }
+    /// <summary>Uses Windows' notification-area service; disabled notifications/DND may suppress it.</summary>
+    public void Notify(string title, string message, LauraNotificationKind kind)
+    {
+        var data = IconData(); data.Flags |= 0x10;
+        data.InfoTitle = title[..Math.Min(title.Length, 63)]; data.Info = message[..Math.Min(message.Length, 255)];
+        data.InfoFlags = kind == LauraNotificationKind.Error ? 3u : kind is LauraNotificationKind.Warning or LauraNotificationKind.Approval ? 2u : 1u;
+        ShellNotifyIcon(1, ref data);
+    }
+    /// <summary>Gets whether the primary window is hidden or minimized.</summary>
+    public bool IsHiddenOrMinimized => !IsWindowVisible(_window) || IsIconic(_window);
     /// <summary>Registers the hotkey and attaches a notification icon to the existing MAUI handle.</summary>
     public WindowsTrayHost(nint window, Action toggle, Action exit, Action<bool>? visibility = null)
     {
@@ -48,7 +65,7 @@ public sealed class WindowsTrayHost : IDisposable
     /// <summary>Restores the notification icon after Explorer restarts.</summary>
     private void AddIcon() { var data = IconData(); ShellNotifyIcon(0, ref data); }
     /// <summary>Builds the native notification icon structure.</summary>
-    private NotifyIconData IconData() => new() { Size = (uint)Marshal.SizeOf<NotifyIconData>(), Window = _window, Id = 1, Flags = 7, CallbackMessage = TrayMessage, Icon = _icon, Tip = "Laura · Alt + L", Info = "", InfoTitle = "" };
+    private NotifyIconData IconData() => new() { Size = (uint)Marshal.SizeOf<NotifyIconData>(), Window = _window, Id = 1, Flags = 7, CallbackMessage = TrayMessage, Icon = _icon, Tip = "Laura · Alt + L" + (_approvalCount > 0 ? " · " + _approvalCount + " approvals / aprovações" : ""), Info = "", InfoTitle = "" };
     /// <summary>Handles tray activation, close-to-tray and the global hotkey.</summary>
     private nint WindowProcedure(nint window, uint message, nuint wParam, nint lParam, nuint id, nuint data)
     {
@@ -60,20 +77,21 @@ public sealed class WindowsTrayHost : IDisposable
             position.Flags = (position.Flags & ~0x40u) | 0x80u;
             Marshal.StructureToPtr(position, lParam, false);
         }
-        if (message == 0x312) { _toggle(); return 0; }
+        if (message == 0x312 && wParam == 1) { _toggle(); return 0; }
         if (message == _taskbarCreated) { AddIcon(); }
         if (message == TrayMessage)
         {
+            if ((uint)lParam == 0x405) { _approvals?.Invoke(); }
             if ((uint)lParam == 0x202) { _toggle(); }
             if ((uint)lParam == 0x205)
             {
                 nint menu = CreatePopupMenu();
                 try
                 {
-                    AppendMenu(menu, 0, 1, "Laura · Alt + L"); AppendMenu(menu, 0, 2, "Exit / Sair");
+                    AppendMenu(menu, 0, 1, "Laura · Alt + L"); AppendMenu(menu, 0, 3, "Approvals / Aprovações (" + _approvalCount + ")"); AppendMenu(menu, 0, 2, "Exit / Sair");
                     GetCursorPos(out NativePoint point); SetForegroundWindow(window);
                     uint command = TrackPopupMenu(menu, 0x100, point.X, point.Y, 0, window, 0);
-                    if (command == 1) { Show(); } else if (command == 2) { _exit(); }
+                    if (command == 1) { Show(); } else if (command == 2) { _exit(); } else if (command == 3) { _approvals?.Invoke(); }
                 }
                 finally { DestroyMenu(menu); }
             }
@@ -103,6 +121,7 @@ public sealed class WindowsTrayHost : IDisposable
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool UnregisterHotKey(nint window, int id);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ShowWindow(nint window, int command);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindowVisible(nint window);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsIconic(nint window);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetForegroundWindow(nint window);
     [DllImport("shell32.dll", EntryPoint = "Shell_NotifyIconW", CharSet = CharSet.Unicode)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ShellNotifyIcon(uint message, ref NotifyIconData data);
     [DllImport("user32.dll", EntryPoint = "LoadImageW", CharSet = CharSet.Unicode)] private static extern nint LoadImage(nint instance, string name, uint type, int width, int height, uint flags);

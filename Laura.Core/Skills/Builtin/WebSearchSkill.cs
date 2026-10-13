@@ -39,7 +39,7 @@ public sealed class WebSearchSkill : PhraseSkillBase
     protected override string PhrasesKey => LocalizationKeys.Skills.SearchPrefixes;
 
     /// <inheritdoc />
-    public override Task<SkillResponse> ExecuteAsync(
+    public override async Task<SkillResponse> ExecuteAsync(
         SkillRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -47,13 +47,12 @@ public sealed class WebSearchSkill : PhraseSkillBase
 
         if (!PhraseMatcher.TryMatchPrefix(request.NormalizedText, Localizer.GetPhrases(PhrasesKey), out string query))
         {
-            return Task.FromResult(SkillResponse.NotHandled);
+            return SkillResponse.NotHandled;
         }
 
         if (string.IsNullOrWhiteSpace(query))
         {
-            return Task.FromResult(SkillResponse.Speak(
-                Localizer.Get(LocalizationKeys.Skills.SearchMissingQuery)));
+            return SkillResponse.Speak(Localizer.Get(LocalizationKeys.Skills.SearchMissingQuery));
         }
 
         var searchUri = new Uri(string.Format(
@@ -61,8 +60,8 @@ public sealed class WebSearchSkill : PhraseSkillBase
             SearchUrlFormat,
             Uri.EscapeDataString(query)));
 
-        return Task.FromResult(_launcher.TryOpen(searchUri)
+        return await _launcher.TryOpenAsync(searchUri, cancellationToken).ConfigureAwait(false)
             ? SkillResponse.Speak(Localizer.Get(LocalizationKeys.Skills.SearchResponse, query))
-            : SkillResponse.Speak(Localizer.Get(LocalizationKeys.Assistant.SkillFailed)));
+            : SkillResponse.Speak(Localizer.Get(LocalizationKeys.Assistant.SkillFailed));
     }
 }

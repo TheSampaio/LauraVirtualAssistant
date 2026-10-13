@@ -130,16 +130,70 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     /// <summary>Reads a real document rather than rendering cached index contents.</summary>
     public async Task<string> ReadAsync(string path, CancellationToken cancellationToken = default)
     { await InitializeAsync(cancellationToken).ConfigureAwait(false); return await Task.Run(() => _storage!.Read(path), cancellationToken).ConfigureAwait(false); }
+    /// <summary>Reads a bounded vault-local attachment through the same link-safe storage adapter.</summary>
+    public async Task<byte[]> ReadAttachmentAsync(string path, CancellationToken cancellationToken = default)
+    { await InitializeAsync(cancellationToken).ConfigureAwait(false); return await Task.Run(() => _storage!.ReadBytes(path), cancellationToken).ConfigureAwait(false); }
+    /// <summary>Resolves a Markdown image relative to its note, refusing URI schemes and traversal beyond the virtual vault root.</summary>
+    public static string ResolveAttachment(string ownerPath, string relative)
+    {
+        if (string.IsNullOrWhiteSpace(relative) || relative.Contains(':', StringComparison.Ordinal) || relative.StartsWith('/') || relative.StartsWith('\\')) { throw new IOException("Only vault-local attachments are supported."); }
+        var parts = new List<string>((Path.GetDirectoryName(ownerPath)?.Replace('\\', '/') ?? "").Split('/', StringSplitOptions.RemoveEmptyEntries));
+        foreach (string part in relative.Replace('\\', '/').Split('/'))
+        {
+            if (part is "" or ".") { continue; }
+            if (part == "..") { if (parts.Count == 0) { throw new IOException("Attachment leaves the vault."); } parts.RemoveAt(parts.Count - 1); }
+            else { parts.Add(part); }
+        }
+        return string.Join('/', parts);
+    }
+
+    /// <summary>Stores one explicitly requested PNG under a content hash and attaches a relative Markdown reference to an exact node or new topic. Similarity never invents relationships.</summary>
+    public async Task<BrainNote> AttachVisualAsync(byte[] png, string topic, string? noteId = null, string? expectedLocation = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(png); ArgumentException.ThrowIfNullOrWhiteSpace(topic);
+        if (png.Length is < 24 or > 32 * 1024 * 1024 || !png.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 })) { throw new ArgumentException("Provide a bounded PNG.", nameof(png)); }
+        uint width = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(16, 4)), height = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(20, 4));
+        if (width == 0 || height == 0 || (ulong)width * height > 32000000) { throw new ArgumentException("PNG dimensions exceed the supported limit.", nameof(png)); }
+        topic = topic.Trim(); if (topic.Length > 200) { throw new ArgumentException("Visual topic exceeds its limit.", nameof(topic)); }
+        byte[] image = (byte[])png.Clone(); await RefreshAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        string vault = expectedLocation ?? Location; EnsureLocation(vault);
+        BrainNote? note = noteId is null ? _snapshot.Notes.SingleOrDefault(item => item.IsKnowledge && (item.Title.Equals(topic, StringComparison.OrdinalIgnoreCase) || item.Aliases.Contains(topic, StringComparer.OrdinalIgnoreCase)))
+            : _snapshot.Notes.SingleOrDefault(item => item.Id == noteId && item.IsKnowledge);
+        if (noteId is not null && note is null) { throw new IOException("The selected Brain node is no longer available."); }
+        note ??= new BrainNote { Path = "References/" + BrainNaming.FileName(topic, "visual:" + topic), Title = topic, Source = "user_visual_reference", Body = "# " + topic.ReplaceLineEndings(" ") + "\n" };
+        string asset = "Assets/Screenshots/" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(image)).ToLowerInvariant() + ".png";
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await Task.Run(() =>
+            {
+                EnsureLocation(vault);
+                _storage!.ValidatePath(asset);
+                if (_storage.EnumerateFiles().Contains(asset, StringComparer.OrdinalIgnoreCase))
+                { if (!_storage.ReadBytes(asset).AsSpan().SequenceEqual(image)) { throw new IOException("Attachment hash collision or external corruption."); } }
+                else { _storage.WriteBytes(asset, image); }
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+        string relative = Path.GetRelativePath(Path.GetDirectoryName(note.Path)?.Length > 0 ? Path.GetDirectoryName(note.Path)! : ".", asset).Replace('\\', '/');
+        string label = topic.ReplaceLineEndings(" ").Replace("[", "", StringComparison.Ordinal).Replace("]", "", StringComparison.Ordinal);
+        string reference = "![" + label + "](" + relative + ")";
+        if (note.Body.Contains(reference, StringComparison.Ordinal)) { return note; }
+        string heading = settings.Current.UiCulture == "pt-BR" ? "## Referências Visuais" : "## Visual References";
+        return await SaveAsync(note with { Body = note.Body.TrimEnd() + (note.Body.Contains(heading, StringComparison.Ordinal) ? "\n\n" : "\n\n" + heading + "\n\n") + reference + "\n" }, false, vault, cancellationToken).ConfigureAwait(false);
+    }
     /// <summary>Saves a note only against its last observed hash, preserving previous revisions and conflicting drafts.</summary>
     public Task<BrainNote> SaveAsync(BrainNote note, CancellationToken cancellationToken = default) => SaveAsync(note, false, cancellationToken);
     /// <summary>Imports authored metadata with its original timestamp when explicitly requested by migration.</summary>
-    public async Task<BrainNote> SaveAsync(BrainNote note, bool preserveTimestamp, CancellationToken cancellationToken = default)
+    public Task<BrainNote> SaveAsync(BrainNote note, bool preserveTimestamp, CancellationToken cancellationToken = default) => SaveAsync(note, preserveTimestamp, null, cancellationToken);
+    private async Task<BrainNote> SaveAsync(BrainNote note, bool preserveTimestamp, string? expectedLocation, CancellationToken cancellationToken)
     {
         await InitializeAsync(cancellationToken).ConfigureAwait(false); await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             return await Task.Run(() =>
             {
+                if (expectedLocation is not null) { EnsureLocation(expectedLocation); }
                 _storage!.ValidatePath(note.Path);
                 if (note.Hash.Length == 0) { note = note with { Path = DestinationPath(note.Path) }; }
                 if (!note.Path.EndsWith(".md", StringComparison.OrdinalIgnoreCase)) { throw new IOException("Notes require a Markdown extension."); }
@@ -164,11 +218,17 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         }
         finally { _gate.Release(); Changed?.Invoke(this, EventArgs.Empty); }
     }
+    private void EnsureLocation(string expected)
+    {
+        if (!Path.TrimEndingDirectorySeparator(Path.GetFullPath(Location)).Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(expected)), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+        { throw new IOException("Brain location changed. Repeat the visual attachment against the newly selected vault."); }
+    }
     /// <summary>Keeps the unsaved branch under a new identity with explicit provenance instead of overwriting the other device's version.</summary>
     private void PreserveDraft(BrainNote note)
     {
         var draft = note with { Id = Guid.NewGuid().ToString("D"), Path = "Archive/Conflicts/" + Guid.NewGuid().ToString("N") + ".md", Status = "conflict", Hash = "",
             Relations = [new(note.Id, "derived_from", 1, note.Confidence, "Concurrent edit preserved", "local_editor")] };
+        draft = draft with { Body = RebaseImages(note.Body, note.Path, draft.Path) };
         _storage!.Write(DestinationPath(draft.Path), BrainMarkdown.Render(draft), null); Interlocked.Exchange(ref _dirty, 1);
     }
     /// <summary>Preserves authored content before edits; history remains Markdown and survives index deletion.</summary>
@@ -176,11 +236,33 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     {
         var revision = note with { Id = Guid.NewGuid().ToString("D"), Path = "Archive/Revisions/" + Guid.NewGuid().ToString("N") + ".md", Status = "archived", Hash = "",
             Relations = [new(note.Id, "derived_from", 1, note.Confidence, "Previous authored revision", note.Source)] };
+        revision = revision with { Body = RebaseImages(note.Body, note.Path, revision.Path) };
         _storage!.Write(DestinationPath(revision.Path), BrainMarkdown.Render(revision), null);
     }
     /// <summary>Validates a new destination before applying the directory naming policy.</summary>
     private string DestinationPath(string path, bool directory = false)
     { _storage!.ValidatePath(path); return BrainNaming.DestinationPath(path, _storage.EnumerateDirectories(), directory); }
+    private static IEnumerable<string> ImageReferences(string body, string owner)
+    {
+        foreach (Match match in Regex.Matches(body, @"!\[[^\]]*\]\(([^)]+)\)", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)))
+        {
+            string? asset = null; try { asset = ResolveAttachment(owner, match.Groups[1].Value); } catch (IOException) { }
+            if (asset is not null) { yield return asset; }
+        }
+    }
+    private static string RebaseImages(string body, string oldPath, string newPath, string? movedFrom = null, string? movedTo = null) =>
+        Regex.Replace(body, @"(!\[[^\]]*\]\()([^)]+)(\))", match =>
+        {
+            try
+            {
+                string asset = ResolveAttachment(oldPath, match.Groups[2].Value);
+                if (movedFrom is not null && movedTo is not null && (asset.Equals(movedFrom, StringComparison.OrdinalIgnoreCase) || asset.StartsWith(movedFrom + "/", StringComparison.OrdinalIgnoreCase)))
+                { asset = movedTo + asset[movedFrom.Length..]; }
+                string relative = Path.GetRelativePath(Path.GetDirectoryName(newPath)?.Length > 0 ? Path.GetDirectoryName(newPath)! : ".", asset).Replace('\\', '/');
+                return match.Groups[1].Value + relative + match.Groups[3].Value;
+            }
+            catch (IOException) { return match.Value; }
+        }, RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
     /// <summary>Moves a note while retaining its identity and prior path/name aliases for existing wikilinks.</summary>
     public async Task MoveAsync(string from, string to, CancellationToken cancellationToken = default)
     {
@@ -194,14 +276,30 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
                 if (to.StartsWith(from + "/", StringComparison.OrdinalIgnoreCase)) { throw new IOException("A directory cannot move inside itself."); }
                 if (_storage.EnumerateFiles().Any(path => path.Equals(to, StringComparison.OrdinalIgnoreCase) || path.StartsWith(to + "/", StringComparison.OrdinalIgnoreCase)) || _storage.EnumerateDirectories().Contains(to, StringComparer.OrdinalIgnoreCase))
                 { throw new IOException("The destination already exists."); }
+                if ((from.StartsWith("Assets/Screenshots", StringComparison.OrdinalIgnoreCase) || from.Equals("Assets", StringComparison.OrdinalIgnoreCase))
+                    && Snapshot.Notes.Any(note => ImageReferences(note.Body, note.Path).Any(asset => asset.Equals(from, StringComparison.OrdinalIgnoreCase) || asset.StartsWith(from + "/", StringComparison.OrdinalIgnoreCase))))
+                { throw new IOException("The image is still referenced by a Brain note or revision. Remove its references before moving or archiving it."); }
+                var rewritten = new List<(string Path, string Original, string WrittenHash)>();
+                try
+                {
                 foreach (BrainNote note in Snapshot.Notes.Where(note => note.Path == from || note.Path.StartsWith(from + "/", StringComparison.OrdinalIgnoreCase)))
                 {
-                    BrainNote current = BrainMarkdown.Parse(_storage.Read(note.Path), note.Path);
+                    string original = _storage.Read(note.Path); BrainNote current = BrainMarkdown.Parse(original, note.Path);
                     if (current.Hash != note.Hash) { throw new BrainConflictException(); }
-                    var moved = current with { Aliases = current.Aliases.Concat([note.Path, Path.GetFileNameWithoutExtension(note.Path)]).Distinct(StringComparer.OrdinalIgnoreCase).ToArray() };
-                    _storage.Write(note.Path, BrainMarkdown.Render(moved), current.Hash);
+                    var moved = current with { Aliases = current.Aliases.Concat([note.Path, Path.GetFileNameWithoutExtension(note.Path)]).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(), Body = RebaseImages(current.Body, note.Path, to + note.Path[from.Length..], from, to) };
+                    string written = BrainMarkdown.Render(moved); _storage.Write(note.Path, written, current.Hash); rewritten.Add((note.Path, original, FileBrainStorage.Hash(written)));
                 }
                 _storage!.Move(from, to); Scan(false);
+                }
+                catch
+                {
+                    foreach (var previous in rewritten)
+                    {
+                        try { if (FileBrainStorage.Hash(_storage.Read(previous.Path)) == previous.WrittenHash) { _storage.Write(previous.Path, previous.Original, previous.WrittenHash); } }
+                        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { logger.LogWarning("Image reference rollback unavailable ({ErrorType}).", error.GetType().Name); }
+                    }
+                    throw;
+                }
             }, cancellationToken).ConfigureAwait(false);
         }
         finally { _gate.Release(); Changed?.Invoke(this, EventArgs.Empty); }
@@ -209,6 +307,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     /// <summary>Duplicates content under a fresh identity and explicit derived_from relation.</summary>
     public async Task<BrainNote> DuplicateAsync(BrainNote note, string path, CancellationToken cancellationToken = default) =>
         await SaveAsync(note with { Id = Guid.NewGuid().ToString("D"), Path = path, Hash = "", Revision = "", Aliases = [],
+            Body = RebaseImages(note.Body, note.Path, path),
             Relations = [new(note.Id, "derived_from", 1, note.Confidence, "User-created copy", "manual")] }, cancellationToken).ConfigureAwait(false);
     /// <summary>Copies an attachment or folder without overwriting files; copied notes receive fresh identities and remapped internal relations.</summary>
     public async Task CopyPathAsync(string from, string to, CancellationToken cancellationToken = default)
@@ -232,7 +331,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
                 {
                     string target = to + file[from.Length..]; BrainNote? original = notes.FirstOrDefault(note => note.Path == file);
                     if (original is null) { _storage.WriteBytes(target, _storage.ReadBytes(file)); continue; }
-                    string body = original.Body;
+                    string body = RebaseImages(original.Body, original.Path, target, from, to);
                     foreach (var pair in ids) { body = body.Replace("[[id:" + pair.Key, "[[id:" + pair.Value, StringComparison.Ordinal); }
                     var copy = original with { Id = original.Id.Length > 0 ? ids[original.Id] : Guid.NewGuid().ToString("D"), Path = target, Aliases = [], Key = "", Hash = "", Revision = Guid.NewGuid().ToString("N"), PreviousRevision = "", Body = body,
                         Relations = original.Relations.Select(relation => relation with { Target = ids.GetValueOrDefault(relation.Target, relation.Target) }).Concat(original.Id.Length > 0 ? [new BrainRelation(original.Id, "derived_from", 1, original.Confidence, "User-created copy", "manual")] : Array.Empty<BrainRelation>()).ToArray() };

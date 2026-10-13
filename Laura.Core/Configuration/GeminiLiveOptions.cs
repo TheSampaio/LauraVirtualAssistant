@@ -9,4 +9,6 @@ public static class GeminiLiveOptions
     public const string Model = "gemini-3.1-flash-live-preview";
     /// <summary>Gets the native audio fallback used when the primary model is unavailable.</summary>
     public const string FallbackModel = "gemini-2.5-flash-native-audio-preview-12-2025";
+    /// <summary>Returns verified Live vision capability; unknown overrides fail closed until reviewed.</summary>
+    public static bool HasVerifiedImageSupport(string? model) => model is "" or Model or FallbackModel;
 }

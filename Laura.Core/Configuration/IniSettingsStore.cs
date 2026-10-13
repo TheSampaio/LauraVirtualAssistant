@@ -123,6 +123,20 @@ public sealed class IniSettingsStore : ISettingsStore
             ClapWakeEnabled = document.GetBoolean(VoiceSection, "ClapWakeEnabled", defaults.ClapWakeEnabled),
             ClapWakeSensitivity = document.GetInt32(VoiceSection, "ClapWakeSensitivity", defaults.ClapWakeSensitivity),
             RememberConversations = document.GetBoolean(GeneralSection, "RememberConversations", defaults.RememberConversations),
+            Permissions = new Laura.Core.Permissions.PermissionOptions
+            {
+                Mode = (Laura.Core.Permissions.ApprovalMode)document.GetInt32("Permissions", "Mode", 0),
+                Voice = (Laura.Core.Permissions.ApprovalVoiceMode)document.GetInt32("Permissions", "Voice", 1),
+                Notifications = document.GetBoolean("Permissions", "Notifications", true),
+                TimeoutSeconds = document.GetInt32("Permissions", "TimeoutSeconds", 120),
+                HistoryDays = document.GetInt32("Permissions", "HistoryDays", 30)
+            },
+            Screenshots = new Laura.Core.Screenshots.ScreenshotOptions
+            {
+                ShortcutsEnabled = document.GetBoolean("Screenshot", "ShortcutsEnabled", true), AllDisplays = document.GetBoolean("Screenshot", "AllDisplays", true),
+                RegionShortcut = document.GetString("Screenshot", "RegionShortcut", "PrtSc"), WindowShortcut = document.GetString("Screenshot", "WindowShortcut", "Ctrl+PrtSc"),
+                FullScreenShortcut = document.GetString("Screenshot", "FullScreenShortcut", "Shift+PrtSc")
+            },
             Brain = new Laura.Core.Brain.BrainOptions
             {
                 Directory = document.GetString("Brain", "Directory", ""),
@@ -186,6 +200,14 @@ public sealed class IniSettingsStore : ISettingsStore
         document.SetBoolean(VoiceSection, "ClapWakeEnabled", settings.ClapWakeEnabled);
         document.SetNumber(VoiceSection, "ClapWakeSensitivity", settings.ClapWakeSensitivity);
         document.SetBoolean(GeneralSection, "RememberConversations", settings.RememberConversations);
+        document.SetNumber("Permissions", "Mode", (int)settings.Permissions.Mode);
+        document.SetNumber("Permissions", "Voice", (int)settings.Permissions.Voice);
+        document.SetBoolean("Permissions", "Notifications", settings.Permissions.Notifications);
+        document.SetNumber("Permissions", "TimeoutSeconds", settings.Permissions.TimeoutSeconds);
+        document.SetNumber("Permissions", "HistoryDays", settings.Permissions.HistoryDays);
+        document.SetBoolean("Screenshot", "ShortcutsEnabled", settings.Screenshots.ShortcutsEnabled); document.SetBoolean("Screenshot", "AllDisplays", settings.Screenshots.AllDisplays);
+        document.Set("Screenshot", "RegionShortcut", settings.Screenshots.RegionShortcut); document.Set("Screenshot", "WindowShortcut", settings.Screenshots.WindowShortcut);
+        document.Set("Screenshot", "FullScreenShortcut", settings.Screenshots.FullScreenShortcut);
         document.Set("Brain", "Directory", settings.Brain.Directory);
         document.SetBoolean("Brain", "AutoLearn", settings.Brain.AutoLearn);
         document.SetNumber("Brain", "ContextCharacters", settings.Brain.ContextCharacters);

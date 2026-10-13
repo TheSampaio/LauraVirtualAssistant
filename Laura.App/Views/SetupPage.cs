@@ -45,10 +45,12 @@ public sealed class SetupPage : ContentPage
     private readonly Button[] _tabs;
     private readonly ContentView _active = new();
     private readonly string _createdCulture;
+    private readonly PermissionSettingsView _permissions;
+    private readonly ScreenshotSettingsView _screenshots;
 
     /// <summary>Creates independent tabs with a fixed save footer and no offline provider controls.</summary>
     public SetupPage(ISettingsService settings, IApiKeyStore keys, GeminiLiveClient live, IUiLocalizer ui,
-        IStartupRegistration startup, ISpeechSynthesizer speech, WindowsApplicationCatalog applications, ILocalizer conversation)
+        IStartupRegistration startup, ISpeechSynthesizer speech, WindowsApplicationCatalog applications, ILocalizer conversation, Laura.App.Platforms.Windows.WindowsApprovalCenter approvals, ScreenshotCoordinator screenshots)
     {
         using var performance = PerformanceTrace.Measure("settings.construct");
         _settings = settings; _keys = keys; _live = live; _ui = ui; _startup = startup; _speech = speech; _applications = applications; _conversation = conversation;
@@ -90,11 +92,13 @@ public sealed class SetupPage : ContentPage
         });
         _key.TextChanged += (_, _) => _revealKey.IsEnabled = !string.IsNullOrWhiteSpace(_key.Text);
         _revealKey.IsEnabled = false;
-        _pages = [ConnectionPanel(), VoicePanel(), PreferencesPanel(), ApplicationsPanel()];
-        string[] names = ["ui.maui.connectionTab", "ui.tab.voice", "ui.maui.preferencesTab", "ui.maui.appsTab"];
-        string[] icons = ["link", "mic", "settings_2", "layout_grid"];
+        _permissions = new(settings, ui, approvals);
+        _screenshots = new(settings, ui, screenshots);
+        _pages = [ConnectionPanel(), VoicePanel(), PreferencesPanel(), ApplicationsPanel(), Panel(_permissions)];
+        string[] names = ["ui.maui.connectionTab", "ui.tab.voice", "ui.maui.preferencesTab", "ui.maui.appsTab", "ui.permissions.tab"];
+        string[] icons = ["link", "mic", "settings_2", "layout_grid", "shield_check"];
         _tabs = names.Select((name, index) => ActionButton(name, icons[index], () => { SelectTab(index); return Task.CompletedTask; })).ToArray();
-        _tabLayout = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star)], ColumnSpacing = 12, RowSpacing = 8 };
+        _tabLayout = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star)], ColumnSpacing = 8, RowSpacing = 8 };
         for (int index = 0; index < _tabs.Length; index++) { _tabLayout.Add(_tabs[index], index); }
         _result.IsVisible = false; _result.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(Label.Text)) { _result.IsVisible = !string.IsNullOrEmpty(_result.Text); } };
         var footer = Theme.Stack(_result, ActionButton("ui.maui.save", "save", async () => { await SaveAsync().ConfigureAwait(true); }, true));
@@ -119,6 +123,8 @@ public sealed class SetupPage : ContentPage
         _key.Text = ""; _key.IsPassword = true; _revealKey.Source = Theme.IconSource("eye");
         Theme.DescribeAction(_revealKey, _ui.Get("ui.settings.revealKey")); _result.Text = "";
         _nickname.Text = current.UserNickname; _persona.Text = current.GenerativeAi.Persona;
+        _permissions.Reload(current.Permissions);
+        _screenshots.Reload(current.Screenshots);
         _model.Text = string.IsNullOrWhiteSpace(current.GenerativeAi.Model) ? GeminiLiveOptions.Model : current.GenerativeAi.Model;
         _voice.SelectedItem = current.GenerativeAi.LiveVoice; _culture.SelectedItem = current.Culture; _uiCulture.SelectedItem = current.UiCulture;
         _muted.IsToggled = current.MicrophoneMuted; _remember.IsToggled = current.RememberConversations;
@@ -245,7 +251,7 @@ public sealed class SetupPage : ContentPage
         Row("ui.maui.greeting", "play", _greeting, "ui.settings.greetingHelp"),
         Row("ui.maui.hourly", "clock", _hourly, "ui.settings.hourlyHelp"),
         Row("ui.maui.autostart", "power", _autoStart, "ui.settings.autostartHelp"),
-        Row("ui.ai.persona", "star", _persona, "ui.settings.personaHelp"));
+        Row("ui.ai.persona", "star", _persona, "ui.settings.personaHelp"), _screenshots);
     /// <summary>Keeps the virtualized application inventory in a finite native viewport.</summary>
     private View ApplicationsPanel()
     {
@@ -288,9 +294,9 @@ public sealed class SetupPage : ContentPage
         bool compact = Width < 900;
         if (_compact == compact) { return; }
         _compact = compact;
-        _tabLayout.ColumnDefinitions = compact ? [new(GridLength.Star), new(GridLength.Star)] : [new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star)];
+        _tabLayout.ColumnDefinitions = compact ? [new(GridLength.Star), new(GridLength.Star), new(GridLength.Star)] : [new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star)];
         _tabLayout.RowDefinitions = compact ? [new(GridLength.Auto), new(GridLength.Auto)] : [new(GridLength.Auto)];
-        for (int index = 0; index < _tabs.Length; index++) { Grid.SetColumn(_tabs[index], compact ? index % 2 : index); Grid.SetRow(_tabs[index], compact ? index / 2 : 0); }
+        for (int index = 0; index < _tabs.Length; index++) { Grid.SetColumn(_tabs[index], compact ? index % 3 : index); Grid.SetRow(_tabs[index], compact ? index / 3 : 0); }
         foreach (var (row, control, toggle) in _responsiveRows)
         {
             row.ColumnDefinitions = compact || toggle ? [new(GridLength.Auto), new(GridLength.Star), new(GridLength.Auto)] : [new(GridLength.Auto), new(new GridLength(250)), new(GridLength.Star)];
@@ -337,7 +343,7 @@ public sealed class SetupPage : ContentPage
     /// <summary>Verifies native tab geometry and draft preservation without cloud or microphone access.</summary>
     public void VerifySettingsForSmoke()
     {
-        if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Settings verification requires isolated UI smoke mode."); }
+        if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal) && !Environment.GetCommandLineArgs().Contains("--permissions-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Settings verification requires isolated UI smoke mode."); }
         if (_body.Width > Width || _active.Height < 100 || _tabs.Any(tab => tab.Width < Theme.TargetSize || tab.Height < Theme.TargetSize))
         { throw new InvalidOperationException("Settings content or tab targets do not fit the native window."); }
         foreach (var (_, control, toggle) in _responsiveRows.Where(item => item.Row.Handler is not null && item.Row.IsVisible))
@@ -369,7 +375,10 @@ public sealed class SetupPage : ContentPage
         if (_pages[_activeTab] is Border { Content: ScrollView scroll })
         {
             double extent = Math.Max(0, scroll.ContentSize.Height - scroll.Height);
-            await scroll.ScrollToAsync(0, bottom ? extent : 0, false).ConfigureAwait(true);
+            double target = bottom ? extent : 0;
+            // MAUI does not always emit completion for a ChangeView that leaves the offset unchanged.
+            if (Math.Abs(scroll.ScrollY - target) > 1)
+            { await scroll.ScrollToAsync(0, target, false).WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(true); }
             await Task.Delay(150).ConfigureAwait(true);
             if (bottom && extent > 10 && scroll.ScrollY < 1) { throw new InvalidOperationException("The settings scroll viewport cannot reach its lower controls."); }
         }
@@ -391,7 +400,7 @@ public sealed class SetupPage : ContentPage
     private async Task<bool> SaveAsync()
     {
         string? candidate = string.IsNullOrWhiteSpace(_key.Text) ? null : _key.Text.Trim();
-        if (candidate is null && string.IsNullOrWhiteSpace(_keys.Read())) { _result.Text = _ui.Get("ui.maui.noKey"); return false; }
+        bool configured = candidate is not null || !string.IsNullOrWhiteSpace(_keys.Read());
         if (candidate is not null)
         {
             _result.Text = _ui.Get("ui.maui.validatingKey");
@@ -414,8 +423,9 @@ public sealed class SetupPage : ContentPage
             ClapWakeEnabled = _clapWake.IsToggled, ClapWakeSensitivity = (int)_clapSensitivity.Value,
             InputDevice = _inputIds[Math.Max(0, _input.SelectedIndex)], OutputDevice = _outputIds[Math.Max(0, _output.SelectedIndex)],
             GreetOnStartup = _greeting.IsToggled, AnnounceHourly = _hourly.IsToggled, StartWithWindows = _autoStart.IsToggled,
+            Permissions = _permissions.Options, Screenshots = _screenshots.Options,
             Voice = _settings.Current.Voice with { VoiceName = null, Volume = (int)_volume.Value },
-            GenerativeAi = _settings.Current.GenerativeAi with { Enabled = true, Provider = "gemini", Model = _model.Text ?? "", Persona = (_persona.Text ?? "").ReplaceLineEndings(" "), LiveVoice = _voice.SelectedItem as string ?? "Aoede", ContinuousListening = true, SilenceDurationMs = (int)_silence.Value }
+            GenerativeAi = _settings.Current.GenerativeAi with { Enabled = configured, Provider = "gemini", Model = _model.Text ?? "", Persona = (_persona.Text ?? "").ReplaceLineEndings(" "), LiveVoice = _voice.SelectedItem as string ?? "Aoede", ContinuousListening = true, SilenceDurationMs = (int)_silence.Value }
         };
         await _settings.UpdateAsync(updated).ConfigureAwait(true); _ui.SetCulture(updated.ResolveUiCulture());
         if (_startup.IsEnabled() != updated.StartWithWindows) { _startup.SetEnabled(updated.StartWithWindows); }
@@ -425,9 +435,15 @@ public sealed class SetupPage : ContentPage
     private async Task PreviewAsync()
     {
         if (!await SaveAsync().ConfigureAwait(true)) { return; }
+        if (!_live.IsAvailable) { _result.Text = _ui.Get("ui.maui.noKey"); return; }
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
         string preview = _conversation.Get("ui.voice.previewText");
         await _speech.SpeakAsync(new SpeechRequest(preview, _settings.Current.Voice, _settings.Current.Culture), timeout.Token).ConfigureAwait(true);
+    }
+    internal async Task SaveSettingsForPermissionSmokeAsync()
+    {
+        if (!Environment.GetCommandLineArgs().Contains("--permissions-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Isolated permission diagnostics only."); }
+        if (!await SaveAsync().ConfigureAwait(true)) { throw new InvalidOperationException("Security settings could not be saved."); }
     }
 
     /// <summary>Exercises masked save and invalid-key preservation only in explicitly requested isolated verification.</summary>

@@ -28,4 +28,10 @@ public interface IProcessLauncher
     ///     <see langword="true"/> when the process was started.
     /// </summary>
     bool TryStart(string fileName, string? arguments = null);
+
+    /// <summary>Asynchronously opens a concrete destination after platform authorization.</summary>
+    Task<bool> TryOpenAsync(Uri uri, CancellationToken cancellationToken = default) => Task.FromResult(TryOpen(uri));
+
+    /// <summary>Asynchronously launches exact parameters after platform authorization.</summary>
+    Task<bool> TryStartAsync(string fileName, string? arguments = null, CancellationToken cancellationToken = default) => Task.FromResult(TryStart(fileName, arguments));
 }

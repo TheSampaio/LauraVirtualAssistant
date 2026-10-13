@@ -68,6 +68,9 @@ public interface IAssistantEngine : IAsyncDisposable
     Task SubmitCommandAsync(string text, CancellationToken cancellationToken = default);
     /// <summary>Queues briefing data exclusively for generation, bypassing local commands and using a concise history title.</summary>
     Task SubmitContextCommandAsync(string text, string displayText, CancellationToken cancellationToken = default);
+    /// <summary>Queues an explicitly selected PNG alongside its question through the normal conversation and speech flow.</summary>
+    Task SubmitVisualCommandAsync(string text, byte[] png, CancellationToken cancellationToken = default) =>
+        Task.FromException(new NotSupportedException("This engine does not support visual turns."));
 
     /// <summary>
     /// Makes Laura speak text while respecting the configured voice profile.

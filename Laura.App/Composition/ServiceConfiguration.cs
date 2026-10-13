@@ -10,6 +10,7 @@ using Laura.Core.Models;
 using Laura.Core.Memory;
 using Laura.Core.Brain;
 using Laura.Core.Files;
+using Laura.Core.Permissions;
 using Laura.Core.Skills.Builtin;
 using Laura.Core.Weather;
 using Laura.Platform.Windows.Conversation;
@@ -71,6 +72,12 @@ public static class ServiceConfiguration
             settingsPath,
             provider.GetRequiredService<ILogger<IniSettingsStore>>()));
         services.AddSingleton<ISettingsService, SettingsService>();
+        services.AddSingleton(provider => new PermissionStore(Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Security", "permissions.json")));
+        services.AddSingleton(provider => new PermissionManager(provider.GetRequiredService<PermissionStore>(),
+            () => provider.GetRequiredService<ISettingsService>().Current.Permissions,
+            () => new[] { provider.GetRequiredService<AssistantStorage>().Directory,
+                provider.GetRequiredService<ISettingsService>().Current.Brain.Directory }.Where(path => !string.IsNullOrWhiteSpace(path)),
+            Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Workspace")));
         services.AddSingleton<SqliteConversationMemory>(_ => new SqliteConversationMemory(
             Path.Combine(Path.GetDirectoryName(settingsPath)!, "memory.db")));
         services.AddSingleton<IBrainEmbedding, OnnxBrainEmbedding>();
@@ -82,7 +89,10 @@ public static class ServiceConfiguration
         services.AddSingleton<BrainSkills>();
         services.AddSingleton<BrainConversationMemory>();
         services.AddSingleton<IConversationMemory>(provider => provider.GetRequiredService<BrainConversationMemory>());
-        services.AddSingleton<IApiKeyStore>(_ => new ProtectedApiKeyStore(Path.GetDirectoryName(settingsPath)!));
+        // Explicit live diagnostics read the already protected credential in-process; it is neither printed nor copied into fixtures.
+        string credentialDirectory = storageDirectory is not null && (Environment.GetCommandLineArgs().Contains("--permissions-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--screenshot-live-smoke", StringComparer.Ordinal))
+            ? Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())! : Path.GetDirectoryName(settingsPath)!;
+        services.AddSingleton<IApiKeyStore>(_ => new ProtectedApiKeyStore(credentialDirectory));
         services.AddSingleton(_ => new UserFileWorkspace(Path.Combine(Path.GetDirectoryName(settingsPath)!, "Workspace")));
 
         services.AddSingleton<ILocalizer>(provider => new JsonLocalizer(
@@ -166,6 +176,9 @@ public static class ServiceConfiguration
     private static void AddPresentation(IServiceCollection services)
     {
         services.AddSingleton<IUiDispatcher, MauiUiDispatcher>();
+        services.AddSingleton<LauraNotifications>();
+        services.AddSingleton<ScreenshotCoordinator>();
+        services.AddSingleton<Laura.App.Platforms.Windows.WindowsApprovalCenter>();
         services.AddSingleton<IDesktopTools, MauiDesktopTools>();
         services.AddSingleton<MauiShellController>();
         services.AddSingleton<Laura.Core.Abstractions.IShellController>(provider => provider.GetRequiredService<MauiShellController>());

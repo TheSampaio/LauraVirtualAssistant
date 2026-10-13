@@ -12,4 +12,8 @@ public interface IAssistantTools
 }
 
 /// <summary>Returns observable tool output and an optional explicitly captured vision frame.</summary>
-public sealed record AssistantToolResult(string Text, byte[]? Image = null, string MimeType = "image/jpeg");
+public sealed record AssistantToolResult(string Text, byte[]? Image = null, string MimeType = "image/jpeg")
+{
+    /// <summary>Cancels future disclosure if the originating editable capture is closed.</summary>
+    public CancellationToken ImageLifetime { get; init; }
+}

@@ -203,6 +203,14 @@ public sealed class AssistantEngine : IAssistantEngine
         return EnqueueAndWaitAsync(completion => new CommandSubmitted(text)
             { Completion = completion, RequestCancellation = cancellationToken, DisplayText = displayText }, cancellationToken);
     }
+    /// <inheritdoc />
+    public Task SubmitVisualCommandAsync(string text, byte[] png, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(text);
+        ArgumentNullException.ThrowIfNull(png); if (png.Length is 0 or > 32 * 1024 * 1024) { throw new ArgumentException("Invalid visual attachment.", nameof(png)); }
+        byte[] snapshot = (byte[])png.Clone();
+        return EnqueueAndWaitAsync(completion => new CommandSubmitted(text) { Image = snapshot, Completion = completion, RequestCancellation = cancellationToken }, cancellationToken);
+    }
 
     /// <inheritdoc />
     public void StopSpeaking()
@@ -260,7 +268,7 @@ public sealed class AssistantEngine : IAssistantEngine
                 case CommandSubmitted submitted:
                     PublishConversation(ConversationMessageSource.UserTyped, submitted.DisplayText ?? submitted.Text);
                     await ExecuteCommandAsync(submitted.Text,
-                        submitted.DisplayText is null ? SkillRequestSource.Text : SkillRequestSource.Context, request.Token).ConfigureAwait(false);
+                        submitted.DisplayText is null ? SkillRequestSource.Text : SkillRequestSource.Context, request.Token, submitted.Image).ConfigureAwait(false);
                     break;
 
                 case SpeechRequested requested:
@@ -322,12 +330,13 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <param name="text">Command text.</param>
     /// <param name="cancellationToken">Token that aborts execution.</param>
     /// <param name="source">Distinguishes an actionable command from non-actionable briefing data.</param>
+    /// <param name="image">Explicit PNG attachment for this interaction, or null for text-only input.</param>
     /// <returns>A task completed when the response has finished being spoken.</returns>
-    private async Task ExecuteCommandAsync(string text, SkillRequestSource source, CancellationToken cancellationToken)
+    private async Task ExecuteCommandAsync(string text, SkillRequestSource source, CancellationToken cancellationToken, byte[]? image = null)
     {
         SetState(AssistantState.Working);
 
-        SkillRequest request = SkillRequest.Create(text, _localizer.Culture, _clock.Now, source);
+        SkillRequest request = SkillRequest.Create(text, _localizer.Culture, _clock.Now, source) with { Image = image };
 
         bool willUseGenerativeAi = _settings.Current.GenerativeAi.Enabled
             && _dispatcher.CanUseGenerativeFallback(request);
@@ -513,6 +522,8 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <summary>Text command sent by the interface.</summary>
     private sealed record CommandSubmitted(string Text) : EngineMessage
     {
+        /// <summary>Gets an explicitly queued image; saved history contains only its question and answer.</summary>
+        public byte[]? Image { get; init; }
         /// <summary>Gets a concise user-visible label for a context-rich internal request.</summary>
         public string? DisplayText { get; init; }
     }

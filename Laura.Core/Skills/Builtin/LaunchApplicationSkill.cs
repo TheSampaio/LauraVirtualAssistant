@@ -50,7 +50,7 @@ public sealed class LaunchApplicationSkill : PhraseSkillBase
     protected override string PhrasesKey => LocalizationKeys.Skills.LaunchPrefixes;
 
     /// <inheritdoc />
-    public override Task<SkillResponse> ExecuteAsync(
+    public override async Task<SkillResponse> ExecuteAsync(
         SkillRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -62,20 +62,20 @@ public sealed class LaunchApplicationSkill : PhraseSkillBase
                 out string applicationName)
             || string.IsNullOrWhiteSpace(applicationName))
         {
-            return Task.FromResult(SkillResponse.NotHandled);
+            return SkillResponse.NotHandled;
         }
 
         ApplicationTarget? target = FindTarget(applicationName);
 
         if (target is null)
         {
-            return Task.FromResult(SkillResponse.Speak(Localizer.Get(
-                _launcher.TryStart(applicationName) ? LocalizationKeys.Skills.LaunchResponse : LocalizationKeys.Skills.LaunchNotFound, applicationName)));
+            return SkillResponse.Speak(Localizer.Get(
+                await _launcher.TryStartAsync(applicationName, cancellationToken: cancellationToken).ConfigureAwait(false) ? LocalizationKeys.Skills.LaunchResponse : LocalizationKeys.Skills.LaunchNotFound, applicationName));
         }
 
-        return Task.FromResult(Launch(target)
+        return await LaunchAsync(target, cancellationToken).ConfigureAwait(false)
             ? SkillResponse.Speak(Localizer.Get(LocalizationKeys.Skills.LaunchResponse, applicationName))
-            : SkillResponse.Speak(Localizer.Get(LocalizationKeys.Skills.LaunchNotFound, applicationName)));
+            : SkillResponse.Speak(Localizer.Get(LocalizationKeys.Skills.LaunchNotFound, applicationName));
     }
 
     /// <summary>
@@ -100,14 +100,14 @@ public sealed class LaunchApplicationSkill : PhraseSkillBase
     /// Returns:
     ///     <see langword="true"/> when the system agreed to open the application.
     /// </summary>
-    private bool Launch(ApplicationTarget target)
+    private async Task<bool> LaunchAsync(ApplicationTarget target, CancellationToken token)
     {
         if (target.IsUri)
         {
-            return _launcher.TryOpen(new Uri(target.Target));
+            return await _launcher.TryOpenAsync(new Uri(target.Target), token).ConfigureAwait(false);
         }
 
-        return _launcher.TryStart(target.Target)
-            || (target.Fallback is not null && _launcher.TryStart(target.Fallback));
+        return await _launcher.TryStartAsync(target.Target, cancellationToken: token).ConfigureAwait(false)
+            || (target.Fallback is not null && await _launcher.TryStartAsync(target.Fallback, cancellationToken: token).ConfigureAwait(false));
     }
 }

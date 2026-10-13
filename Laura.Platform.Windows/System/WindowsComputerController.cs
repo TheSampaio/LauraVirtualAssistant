@@ -21,6 +21,31 @@ public static class WindowsComputerController
         if (matches.Count != 1) { return false; }
         ShowWindow(matches[0], 9); return SetForegroundWindow(matches[0]);
     }
+    /// <summary>Pins a real window and process before approval; Laura's own security UI cannot be automated by a model.</summary>
+    public static WindowsInputTarget ResolveInputTarget(string title)
+    {
+        var matches = new List<nint>();
+        if (title.Length == 0) { matches.Add(GetForegroundWindow()); }
+        else { EnumWindows((window, _) => { if (IsWindowVisible(window) && Title(window).Contains(title, StringComparison.OrdinalIgnoreCase)) { matches.Add(window); } return true; }, 0); }
+        if (matches.Count != 1 || !IsWindow(matches[0])) { throw new InvalidOperationException("Choose one actual window."); }
+        _ = GetWindowThreadProcessId(matches[0], out uint process);
+        if (process == Environment.ProcessId) { throw new InvalidOperationException("Model input cannot change Laura's own authorization UI."); }
+        return new(matches[0].ToInt64(), process, Title(matches[0]));
+    }
+    /// <summary>Rechecks identity after approval and verifies foreground focus immediately before input.</summary>
+    public static bool FocusVerified(WindowsInputTarget target)
+    {
+        nint handle = new(target.Handle);
+        _ = GetWindowThreadProcessId(handle, out uint process);
+        if (!IsWindow(handle) || process != target.ProcessId || process == Environment.ProcessId || Title(handle) != target.Title) { return false; }
+        ShowWindow(handle, 9); return SetForegroundWindow(handle) && GetForegroundWindow() == handle;
+    }
+    /// <summary>Refuses mouse input redirected onto another top-level window.</summary>
+    public static void ValidatePoint(WindowsInputTarget target, int x, int y)
+    {
+        if (GetAncestor(WindowFromPoint(new NativePoint { X = x, Y = y }), 2).ToInt64() != target.Handle)
+        { throw new InvalidOperationException("Pointer coordinates no longer belong to the approved window."); }
+    }
     /// <summary>Types Unicode literally into the active application, without interpreting command syntax.</summary>
     public static void Type(string text)
     {
@@ -78,11 +103,17 @@ public static class WindowsComputerController
     /// <summary>Reads a window title for targeting without inspecting another app's private data.</summary>
     private static string Title(nint window) { char[] title = new char[512]; int length = GetWindowText(window, title, title.Length); return length > 0 ? new string(title, 0, length) : ""; }
     [StructLayout(LayoutKind.Sequential)] private struct Input { internal uint Type; internal InputPayload Payload; }
+    [StructLayout(LayoutKind.Sequential)] private struct NativePoint { internal int X, Y; }
     [StructLayout(LayoutKind.Explicit)] private struct InputPayload { [FieldOffset(0)] internal MouseInput Mouse; [FieldOffset(0)] internal KeyboardInput Keyboard; }
     [StructLayout(LayoutKind.Sequential)] private struct MouseInput { internal int X, Y; internal uint Data, Flags, Time; internal nuint Extra; }
     [StructLayout(LayoutKind.Sequential)] private struct KeyboardInput { internal ushort Key, Scan; internal uint Flags, Time; internal nuint Extra; }
     private delegate bool EnumProcedure(nint window, nint data);
     [DllImport("user32.dll")] private static extern uint SendInput(uint count, Input[] inputs, int size);
+    [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindow(nint window);
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(nint window, out uint process);
+    [DllImport("user32.dll")] private static extern nint WindowFromPoint(NativePoint point);
+    [DllImport("user32.dll")] private static extern nint GetAncestor(nint window, uint flag);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool EnumWindows(EnumProcedure procedure, nint data);
@@ -92,3 +123,5 @@ public static class WindowsComputerController
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ShowWindow(nint window, int command);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SystemParametersInfo(uint action, uint parameter, string value, uint flags);
 }
+/// <summary>A window identity captured before a user approval. Changing titles/processes invalidates pending input.</summary>
+public sealed record WindowsInputTarget(long Handle, uint ProcessId, string Title);
