@@ -42,6 +42,9 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         Function("file_control", "Operate on real user files. Actions: list, search, read, write, mkdir, copy, move, delete, open, info, undo. Aliases: desktop, downloads, documents, pictures, workspace. Writes and destructive actions require native confirmation; deletions move to reversible Laura trash. Read text/code files to help develop projects; use write to save generated code.", ["action"], ("action", "STRING", "File action"), ("path", "STRING", "File or folder"), ("destination", "STRING", "Copy/move destination"), ("content", "STRING", "Literal file content"), ("query", "STRING", "File name search")),
         Function("run_program", "Run a specific installed executable with structured arguments for development tasks or existing projects, after native user confirmation. Captures actual exit code and output; no shell interpolation. Do not invent successful builds.", ["executable"], ("executable", "STRING", "Executable name or existing executable path"), ("arguments", "STRING", "JSON array of literal command-line arguments"), ("directory", "STRING", "Working directory"), ("timeout", "INTEGER", "Timeout seconds, up to 120")),
         Function("save_memory", "Save a fact or preference the user asks you to remember.", ["key", "value"], ("key", "STRING", "Stable fact key"), ("value", "STRING", "Fact text")),
+        Function("learn_memory", "Propose durable knowledge grounded ONLY in the current user's actual words, regardless of grammar. Categories: preference, goal, project, decision, procedure. Changes: new, complement, correction, contradiction, temporary, obsolete, unverified. evidence and value must be exact user quotes; aspect must be an exact topic quote, except preference editor/language/style. Corrections/complements require the actual existing note ID from recall_memory. Temporary context is not persisted. No policies, skills, secrets or generated assistant claims can be learned.", ["category", "aspect", "value", "evidence"],
+            ("category", "STRING", "Knowledge category"), ("aspect", "STRING", "Grounded topic or preference editor/language/style"), ("value", "STRING", "Exact short user quote"),
+            ("evidence", "STRING", "Exact evidence quoted from current user input"), ("change", "STRING", "Knowledge change classification"), ("target", "STRING", "Existing stable note ID when updating")),
         Function("recall_memory", "Consult actual Brain knowledge, preferences, projects and decisions before claiming you do not remember. For a general overview about the owner, use an empty query to retrieve a bounded knowledge overview. Skills are discovered separately with list_brain_skills.", [], ("query", "STRING", "Specific knowledge query, or empty for an owner overview")),
         Function("list_brain_skills", "Discover installed Brain skills by their real names, descriptions and approval status. Consult this for writing/editing tasks and before claiming a skill is missing. Disabled imports can be reviewed with read_brain_skill.", []),
         Function("read_brain_skill", "Load one relevant skill's instructions by ID or exact name. If disabled or changed, native review asks the user to approve that exact version first. Match descriptions to the task across languages. No scripts or dependencies execute.", ["name"], ("name", "STRING", "Stable ID or exact skill name")),
@@ -60,6 +63,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
     /// <inheritdoc />
     public async Task<AssistantToolResult> ExecuteAsync(string name, JsonElement arguments, CancellationToken cancellationToken)
     {
+        string workingUserText = memory.WorkingUserText;
         await _actions.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -84,7 +88,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             using var document = JsonDocument.Parse(frozen.ToJsonString());
             JsonElement snapshot = document.RootElement.Clone();
             return await permissions.ExecuteAsync(MauiToolPermissions.Describe(name, snapshot),
-                token => ExecuteAuthorizedAsync(name, snapshot, token), cancellationToken).ConfigureAwait(false);
+                token => ExecuteAuthorizedAsync(name, snapshot, workingUserText, token), cancellationToken).ConfigureAwait(false);
         }
         catch (PermissionDeniedException) { return new("Operation denied by local authorization. No action was dispatched; do not retry through another tool."); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or JsonException or InvalidOperationException)
@@ -92,7 +96,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         finally { _actions.Release(); }
     }
 
-    private async Task<AssistantToolResult> ExecuteAuthorizedAsync(string name, JsonElement arguments, CancellationToken cancellationToken)
+    private async Task<AssistantToolResult> ExecuteAuthorizedAsync(string name, JsonElement arguments, string workingUserText, CancellationToken cancellationToken)
     {
         try
         {
@@ -170,6 +174,11 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                 case "save_memory":
                     if (!settings.Current.RememberConversations) { return new("User memory is disabled."); }
                     memory.SetFact(Value(arguments, "key"), Value(arguments, "value")); return new("Fact saved.");
+                case "learn_memory":
+                    var proposal = new BrainMemoryProposal(Value(arguments, "category"), Value(arguments, "aspect"), Value(arguments, "value"), Value(arguments, "evidence"),
+                        Value(arguments, "change") is { Length: > 0 } change ? change : "new", Value(arguments, "target"));
+                    BrainMemoryResult learned = await services.GetRequiredService<BrainLearning>().LearnProposalAsync(proposal, workingUserText, cancellationToken).ConfigureAwait(false);
+                    return new(JsonSerializer.Serialize(learned));
                 case "recall_memory":
                     if (!settings.Current.RememberConversations) { return new("User memory is disabled."); }
                     return new(await services.GetRequiredService<Laura.Core.Brain.BrainService>().RecallAsync(Value(arguments, "query"), cancellationToken).ConfigureAwait(false));

@@ -42,7 +42,7 @@ public static partial class BrainMarkdown
             Type = Scalar(map, "type", path.StartsWith("skills/", StringComparison.OrdinalIgnoreCase) ? "skill" : "document"),
             MemoryType = Scalar(map, "memory_type", "semantic"), Status = Scalar(map, "status", "active"),
             CreatedAt = Date(map, "created_at"), UpdatedAt = Date(map, "updated_at"), Confidence = Number(map, "confidence", .8), Importance = Number(map, "importance", .5),
-            Tags = Strings(map, "tags"), Aliases = Strings(map, "aliases"), Source = Scalar(map, "source", "manual"), Key = Scalar(map, "key", ""),
+            Tags = Strings(map, "tags"), Aliases = Strings(map, "aliases"), Source = Scalar(map, "source", "manual"), Verification = Scalar(map, "verification", "unspecified"), Key = Scalar(map, "key", ""),
             Revision = Scalar(map, "revision", ""), PreviousRevision = Scalar(map, "previous_revision", ""), Relations = relations,
             Body = body, Frontmatter = yaml, Hash = FileBrainStorage.Hash(content)
         };
@@ -54,7 +54,7 @@ public static partial class BrainMarkdown
         foreach ((string key, string value) in new[] { ("id", note.Id), ("schema_version", "1"), ("title", note.Title), ("description", note.Description), ("type", note.Type),
             ("memory_type", note.MemoryType), ("created_at", note.CreatedAt.ToString("O", CultureInfo.InvariantCulture)), ("updated_at", note.UpdatedAt.ToString("O", CultureInfo.InvariantCulture)),
             ("status", note.Status), ("confidence", note.Confidence.ToString(CultureInfo.InvariantCulture)), ("importance", note.Importance.ToString(CultureInfo.InvariantCulture)),
-            ("source", note.Source), ("key", note.Key), ("revision", note.Revision), ("previous_revision", note.PreviousRevision) })
+            ("source", note.Source), ("verification", note.Verification), ("key", note.Key), ("revision", note.Revision), ("previous_revision", note.PreviousRevision) })
         { map.Children[new YamlScalarNode(key)] = new YamlScalarNode(value); }
         map.Children[new YamlScalarNode("tags")] = new YamlSequenceNode(note.Tags.Select(tag => new YamlScalarNode(tag)));
         map.Children[new YamlScalarNode("aliases")] = new YamlSequenceNode(note.Aliases.Select(alias => new YamlScalarNode(alias)));

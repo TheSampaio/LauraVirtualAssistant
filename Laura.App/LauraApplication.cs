@@ -52,7 +52,7 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
             approvals.Start((title, message) => services.GetRequiredService<LauraNotifications>().Publish(title, message, LauraNotificationKind.Approval),
                 () => _tray?.IsHiddenOrMinimized != false, () => { _tray?.Show(); _ = services.GetRequiredService<MainPage>().OpenSetupAsync(); });
             services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed += OnApprovalsChanged;
-            if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal) && !Environment.GetCommandLineArgs().Contains("--permissions-smoke", StringComparer.Ordinal) && !Environment.GetCommandLineArgs().Contains("--screenshot-smoke", StringComparer.Ordinal)) { _shortcuts = new WindowsShortcutHost(window, services.GetRequiredService<MainPage>()); }
+            if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal) && !Environment.GetCommandLineArgs().Contains("--permissions-smoke", StringComparer.Ordinal) && !Environment.GetCommandLineArgs().Contains("--screenshot-smoke", StringComparer.Ordinal) && !Environment.GetCommandLineArgs().Contains("--brain-smoke", StringComparer.Ordinal)) { _shortcuts = new WindowsShortcutHost(window, services.GetRequiredService<MainPage>()); }
             services.GetRequiredService<MauiShellController>().Bind(
                 () => { _tray.Show(); _ = services.GetRequiredService<MainPage>().OpenSetupAsync(); },
                 _tray.Toggle, () => _ = ExitAsync(window), _tray.Show);
@@ -77,7 +77,8 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
             int smoke = Array.IndexOf(args, "--ui-smoke");
             int permissionSmoke = Array.IndexOf(args, "--permissions-smoke");
             int screenshotSmoke = Array.IndexOf(args, "--screenshot-smoke");
-            if (smoke >= 0 || permissionSmoke >= 0 || screenshotSmoke >= 0) { await settings.UpdateAsync(settings.Current with { GreetOnStartup = false, AnnounceHourly = false, ClapWakeEnabled = false }).ConfigureAwait(true); }
+            int brainSmoke = Array.IndexOf(args, "--brain-smoke");
+            if (smoke >= 0 || permissionSmoke >= 0 || screenshotSmoke >= 0 || brainSmoke >= 0) { await settings.UpdateAsync(settings.Current with { GreetOnStartup = false, AnnounceHourly = false, ClapWakeEnabled = false }).ConfigureAwait(true); }
             services.GetRequiredService<ILocalizer>().SetCulture(settings.Current.ResolveCulture());
             services.GetRequiredService<IUiLocalizer>().SetCulture(settings.Current.ResolveUiCulture());
             _brainStartup = WarmBrainAsync();
@@ -85,11 +86,12 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
             if (_stopping) { interactive.Dispose(); return; }
             await services.GetRequiredService<ReminderScheduler>().StartAsync().ConfigureAwait(true);
             services.GetRequiredService<HourlyAnnouncer>().Start();
-            if (smoke < 0 && permissionSmoke < 0 && screenshotSmoke < 0) { services.GetRequiredService<ClapWakeCoordinator>().Start(); }
+            if (smoke < 0 && permissionSmoke < 0 && screenshotSmoke < 0 && brainSmoke < 0) { services.GetRequiredService<ClapWakeCoordinator>().Start(); }
             services.GetRequiredService<MainPage>().Reload();
             interactive.Dispose();
             await _brainStartup.ConfigureAwait(true);
             if (_stopping) { return; }
+            if (brainSmoke >= 0 && brainSmoke + 1 < args.Length) { await BrainSmokeRunner.RunAsync(services, args[brainSmoke + 1]).ConfigureAwait(true); return; }
             if (screenshotSmoke >= 0 && screenshotSmoke + 1 < args.Length) { await ScreenshotSmokeRunner.RunAsync(services, Windows[0], args[screenshotSmoke + 1]).ConfigureAwait(true); return; }
             if (smoke < 0 && permissionSmoke < 0 && !args.Contains("--screenshot-smoke", StringComparer.Ordinal) && Windows[0].Handler?.PlatformView is Microsoft.UI.Xaml.Window screenshotNative)
             { _screenshotShortcuts = new(WinRT.Interop.WindowNative.GetWindowHandle(screenshotNative), settings, services.GetRequiredService<ScreenshotCoordinator>(), services.GetRequiredService<IUiLocalizer>(), services.GetRequiredService<LauraNotifications>()); }

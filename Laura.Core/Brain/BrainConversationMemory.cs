@@ -13,6 +13,11 @@ public sealed class BrainConversationMemory(BrainService brain, BrainLearning le
     /// <summary>Gets transient working context for grounded tool proposals; it is not an execution permission.</summary>
     public string LastUserText { get { lock (_gate) { return _lastUserText; } } }
     /// <inheritdoc />
+    public string WorkingUserText => LastUserText;
+    /// <inheritdoc />
+    public void SetWorkingContext(string text)
+    { ArgumentNullException.ThrowIfNull(text); lock (_gate) { _lastUserText = text.Length <= 4000 ? text : ""; } }
+    /// <inheritdoc />
     public void Initialize()
     {
         lock (_gate)
@@ -41,7 +46,7 @@ public sealed class BrainConversationMemory(BrainService brain, BrainLearning le
     {
         Initialize(); transcripts.Append(message);
         if (message.Source != ConversationMessageSource.Assistant)
-        { lock (_gate) { _lastUserText = message.Text; } learning.Observe(message.Text); }
+        { SetWorkingContext(message.Text); learning.Observe(message.Text); }
     }
     /// <inheritdoc />
     public IReadOnlyList<ConversationMessage> ReadRecent(int limit) => transcripts.ReadRecent(limit);

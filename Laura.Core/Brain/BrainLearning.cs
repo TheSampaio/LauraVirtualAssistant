@@ -10,22 +10,54 @@ namespace Laura.Core.Brain;
 /// <summary>Conservatively consolidates durable user declarations; never learns assertions from generated assistant text.</summary>
 public sealed partial class BrainLearning(BrainService brain, ISettingsService settings, ILocalizer localizer, ILogger<BrainLearning> logger) : IAsyncDisposable
 {
-    private readonly Channel<string> _queue = Channel.CreateBounded<string>(new BoundedChannelOptions(64) { FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true, SingleWriter = false });
+    private sealed record Work(string Text, string Vault, TaskCompletionSource? Barrier = null);
+    private readonly Channel<Work> _queue = Channel.CreateBounded<Work>(new BoundedChannelOptions(64) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = false });
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly object _workerGate = new();
+    private readonly SemaphoreSlim _consolidation = new(1, 1);
     private Task? _worker;
-    private int _started;
+    private bool _stopping;
+    private long _accepted, _completed, _failed, _excluded, _saturated;
+    /// <summary>Gets non-sensitive queue and processing counters for diagnostics.</summary>
+    public BrainLearningStatus Status => new(Interlocked.Read(ref _accepted), Interlocked.Read(ref _completed), Interlocked.Read(ref _failed), Interlocked.Read(ref _excluded), Interlocked.Read(ref _saturated));
     /// <summary>Queues only bounded user declarations, preserving responsive speech and UI paths.</summary>
-    public void Observe(string text)
+    public BrainObservationResult Observe(string text)
     {
-        if (!settings.Current.RememberConversations || !settings.Current.Brain.AutoLearn || text.Length is < 8 or > 4000 || Sensitive(text)) { return; }
-        if (Interlocked.CompareExchange(ref _started, 1, 0) == 0) { _worker = Task.Run(RunAsync); } _queue.Writer.TryWrite(text);
+        if (!Eligible(text)) { Interlocked.Increment(ref _excluded); return BrainObservationResult.Excluded; }
+        lock (_workerGate)
+        {
+            if (_stopping) { return BrainObservationResult.Stopped; }
+            StartWorker();
+            if (_queue.Writer.TryWrite(new(text, brain.Location))) { Interlocked.Increment(ref _accepted); return BrainObservationResult.Accepted; }
+            Interlocked.Increment(ref _saturated);
+            logger.LogWarning("Brain learning queue saturated; event was not accepted. Retained transcript remains available.");
+            return BrainObservationResult.Saturated;
+        }
     }
+    /// <summary>Waits for capacity instead of silently dropping relevant work; cancellation means it was not accepted.</summary>
+    public async Task<BrainObservationResult> ObserveAsync(string text, CancellationToken cancellationToken = default)
+    {
+        if (!Eligible(text)) { Interlocked.Increment(ref _excluded); return BrainObservationResult.Excluded; }
+        lock (_workerGate) { if (_stopping) { return BrainObservationResult.Stopped; } StartWorker(); }
+        try { await _queue.Writer.WriteAsync(new(text, brain.Location), cancellationToken).ConfigureAwait(false); Interlocked.Increment(ref _accepted); return BrainObservationResult.Accepted; }
+        catch (ChannelClosedException) { return BrainObservationResult.Stopped; }
+    }
+    /// <summary>Waits until previously accepted work has settled. Failed work remains visible in <see cref="Status"/>.</summary>
+    public async Task FlushAsync(CancellationToken cancellationToken = default)
+    {
+        var barrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_workerGate) { ObjectDisposedException.ThrowIf(_stopping, this); StartWorker(); }
+        await _queue.Writer.WriteAsync(new("", "", barrier), cancellationToken).ConfigureAwait(false);
+        await barrier.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+    private bool Eligible(string text) => settings.Current.RememberConversations && settings.Current.Brain.AutoLearn && text.Length is >= 8 and <= 4000 && !Sensitive(text);
+    private void StartWorker() => _worker ??= Task.Run(RunAsync);
     /// <summary>Gets whether a declaration contains credential, financial, health or private-contact markers requiring deliberate manual storage.</summary>
     public static bool Sensitive(string text) => SensitivePattern().IsMatch(text);
     /// <summary>Processes grounded durable statements rather than producing one note for every chat message.</summary>
     public async Task LearnAsync(string text, CancellationToken cancellationToken = default)
     {
-        if (!settings.Current.RememberConversations || !settings.Current.Brain.AutoLearn || Sensitive(text)) { return; }
+        if (!Eligible(text)) { return; }
         await brain.InitializeAsync(cancellationToken).ConfigureAwait(false);
         foreach ((string key, string type, string folder) in new[] { ("editor", "preference", "Owner/Preferences"), ("language", "preference", "Owner/Preferences"),
             ("style", "preference", "Owner/Preferences"), ("goal", "goal", "Owner/Goals"), ("project", "project", "Projects"), ("decision", "decision", "Memories/Decisions"), ("routine", "procedure", "Procedures") })
@@ -38,7 +70,7 @@ public sealed partial class BrainLearning(BrainService brain, ISettingsService s
             string stableKey = "owner." + key + (key is "goal" or "project" or "decision" or "routine" ? "." + FileBrainStorage.Hash(TextNormalizer.Normalize(value))[..12] : "");
             var note = new BrainNote { Key = stableKey, Title = value.Length > 90 ? value[..90] : value, Type = type,
                 MemoryType = key is "decision" ? "episodic" : key is "routine" ? "procedural" : "semantic",
-                Path = folder + "/" + BrainNaming.FileName(key is "editor" or "language" or "style" ? key : value, stableKey), Body = text.Trim(), Source = "user_declaration", Tags = [key], Confidence = .8, Importance = .7 };
+                Path = folder + "/" + BrainNaming.FileName(key is "editor" or "language" or "style" ? key : value, stableKey), Body = text.Trim(), Source = "user_declaration", Verification = "user_reported", Tags = [key], Confidence = .8, Importance = .7 };
             var relations = new List<BrainRelation>();
             if (key is "editor" or "language")
             {
@@ -75,6 +107,12 @@ public sealed partial class BrainLearning(BrainService brain, ISettingsService s
     /// <summary>Updates explicit corrections with history; ambiguous automatic contradictions preserve both versions for review.</summary>
     public async Task<BrainNote> ConsolidateAsync(BrainNote incoming, bool explicitCorrection, CancellationToken cancellationToken = default)
     {
+        await _consolidation.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try { return await ConsolidateCoreAsync(incoming, explicitCorrection, cancellationToken).ConfigureAwait(false); }
+        finally { _consolidation.Release(); }
+    }
+    private async Task<BrainNote> ConsolidateCoreAsync(BrainNote incoming, bool explicitCorrection, CancellationToken cancellationToken)
+    {
         await brain.InitializeAsync(cancellationToken).ConfigureAwait(false);
         BrainNote? existing = brain.Snapshot.Notes.FirstOrDefault(note => note.IsKnowledge && incoming.Key.Length > 0 && note.Key == incoming.Key);
         existing ??= brain.Snapshot.Notes.FirstOrDefault(note => note.IsKnowledge && TextNormalizer.Normalize(note.Body) == TextNormalizer.Normalize(incoming.Body));
@@ -84,7 +122,7 @@ public sealed partial class BrainLearning(BrainService brain, ISettingsService s
         if (explicitCorrection)
         {
             return await brain.SaveAsync(existing with { Body = incoming.Body, Title = incoming.Title, UpdatedAt = DateTimeOffset.UtcNow,
-                Source = incoming.Source, Confidence = incoming.Confidence, Relations = incoming.Relations.Count > 0 ? incoming.Relations : existing.Relations }, cancellationToken).ConfigureAwait(false);
+                Source = incoming.Source, Verification = incoming.Verification, Confidence = incoming.Confidence, Relations = incoming.Relations.Count > 0 ? incoming.Relations : existing.Relations }, cancellationToken).ConfigureAwait(false);
         }
         var conflict = incoming with { Id = Guid.NewGuid().ToString("D"), Path = "Inbox/" + Guid.NewGuid().ToString("N") + ".md", Status = "draft",
             Relations = incoming.Relations.Concat([new BrainRelation(existing.Id, "contradicts", 1, incoming.Confidence, incoming.Body, incoming.Source)]).ToArray() };
@@ -96,18 +134,46 @@ public sealed partial class BrainLearning(BrainService brain, ISettingsService s
     {
         try
         {
-            await foreach (string text in _queue.Reader.ReadAllAsync(_lifetime.Token).ConfigureAwait(false))
+            await foreach (Work work in _queue.Reader.ReadAllAsync(_lifetime.Token).ConfigureAwait(false))
             {
-                try { await LearnAsync(text, _lifetime.Token).ConfigureAwait(false); }
-                catch (Exception error) when (error is IOException or UnauthorizedAccessException or FormatException or RegexMatchTimeoutException)
-                { logger.LogWarning("Brain learning deferred ({ErrorType}).", error.GetType().Name); }
+                if (work.Barrier is not null) { work.Barrier.TrySetResult(); continue; }
+                for (int attempt = 0; attempt < 3; attempt++)
+                {
+                    try
+                    {
+                        if (!string.Equals(work.Vault, brain.Location, StringComparison.Ordinal)) { throw new InvalidOperationException("Learning vault changed."); }
+                        await LearnAsync(work.Text, _lifetime.Token).ConfigureAwait(false);
+                        Interlocked.Increment(ref _completed); break;
+                    }
+                    catch (Exception error) when (error is IOException or UnauthorizedAccessException or FormatException or RegexMatchTimeoutException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
+                    {
+                        bool retry = attempt < 2 && error is IOException or Microsoft.Data.Sqlite.SqliteException;
+                        if (!retry) { Interlocked.Increment(ref _failed); logger.LogWarning("Brain learning failed ({ErrorType}); retained transcript may be retried.", error.GetType().Name); break; }
+                        await Task.Delay(TimeSpan.FromMilliseconds(100 * (attempt + 1)), _lifetime.Token).ConfigureAwait(false);
+                    }
+                }
             }
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        finally { while (_queue.Reader.TryRead(out Work? work)) { work.Barrier?.TrySetCanceled(); } }
     }
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
-    { _queue.Writer.TryComplete(); await _lifetime.CancelAsync().ConfigureAwait(false); if (_worker is not null) { await _worker.ConfigureAwait(false); } _lifetime.Dispose(); GC.SuppressFinalize(this); }
+    {
+        Task? worker;
+        lock (_workerGate) { if (_stopping) { return; } _stopping = true; _queue.Writer.TryComplete(); worker = _worker; }
+        if (worker is not null)
+        {
+            try { await worker.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
+            catch (TimeoutException)
+            {
+                await _lifetime.CancelAsync().ConfigureAwait(false);
+                logger.LogWarning("Brain learning shutdown timed out; {Pending} accepted events were not completed.", Status.Pending);
+                await worker.ConfigureAwait(false);
+            }
+        }
+        _lifetime.Dispose(); _consolidation.Dispose(); GC.SuppressFinalize(this);
+    }
     /// <summary>Excludes secrets and sensitive classes from automatic capture rather than pretending they are safe ordinary facts.</summary>
     [GeneratedRegex(@"password|senha|secret|api.?key|token|credit.?card|cart[aã]o|cpf|diagn[oó]stic|medica|sa[uú]de|endere[cç]o|address|\b\d{3}[.\-]?\d{3}[.\-]?\d{3}[\-]?\d{2}\b|[\w.+-]+@[\w.-]+\.[\w]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SensitivePattern();

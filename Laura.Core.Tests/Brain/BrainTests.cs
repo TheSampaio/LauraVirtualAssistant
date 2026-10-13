@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Laura.Core.Tests.Brain;
 
 /// <summary>Exercises real Markdown files and disposable indices with synthetic knowledge, never personal Brain data.</summary>
-public sealed class BrainTests : IAsyncLifetime
+public sealed partial class BrainTests : IAsyncLifetime
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "laura-brain-test-" + Guid.NewGuid().ToString("N"));
     private readonly List<BrainService> _services = [];

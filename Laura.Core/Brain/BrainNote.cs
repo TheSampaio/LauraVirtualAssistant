@@ -31,6 +31,8 @@ public sealed record BrainNote
     public IReadOnlyList<string> Aliases { get; init; } = [];
     /// <summary>Gets the attributed source, never an execution permission.</summary>
     public string Source { get; init; } = "manual";
+    /// <summary>Gets evidence status separately from confidence: unspecified, user_reported, unverified or verified.</summary>
+    public string Verification { get; init; } = "unspecified";
     /// <summary>Gets a structured consolidation key, if applicable.</summary>
     public string Key { get; init; } = "";
     /// <summary>Gets the authored revision identity.</summary>

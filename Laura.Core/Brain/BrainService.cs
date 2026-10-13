@@ -394,7 +394,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         {
             string[] conflicts = Snapshot.Edges.Where(edge => edge.Type == "contradicts" && (edge.Source == hit.Note.Id || edge.Target == hit.Note.Id)).Select(edge => edge.Source == hit.Note.Id ? edge.Target : edge.Source).Distinct(StringComparer.Ordinal).Take(4).ToArray();
             string warning = conflicts.Length > 0 ? "Conflicting evidence exists: " + string.Join(", ", conflicts) + ". Do not silently choose a version.\n" : "";
-            string piece = $"[{hit.Note.Id}] {hit.Note.Title} ({hit.Note.UpdatedAt:yyyy-MM-dd}, confidence {hit.Note.Confidence.ToString("F2", CultureInfo.InvariantCulture)}, source {hit.Note.Source})\n{warning}{hit.Excerpt}\n";
+            string piece = $"[{hit.Note.Id}] {hit.Note.Title} ({hit.Note.UpdatedAt:yyyy-MM-dd}, {hit.Note.MemoryType}, confidence {hit.Note.Confidence.ToString("F2", CultureInfo.InvariantCulture)}, evidence {hit.Note.Verification}, source {hit.Note.Source})\n{warning}{hit.Excerpt}\n";
             if (builder.Length + piece.Length > budget) { builder.Append(piece.AsSpan(0, budget - builder.Length)); break; } builder.Append(piece);
         }
         return builder.ToString();
