@@ -10,7 +10,7 @@ namespace Laura.Core.Brain;
 /// <summary>Conservatively consolidates durable user declarations; never learns assertions from generated assistant text.</summary>
 public sealed partial class BrainLearning(BrainService brain, ISettingsService settings, ILocalizer localizer, ILogger<BrainLearning> logger) : IAsyncDisposable
 {
-    private sealed record Work(string Text, string Vault, TaskCompletionSource? Barrier = null);
+    private sealed record Work(string Text, string Vault, TaskCompletionSource? Barrier = null, Laura.Core.Memory.SqliteConversationMemory? Journal = null, long Receipt = 0);
     private readonly Channel<Work> _queue = Channel.CreateBounded<Work>(new BoundedChannelOptions(64) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = false });
     private readonly CancellationTokenSource _lifetime = new();
     private readonly object _workerGate = new();
@@ -46,16 +46,22 @@ public sealed partial class BrainLearning(BrainService brain, ISettingsService s
     public async Task FlushAsync(CancellationToken cancellationToken = default)
     {
         var barrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task? recovery;
+        lock (_workerGate) { recovery = _recovery; }
+        if (recovery is not null) { await recovery.WaitAsync(cancellationToken).ConfigureAwait(false); }
         lock (_workerGate) { ObjectDisposedException.ThrowIf(_stopping, this); StartWorker(); }
         await _queue.Writer.WriteAsync(new("", "", barrier), cancellationToken).ConfigureAwait(false);
         await barrier.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
     private bool Eligible(string text) => settings.Current.RememberConversations && settings.Current.Brain.AutoLearn && text.Length is >= 8 and <= 4000 && !Sensitive(text);
+    /// <summary>Checks whether user settings and privacy allow an automatic-learning receipt.</summary>
+    public bool CanObserve(string text) => Eligible(text);
     private void StartWorker() => _worker ??= Task.Run(RunAsync);
     /// <summary>Gets whether a declaration contains credential, financial, health or private-contact markers requiring deliberate manual storage.</summary>
     public static bool Sensitive(string text) => SensitivePattern().IsMatch(text);
     /// <summary>Processes grounded durable statements rather than producing one note for every chat message.</summary>
-    public async Task LearnAsync(string text, CancellationToken cancellationToken = default)
+    public Task LearnAsync(string text, CancellationToken cancellationToken = default) => LearnAtLocationAsync(text, brain.Location, cancellationToken);
+    private async Task LearnAtLocationAsync(string text, string vault, CancellationToken cancellationToken)
     {
         if (!Eligible(text)) { return; }
         await brain.InitializeAsync(cancellationToken).ConfigureAwait(false);
@@ -74,7 +80,7 @@ public sealed partial class BrainLearning(BrainService brain, ISettingsService s
             var relations = new List<BrainRelation>();
             if (key is "editor" or "language")
             {
-                BrainNote entity = await EntityAsync(value, cancellationToken).ConfigureAwait(false);
+                BrainNote entity = await EntityAsync(value, vault, cancellationToken).ConfigureAwait(false);
                 relations.Add(new(entity.Id, "prefers", .9, .8, text.Trim(), "user_declaration"));
             }
             if (key == "decision")
@@ -86,48 +92,51 @@ public sealed partial class BrainLearning(BrainService brain, ISettingsService s
                     BrainNote? project = brain.Snapshot.Notes.FirstOrDefault(candidate => candidate.IsKnowledge && candidate.Type == "project" && candidate.Title.Equals(name, StringComparison.OrdinalIgnoreCase));
                     if (project is not null)
                     {
-                        BrainNote entity = await EntityAsync(association.Groups["entity"].Value.Trim(), cancellationToken).ConfigureAwait(false);
+                        BrainNote entity = await EntityAsync(association.Groups["entity"].Value.Trim(), vault, cancellationToken).ConfigureAwait(false);
                         relations.Add(new(project.Id, "belongs_to", .9, .8, text.Trim(), "user_declaration"));
                         if (!project.Relations.Any(relation => relation.Target == entity.Id && relation.Type == "uses"))
-                        { await brain.SaveAsync(project with { Relations = project.Relations.Concat([new BrainRelation(entity.Id, "uses", .9, .8, text.Trim(), "user_declaration")]).ToArray() }, cancellationToken).ConfigureAwait(false); }
+                        { await brain.SaveAtLocationAsync(project with { Relations = project.Relations.Concat([new BrainRelation(entity.Id, "uses", .9, .8, text.Trim(), "user_declaration")]).ToArray() }, vault, cancellationToken).ConfigureAwait(false); }
                         relations.Add(new(entity.Id, "uses", .9, .8, text.Trim(), "user_declaration"));
                     }
                 }
             }
-            await ConsolidateAsync(note with { Relations = relations }, false, cancellationToken).ConfigureAwait(false);
+            await _consolidation.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try { await ConsolidateCoreAsync(note with { Relations = relations }, false, vault, cancellationToken).ConfigureAwait(false); }
+            finally { _consolidation.Release(); }
         }
     }
     /// <summary>Creates a named entity only after an explicit user statement, without asserting an invented factual definition.</summary>
-    private async Task<BrainNote> EntityAsync(string name, CancellationToken cancellationToken)
+    private async Task<BrainNote> EntityAsync(string name, string vault, CancellationToken cancellationToken)
     {
         BrainNote? existing = brain.Snapshot.Notes.FirstOrDefault(note => note.IsKnowledge && note.Type == "entity" && note.Title.Equals(name, StringComparison.OrdinalIgnoreCase));
-        return existing ?? await brain.SaveAsync(new BrainNote { Path = "Knowledge/Entities/" + BrainNaming.FileName(name, TextNormalizer.Normalize(name)), Title = name, Type = "entity",
-            Body = "# " + name + "\n\n" + localizer.Get(LocalizationKeys.Brain.EntityContext), Source = "user_declaration", Confidence = .8 }, cancellationToken).ConfigureAwait(false);
+        return existing ?? await brain.SaveAtLocationAsync(new BrainNote { Path = "Knowledge/Entities/" + BrainNaming.FileName(name, TextNormalizer.Normalize(name)), Title = name, Type = "entity",
+            Body = "# " + name + "\n\n" + localizer.Get(LocalizationKeys.Brain.EntityContext), Source = "user_declaration", Confidence = .8 }, vault, cancellationToken).ConfigureAwait(false);
     }
     /// <summary>Updates explicit corrections with history; ambiguous automatic contradictions preserve both versions for review.</summary>
     public async Task<BrainNote> ConsolidateAsync(BrainNote incoming, bool explicitCorrection, CancellationToken cancellationToken = default)
     {
         await _consolidation.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try { return await ConsolidateCoreAsync(incoming, explicitCorrection, cancellationToken).ConfigureAwait(false); }
+        try { return await ConsolidateCoreAsync(incoming, explicitCorrection, brain.Location, cancellationToken).ConfigureAwait(false); }
         finally { _consolidation.Release(); }
     }
-    private async Task<BrainNote> ConsolidateCoreAsync(BrainNote incoming, bool explicitCorrection, CancellationToken cancellationToken)
+    private async Task<BrainNote> ConsolidateCoreAsync(BrainNote incoming, bool explicitCorrection, string vault, CancellationToken cancellationToken)
     {
         await brain.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(vault, brain.Location, StringComparison.Ordinal)) { throw new InvalidOperationException("Learning vault changed."); }
         BrainNote? existing = brain.Snapshot.Notes.FirstOrDefault(note => note.IsKnowledge && incoming.Key.Length > 0 && note.Key == incoming.Key);
         existing ??= brain.Snapshot.Notes.FirstOrDefault(note => note.IsKnowledge && TextNormalizer.Normalize(note.Body) == TextNormalizer.Normalize(incoming.Body));
-        if (existing is null) { return await brain.SaveAsync(incoming, cancellationToken).ConfigureAwait(false); }
+        if (existing is null) { return await brain.SaveAtLocationAsync(incoming, vault, cancellationToken).ConfigureAwait(false); }
         if (TextNormalizer.Normalize(existing.Body) == TextNormalizer.Normalize(incoming.Body)
             || (!explicitCorrection && existing.Key == incoming.Key && TextNormalizer.Normalize(existing.Title) == TextNormalizer.Normalize(incoming.Title))) { return existing; }
         if (explicitCorrection)
         {
-            return await brain.SaveAsync(existing with { Body = incoming.Body, Title = incoming.Title, UpdatedAt = DateTimeOffset.UtcNow,
-                Source = incoming.Source, Verification = incoming.Verification, Confidence = incoming.Confidence, Relations = incoming.Relations.Count > 0 ? incoming.Relations : existing.Relations }, cancellationToken).ConfigureAwait(false);
+            return await brain.SaveAtLocationAsync(existing with { Body = incoming.Body, Title = incoming.Title, UpdatedAt = DateTimeOffset.UtcNow,
+                Source = incoming.Source, Verification = incoming.Verification, Confidence = incoming.Confidence, Relations = incoming.Relations.Count > 0 ? incoming.Relations : existing.Relations }, vault, cancellationToken).ConfigureAwait(false);
         }
         var conflict = incoming with { Id = Guid.NewGuid().ToString("D"), Path = "Inbox/" + Guid.NewGuid().ToString("N") + ".md", Status = "draft",
             Relations = incoming.Relations.Concat([new BrainRelation(existing.Id, "contradicts", 1, incoming.Confidence, incoming.Body, incoming.Source)]).ToArray() };
         BrainNote? already = brain.Snapshot.Notes.FirstOrDefault(note => note.Status == "draft" && note.Key == conflict.Key && TextNormalizer.Normalize(note.Body) == TextNormalizer.Normalize(conflict.Body));
-        return already ?? await brain.SaveAsync(conflict, cancellationToken).ConfigureAwait(false);
+        return already ?? await brain.SaveAtLocationAsync(conflict, vault, cancellationToken).ConfigureAwait(false);
     }
     /// <summary>Drains a bounded queue and isolates failures without logging text, keys or private paths.</summary>
     private async Task RunAsync()
@@ -137,13 +146,19 @@ public sealed partial class BrainLearning(BrainService brain, ISettingsService s
             await foreach (Work work in _queue.Reader.ReadAllAsync(_lifetime.Token).ConfigureAwait(false))
             {
                 if (work.Barrier is not null) { work.Barrier.TrySetResult(); continue; }
+                bool settled = false;
                 for (int attempt = 0; attempt < 3; attempt++)
                 {
                     try
                     {
                         if (!string.Equals(work.Vault, brain.Location, StringComparison.Ordinal)) { throw new InvalidOperationException("Learning vault changed."); }
-                        await LearnAsync(work.Text, _lifetime.Token).ConfigureAwait(false);
-                        Interlocked.Increment(ref _completed); break;
+                        string vaultIdentity = FileBrainStorage.Hash(work.Vault);
+                        if (work.Journal is null || work.Journal.HasPendingLearning(work.Receipt, vaultIdentity))
+                        {
+                            await LearnAtLocationAsync(work.Text, work.Vault, _lifetime.Token).ConfigureAwait(false);
+                            work.Journal?.CompleteLearning(work.Receipt, vaultIdentity);
+                        }
+                        settled = true; Interlocked.Increment(ref _completed); break;
                     }
                     catch (Exception error) when (error is IOException or UnauthorizedAccessException or FormatException or RegexMatchTimeoutException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
                     {
@@ -151,6 +166,11 @@ public sealed partial class BrainLearning(BrainService brain, ISettingsService s
                         if (!retry) { Interlocked.Increment(ref _failed); logger.LogWarning("Brain learning failed ({ErrorType}); retained transcript may be retried.", error.GetType().Name); break; }
                         await Task.Delay(TimeSpan.FromMilliseconds(100 * (attempt + 1)), _lifetime.Token).ConfigureAwait(false);
                     }
+                }
+                if (settled && work.Journal is not null)
+                {
+                    lock (_workerGate) { _scheduledReceipts.Remove(FileBrainStorage.Hash(work.Vault) + ":" + work.Receipt.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
+                    RecoverPending(work.Journal);
                 }
             }
         }
@@ -172,6 +192,7 @@ public sealed partial class BrainLearning(BrainService brain, ISettingsService s
                 await worker.ConfigureAwait(false);
             }
         }
+        if (_recovery is not null) { await _recovery.ConfigureAwait(false); }
         _lifetime.Dispose(); _consolidation.Dispose(); GC.SuppressFinalize(this);
     }
     /// <summary>Excludes secrets and sensitive classes from automatic capture rather than pretending they are safe ordinary facts.</summary>

@@ -184,6 +184,8 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     }
     /// <summary>Saves a note only against its last observed hash, preserving previous revisions and conflicting drafts.</summary>
     public Task<BrainNote> SaveAsync(BrainNote note, CancellationToken cancellationToken = default) => SaveAsync(note, false, cancellationToken);
+    /// <summary>Pins background learning to its original vault under the actual write gate.</summary>
+    internal Task<BrainNote> SaveAtLocationAsync(BrainNote note, string expectedLocation, CancellationToken cancellationToken) => SaveAsync(note, false, expectedLocation, cancellationToken);
     /// <summary>Imports authored metadata with its original timestamp when explicitly requested by migration.</summary>
     public Task<BrainNote> SaveAsync(BrainNote note, bool preserveTimestamp, CancellationToken cancellationToken = default) => SaveAsync(note, preserveTimestamp, null, cancellationToken);
     private async Task<BrainNote> SaveAsync(BrainNote note, bool preserveTimestamp, string? expectedLocation, CancellationToken cancellationToken)

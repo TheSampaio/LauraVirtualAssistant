@@ -28,6 +28,7 @@ public sealed partial class BrainLearning
         bool knownPreference = proposal.Category == "preference" && aspect is "editor" or "language" or "style";
         if (!knownPreference && !userText.Contains(proposal.Aspect, StringComparison.Ordinal)) { return new("rejected", Reason: "Topic is absent from actual user input."); }
         string key = knownPreference ? "owner." + aspect : "context." + proposal.Category + "." + FileBrainStorage.Hash(aspect)[..16];
+        string vault = brain.Location;
         await _consolidation.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -52,17 +53,17 @@ public sealed partial class BrainLearning
                 BrainNote draft = note with { Status = "draft", Path = "Inbox/" + Guid.NewGuid().ToString("N") + ".md",
                     Relations = [new(existing!.Id, "replaces", 1, .7, proposal.Evidence, note.Source)] };
                 BrainNote? prior = brain.Snapshot.Notes.FirstOrDefault(item => item.Status == "draft" && item.Key == key && TextNormalizer.Normalize(item.Body) == TextNormalizer.Normalize(draft.Body) && item.Relations.Any(relation => relation.Type == "replaces"));
-                BrainNote savedDraft = prior ?? await brain.SaveAsync(draft, cancellationToken).ConfigureAwait(false);
+                BrainNote savedDraft = prior ?? await brain.SaveAtLocationAsync(draft, vault, cancellationToken).ConfigureAwait(false);
                 return new("obsolete_review", savedDraft.Id, "Existing knowledge retained until review.");
             }
             if (proposal.Change == "complement" && existing is not null)
             {
                 if (existing.Body.Contains(note.Body, StringComparison.Ordinal)) { return new("repeated", existing.Id); }
-                BrainNote saved = await brain.SaveAsync(existing with { Body = existing.Body.TrimEnd() + "\n\n" + note.Body, Source = note.Source,
-                    Verification = note.Verification, Confidence = Math.Min(existing.Confidence, note.Confidence) }, cancellationToken).ConfigureAwait(false);
+                BrainNote saved = await brain.SaveAtLocationAsync(existing with { Body = existing.Body.TrimEnd() + "\n\n" + note.Body, Source = note.Source,
+                    Verification = note.Verification, Confidence = Math.Min(existing.Confidence, note.Confidence) }, vault, cancellationToken).ConfigureAwait(false);
                 return new("complement", saved.Id);
             }
-            BrainNote result = await ConsolidateCoreAsync(note, proposal.Change == "correction", cancellationToken).ConfigureAwait(false);
+            BrainNote result = await ConsolidateCoreAsync(note, proposal.Change == "correction", vault, cancellationToken).ConfigureAwait(false);
             return new(result.Status == "draft" ? "contradiction" : existing is null ? "new" : proposal.Change == "correction" ? "correction" : "repeated", result.Id);
         }
         finally { _consolidation.Release(); }

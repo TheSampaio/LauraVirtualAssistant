@@ -39,14 +39,18 @@ public sealed class BrainConversationMemory(BrainService brain, BrainLearning le
                     Body = "Legacy explicit facts were copied to Markdown. The original application database was retained unchanged. Subsequent fact operations use only this vault." }).GetAwaiter().GetResult();
             }
             _initialized = true;
+            learning.RecoverPending(transcripts);
         }
     }
     /// <inheritdoc />
     public void Append(ConversationMessage message)
     {
-        Initialize(); transcripts.Append(message);
+        Initialize();
+        if (message.Source != ConversationMessageSource.Assistant && learning.CanObserve(message.Text))
+        { transcripts.AppendForLearning(message, FileBrainStorage.Hash(brain.Location)); learning.RecoverPending(transcripts); }
+        else { transcripts.Append(message); }
         if (message.Source != ConversationMessageSource.Assistant)
-        { SetWorkingContext(message.Text); learning.Observe(message.Text); }
+        { SetWorkingContext(message.Text); }
     }
     /// <inheritdoc />
     public IReadOnlyList<ConversationMessage> ReadRecent(int limit) => transcripts.ReadRecent(limit);

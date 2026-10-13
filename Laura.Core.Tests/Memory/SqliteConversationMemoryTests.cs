@@ -58,6 +58,30 @@ public sealed class SqliteConversationMemoryTests : IDisposable
         Assert.Throws<InvalidOperationException>(() => new SqliteConversationMemory(Database).Initialize());
         Assert.True(File.Exists(Database));
     }
+    [Fact]
+    public void MigratesVersionOneWithoutInventingReceiptsForHistoricalText()
+    {
+        var original = new SqliteConversationMemory(Database); original.Append(new(ConversationMessageSource.UserTyped, "Synthetic old history", DateTimeOffset.UtcNow)); original.SetFact("synthetic", "Existing fact");
+        using (var connection = new SqliteConnection($"Data Source={Database};Pooling=False"))
+        {
+            connection.Open(); using var command = connection.CreateCommand(); command.CommandText = "DROP TABLE learning_events; PRAGMA user_version=1;"; command.ExecuteNonQuery();
+        }
+        var migrated = new SqliteConversationMemory(Database); Assert.Single(migrated.ReadRecent(10)); Assert.Single(migrated.Search("Existing"));
+        Assert.Empty(migrated.ReadPendingLearning(new string('A', 64)));
+    }
+    [Fact]
+    public void TranscriptRetentionAlsoRemovesReceiptsForExpiredMessages()
+    {
+        var store = new SqliteConversationMemory(Database); string identity = new('A', 64);
+        store.AppendForLearning(new(ConversationMessageSource.UserTyped, "Synthetic pending oldest event", DateTimeOffset.UtcNow), identity);
+        using (var connection = new SqliteConnection($"Data Source={Database};Pooling=False"))
+        {
+            connection.Open(); using var command = connection.CreateCommand();
+            command.CommandText = "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<2000) INSERT INTO messages(source,text,stamp) SELECT 0,'Synthetic retained filler','2026-10-13T00:00:00Z' FROM n;"; command.ExecuteNonQuery();
+        }
+        store.Append(new(ConversationMessageSource.Assistant, "Synthetic final retained text", DateTimeOffset.UtcNow));
+        Assert.Empty(store.ReadPendingLearning(identity));
+    }
 
     public void Dispose()
     {
