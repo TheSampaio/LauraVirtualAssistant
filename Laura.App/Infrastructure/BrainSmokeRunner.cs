@@ -31,6 +31,11 @@ public static class BrainSmokeRunner
                 Permissions = settings.Current.Permissions with { Voice = ApprovalVoiceMode.Never }, Screenshots = settings.Current.Screenshots with { ShortcutsEnabled = false } }).ConfigureAwait(true);
             var memory = services.GetRequiredService<IConversationMemory>(); var tools = services.GetRequiredService<IAssistantTools>(); var permissions = services.GetRequiredService<PermissionManager>();
             int guiFixture = Array.IndexOf(args, "--gui-launch-smoke");
+            if (args.Contains("--brain-restart-smoke", StringComparer.Ordinal))
+            {
+                stage = "actual_process_restart_recovery"; results.AddRange(await BrainRestartSmokeRunner.VerifyAsync(services, directory).ConfigureAwait(true));
+                await File.WriteAllLinesAsync(Path.Combine(directory, "restart-result.txt"), PassedHeader.Concat(results)).ConfigureAwait(true); return;
+            }
             int mcpFixture = Array.IndexOf(args, "--brain-mcp-smoke");
             if (args.Contains("--brain-maintenance-smoke", StringComparer.Ordinal))
             {
@@ -206,10 +211,11 @@ public static class BrainSmokeRunner
                 if (permissions.PendingRequests.Count != 0) { throw new InvalidOperationException("Cognitive diagnostics attempted an unrelated protected action."); }
             }
             await services.GetRequiredService<BrainLearning>().FlushAsync().ConfigureAwait(true);
+            await BrainRestartSmokeRunner.WriteAsync(services, directory).ConfigureAwait(true);
             await File.WriteAllLinesAsync(Path.Combine(directory, "result.txt"), PassedHeader.Concat(results)).ConfigureAwait(true);
         }
         catch (Exception error)
-        { await File.WriteAllLinesAsync(Path.Combine(directory, "result.txt"), new[] { "FAIL: " + stage + " (" + error.GetType().Name + "). No raw provider error or credential was logged." }.Concat(results)).ConfigureAwait(true); }
+        { await File.WriteAllLinesAsync(Path.Combine(directory, Environment.GetCommandLineArgs().Contains("--brain-restart-smoke", StringComparer.Ordinal) ? "restart-result.txt" : "result.txt"), new[] { "FAIL: " + stage + " (" + error.GetType().Name + "). No raw provider error or credential was logged." }.Concat(results)).ConfigureAwait(true); }
         finally { services.GetRequiredService<Laura.Core.Abstractions.IShellController>().Shutdown(); }
     }
     private static async Task AwaitApprovalAsync(PermissionManager permissions, PermissionRisk risk = PermissionRisk.Critical)

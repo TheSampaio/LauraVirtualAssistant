@@ -149,6 +149,12 @@ public static class MauiSmokeRunner
                         await memory.PreviewBrainForSmokeAsync("graph").ConfigureAwait(true); await Task.Delay(250).ConfigureAwait(true); memory.VerifyBrainForSmoke();
                         await CaptureAsync(window, Path.Combine(directory, "brain-return-" + culture + ".png")).ConfigureAwait(true);
                         await File.WriteAllTextAsync(Path.Combine(directory, "brain.txt"), "Synthetic declarations persisted as Markdown, created attributed graph edges, rendered dark/red global/local graph, reader, editor, split, SVG file tree, selected actions and minimum 720x600 including details; native editor changed the real Markdown file.").ConfigureAwait(true);
+                        using var maintenancePage = new BrainMaintenancePage(services.GetRequiredService<Laura.Core.Brain.BrainService>(), services.GetRequiredService<Laura.Core.Brain.BrainMaintenance>(),
+                            services.GetRequiredService<ISettingsService>(), services.GetRequiredService<IUiLocalizer>(), _ => Task.CompletedTask);
+                        await NavigationMotion.PushAsync(navigation.Navigation, maintenancePage).ConfigureAwait(true); await maintenancePage.AnalyzeForSmokeAsync().ConfigureAwait(true);
+                        await Task.Delay(150).ConfigureAwait(true); await CaptureAsync(window, Path.Combine(directory, "maintenance-" + culture + ".png")).ConfigureAwait(true);
+                        window.Width = 720; window.Height = 600; await Task.Delay(200).ConfigureAwait(true); await CaptureAsync(window, Path.Combine(directory, "maintenance-compact-" + culture + ".png")).ConfigureAwait(true);
+                        await NavigationMotion.PopAsync(navigation.Navigation).ConfigureAwait(true); window.Width = 1440; window.Height = 900;
                     }
                     if (navigation.CurrentPage is SetupPage setup)
                     {

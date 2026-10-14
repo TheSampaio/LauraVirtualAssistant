@@ -119,11 +119,12 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         catch (Exception error)
         {
             services.GetRequiredService<ILogger<LauraApplication>>().LogError("Startup failed ({ErrorType}).", error.GetType().Name);
-            int smoke = Array.IndexOf(args, "--ui-smoke");
+            int smoke = Array.FindIndex(args, argument => argument is "--ui-smoke" or "--permissions-smoke" or "--screenshot-smoke" or "--brain-smoke");
             if (smoke >= 0 && smoke + 1 < args.Length)
             {
                 string directory = Path.GetFullPath(args[smoke + 1]); Directory.CreateDirectory(directory);
-                await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "Startup failed: " + error.GetType().Name).ConfigureAwait(true);
+                string result = args.Contains("--brain-restart-smoke", StringComparer.Ordinal) ? "restart-result.txt" : "result.txt";
+                await File.WriteAllTextAsync(Path.Combine(directory, result), "FAIL: startup (" + error.GetType().Name + "). No raw error or credential was logged.").ConfigureAwait(true);
                 services.GetRequiredService<Laura.Core.Abstractions.IShellController>().Shutdown();
             }
             else if (args.Contains("--show", StringComparer.Ordinal))

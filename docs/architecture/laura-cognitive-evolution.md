@@ -206,6 +206,30 @@ Validação: **330 testes passaram**, zero falhas/skips (`_Output/CognitiveEvide
 
 O primeiro ensaio do inspetor foi encerrado somente em seu processo isolado: a rolagem diagnóstica aguardava o evento que o WinUI não emite ao manter a posição. A espera foi removida da sondagem, sem bloquear os controles do usuário. A inspeção visual também detectou expansão indevida de botão dentro do `ContentView`; alinhamento natural e margens corrigiram o layout. O cenário final mediu 44 px no botão de fonte em ambos os idiomas e completou todos os caminhos. Esses testes usam automation peers nativos, não interação física de mouse nem uma avaliação completa com Narrator. A qualidade de seleção semântica com modelo ONNX real e linguagem natural arbitrária não é afirmada por esses testes.
 
+## Fase 10 — validação integrada e reinício real
+
+A regressão final executou **330 testes Core, todos aprovados**, sem falhas, ignorados ou abortos (`_Output/CognitiveFinalTests/cognitive-final.trx`). A referência inicial tinha 243 testes. O build completo Release passou com zero avisos/erros e `dotnet restore Laura.sln --locked-mode` restaurou as versões travadas. A consulta NuGet de vulnerabilidades da plataforma Windows, incluindo transitivas, não encontrou pacotes vulneráveis nas fontes consultadas. O benchmark sintético de descoberta manteve P@1 de 5/5 contra cobertura 0/5 do catálogo alfabético limitado; nesta execução, 25 consultas aquecidas tiveram p50 de 55,02 ms e p95 de 70,23 ms. Isso mede metadados locais sintéticos, sem avaliar um modelo neural real.
+
+`_Output/CognitiveFinal/result.txt` passou pelo fluxo nativo integrado com a fonte pública REA fixada por hash, aprovação de aquisição, propostas/revisões, descoberta por tarefa, processos SDK reais com saída zero e não zero, recusa de execução, mudança de turno e inspetor EN/PT. Fonte e revisão foram abertas pelos botões nativos reais; a revisão posterior permaneceu draft e não herdou os resultados da versão anterior. As dez fontes REA mantiveram as posições de recuperação 1, 1, 3 e 1 nas quatro consultas de referência. Não foram instalados npm, REA ou seus servidores.
+
+`BrainRestartSmokeRunner` grava somente um manifesto de metadados fora do vault no diagnóstico isolado. Um **segundo processo nativo**, após conferir o encerramento do primeiro, reconstruiu o índice derivado e verificou 25 identidades/caminhos/hashes/status de notas, três estados de aprovação/disponibilidade de habilidades e duas observações de processos com sua identidade e versão originais. Recuperou novamente conhecimento sintético e a política pública de startup MCP. `_Output/CognitiveFinal/restart-result.txt` passou: nenhuma solicitação pendente, grant, capacidade MCP conectada ou vínculo transitório de uso foi restaurado; o histórico de autorização não ganhou execuções durante a recuperação. Esse ensaio amplia a verificação anterior que apenas recriava `BrainService`; não simula queda de energia nem reinício do Windows.
+
+`_Output/CognitiveFinalUi/result.txt` passou na regressão MAUI/WinUI EN/PT: seis abas de configuração, grafo/inspetor/editor do cérebro, gravação real de Markdown, navegação repetida, monitor e janela mínima de 720×600. A manutenção também foi capturada em ambos os idiomas e tamanhos; a captura compacta em português foi inspecionada visualmente, com controles e textos legíveis. O ensaio usa controles/automation peers e pixels da própria LAURA, sem abrir microfone.
+
+`_Output/CognitiveFinalPermissionsVerified/result.txt` passou: botões reais aprovaram gravações sintéticas com janela principal visível, oculta e minimizada; negação, cancelamento e expiração impediram gravação e aprovação tardia. Ferramentas genéricas não alteraram o armazenamento de segurança, e a aba Segurança persistiu configurações sem exigir chave Gemini. A primeira chamada de regressão usou incorretamente a raiz de diagnóstico também como armazenamento: a pré-condição corretamente rejeitou o teste, mas a inicialização só reportava falhas de `--ui-smoke`. O tratamento foi ampliado aos quatro runners, com tipo de erro sanitizado, resultado separado para reinício e encerramento. `_Output/CognitiveRejectedDiagnostic/result.txt` verificou a rejeição explícita e o encerramento natural com o mesmo parâmetro inválido; o ensaio válido usa o subdiretório `Storage` documentado.
+
+`_Output/CognitiveFinalScreenshot/result.txt` passou: anotações e alinhamento de pixels, mover/remover/desfazer/refazer, exportação PNG/JPEG pelos botões reais, caminho inválido, cancelamento do formulário, round-trip da área de transferência, WGC da janela sintética da LAURA e captura local do desktop virtual de 1920×1080. Os pixels do desktop não foram gravados/transmitidos. A imagem sintética foi anexada pelo coordenador de produção ao cérebro isolado, recuperada com bytes exatos e reutilizada sem duplicar a referência Markdown. Registro nativo de atalhos e conflito entre duas combinações também passaram, com liberação ao terminar. A área de transferência ficou com a imagem sintética do teste. Nenhuma nova chamada a modelo em nuvem foi feita nesta regressão; as verificações live anteriores e seus limites continuam no relatório de captura.
+
+A unidade final acrescenta `BrainRestartSmokeRunner.cs`, amplia os cenários de `BrainSmokeRunner.cs` e `MauiSmokeRunner.cs`, e corrige o relato/encerramento de falhas diagnósticas em `LauraApplication.cs`. As unidades de produto, componentes principais e decisões estão descritos nas fases anteriores e nos commits abaixo. Nenhum processo diagnóstico permaneceu em execução após os resultados finais.
+
+Os controles de execução permanecem no `PermissionManager`; nenhuma revisão, consolidação, resultado favorável ou arquivo Markdown concede autorização. Aprovação Automática aplica somente as políticas nativas explícitas. A correção de aplicativos GUI e a validação específica do NeuralScreen estão em [Permissões](laura-permissions.md). Mudanças de código exigem recompilar/reiniciar a instância que o usuário utiliza; os diagnósticos Release e seus armazenamentos não substituem automaticamente uma instância Debug nem alteram o cérebro pessoal.
+
+### Limites finais
+
+As fases implementadas têm evidências específicas, sem alegação de autonomia universal. Descoberta semântica com ONNX real, seleção arbitrária de procedimento pelo modelo, sucesso completo de tarefas, execução de código importado, MCP HTTP/OAuth e instalação/execução do REA real não foram validados nem habilitados como consequência da aquisição. O cliente MCP stdio foi verificado com um servidor BCL independente e permissões reais, incluindo timeout, cancelamento, crash e respostas inválidas, conforme a fase 7; o processo servidor continua sujeito aos direitos da conta Windows e não é apresentado como sandbox.
+
+Permanecem verificações manuais de Narrator/navegação física, voz audível e microfone, notificações com Não Perturbe, gestos de seleção, múltiplos monitores/DPI físicos, disco cheio e aplicativos com conteúdo protegido. Não foram executados ensaio de carga de 10.000 notas, perfil completo de memória ou geração/instalação de um novo pacote final nesta fase. Artefatos `_Output` são locais e ignorados pelo Git; os runners e as asserções de reprodução ficam no código.
+
 ## Registro de commits e reprodução
 
 ### Fonte real indicada: REA
@@ -244,6 +268,7 @@ A preparação HTTP é uma ferramenta explícita de validação, não um leitor 
 | `d4fcbea` | Monitoramento por versão/turno a partir de resultados nativos de processos |
 | `86dfb76` | Cliente MCP stdio nativo, aprovações críticas e capacidades conectadas |
 | `8baba6c` | Manutenção incremental e consolidação revisada, reversível e por versão |
+| `cfe1108` | Inspetor de fontes, requisitos, versões, observações e revisões EN/PT |
 
 O diagnóstico público REA é registrado no commit subsequente desta documentação. Artefatos `_Output` são ignorados pelo Git e não contêm a credencial protegida.
 
@@ -252,6 +277,8 @@ dotnet test Laura.Core.Tests/Laura.Core.Tests.csproj -c Release --no-restore
 dotnet build Laura.sln -c Release --no-restore
 # Raiz nova e isolada; o diagnóstico cria somente dados/fontes sintéticos.
 Laura.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/Laura.exe --storage D:/Temp/LauraBrainCheck --brain-smoke D:/Temp/LauraBrainCheck
+# Após o primeiro processo encerrar, usar o mesmo armazenamento para verificar recuperação real.
+Laura.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/Laura.exe --storage D:/Temp/LauraBrainCheck --brain-smoke D:/Temp/LauraBrainCheck --brain-restart-smoke
 ```
 
-`--brain-live-smoke` é opt-in para verificar o modelo real com mensagens sintéticas; usa a credencial existente somente em processo. O diagnóstico altera apenas seus fixtures e copia um host do SDK para testar alteração de bytes. Mouse/voz completa, múltiplos monitores e servidor MCP conectado continuam verificações separadas. Ausência de servidor não é apresentada como integração MCP verificada.
+`--brain-live-smoke` é opt-in para verificar o modelo real com mensagens sintéticas; usa a credencial existente somente em processo. O diagnóstico altera apenas seus fixtures e copia um host do SDK para testar alteração de bytes. Mouse/voz completa, múltiplos monitores e servidores MCP externos reais continuam verificações separadas. O cliente stdio foi verificado com o servidor BCL independente da fase 7; a aquisição de documentação do REA não é apresentada como uma conexão ao servidor REA.
