@@ -146,7 +146,9 @@ public sealed class IniSettingsStore : ISettingsStore
                 EmbeddingVocabulary = document.GetString("Brain", "EmbeddingVocabulary", ""),
                 LexicalWeight = document.GetDouble("Brain", "LexicalWeight", .45), SemanticWeight = document.GetDouble("Brain", "SemanticWeight", .3),
                 GraphWeight = document.GetDouble("Brain", "GraphWeight", .15), TemporalWeight = document.GetDouble("Brain", "TemporalWeight", .1),
-                GraphLimit = document.GetInt32("Brain", "GraphLimit", 400)
+                GraphLimit = document.GetInt32("Brain", "GraphLimit", 400),
+                RetrievalGraphDepth = document.GetInt32("Brain", "RetrievalGraphDepth", 2), RetrievalGraphCandidates = document.GetInt32("Brain", "RetrievalGraphCandidates", 160),
+                RetrievalGraphMilliseconds = document.GetInt32("Brain", "RetrievalGraphMilliseconds", 30)
                 , TrustedSkills = document.GetString("Brain", "TrustedSkills", "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             },
             GreetOnStartup = document.GetBoolean(GeneralSection, "GreetOnStartup", defaults.GreetOnStartup),
@@ -218,6 +220,9 @@ public sealed class IniSettingsStore : ISettingsStore
         document.SetNumber("Brain", "GraphWeight", settings.Brain.GraphWeight);
         document.SetNumber("Brain", "TemporalWeight", settings.Brain.TemporalWeight);
         document.SetNumber("Brain", "GraphLimit", settings.Brain.GraphLimit);
+        document.SetNumber("Brain", "RetrievalGraphDepth", settings.Brain.RetrievalGraphDepth);
+        document.SetNumber("Brain", "RetrievalGraphCandidates", settings.Brain.RetrievalGraphCandidates);
+        document.SetNumber("Brain", "RetrievalGraphMilliseconds", settings.Brain.RetrievalGraphMilliseconds);
         document.Set("Brain", "TrustedSkills", string.Join(';', settings.Brain.TrustedSkills));
         document.SetBoolean(GeneralSection, "GreetOnStartup", settings.GreetOnStartup);
         document.SetBoolean(GeneralSection, "AnnounceHourly", settings.AnnounceHourly);

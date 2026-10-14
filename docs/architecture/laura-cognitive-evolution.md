@@ -83,3 +83,13 @@ O mesmo `BrainIndex` passa ao esquema derivado 2: FTS5 e vetores por passagem, h
 - RRF foi considerado, mas a melhora demonstrada aqui depende da granularidade. Sem corpus semântico representativo não existe evidência para substituir os pesos já configuráveis; esse benchmark não é apresentado como comparação entre RRF e fusão ponderada.
 
 APIs consultadas: [SQLite FTS5](https://www.sqlite.org/fts5.html) para MATCH/BM25/colunas não indexadas e [Markdig](https://github.com/xoofx/markdig) para parsing Markdown. Não foi introduzido pacote. Limites: até 512 spans por nota; passagem final grande tem janela semântica parcial conforme o modelo; SQLite/ONNX em andamento não são interrompidos no meio de uma chamada nativa. A UI aguarda de forma assíncrona. Testes de corpus real, escalas grandes e modelo ONNX instalado continuam pendentes.
+
+## Fase 3 — ativação associativa limitada
+
+`BrainGraphActivation` prepara vizinhanças com até 32 relações elegíveis por nó durante a publicação do snapshot. A consulta seleciona até oito sementes reais, usa prioridade por força, atenua saltos posteriores e preserva cada aresta, sua direção e proveniência. Busca reversa é identificada e recebe peso menor. Ciclos e relações duplicadas não elevam confiança nem criam conhecimento novo.
+
+O orçamento padrão é dois saltos, 160 candidatos e 30 ms de travessia; o limite adicional é 4.096 arestas visitadas. Os valores `RetrievalGraphDepth`, `RetrievalGraphCandidates` e `RetrievalGraphMilliseconds` são persistidos no INI externo ao vault e sanitizados (profundidade 0–4, candidatos 8–500, tempo 5–250 ms). Zero saltos desativa expansão. Essas configurações não modificam permissões. O orçamento cobre travessia, não construção do índice nem chamadas nativas de ONNX/SQLite.
+
+Relações desconhecidas, `contradicts`, nós draft/arquivados/skills, identidades conflitantes e pesos inválidos são excluídos. `BrainEdge.Provenance` mantém a origem de `BrainRelation.Source` e identifica wikilinks autorados. O resultado de recuperação expõe o caminho associado, explicando que ele não estabelece um novo fato. Esta unidade não gera automaticamente relações semânticas gerais a partir de similaridade; interpretações adicionais devem ter evidência e revisão adequadas.
+
+Validação: **270 testes passaram**, `_Output/CognitivePhase3/phase3-all.trx`; build Release zero warnings/erros. Os cinco novos testes verificam dois saltos na recuperação real, preservação de hashes/arestas, direção reversa, ciclos, candidatos, cancelamento e exclusões. O teste de INI existente também verifica persistência dos três limites. Não é um benchmark de grafo de milhões de nós nem uma garantia de deadline rígido de sistema operacional.

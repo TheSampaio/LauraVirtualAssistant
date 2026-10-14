@@ -54,7 +54,7 @@ public sealed record BrainNote
 /// <summary>An attributed, directed relation; similarity alone never creates one.</summary>
 public sealed record BrainRelation(string Target, string Type = "related_to", double Weight = .5, double Confidence = .7, string Evidence = "", string Source = "manual");
 /// <summary>A resolved link with provenance and direction.</summary>
-public sealed record BrainEdge(string Source, string Target, string Type, double Weight, double Confidence, string Evidence);
+public sealed record BrainEdge(string Source, string Target, string Type, double Weight, double Confidence, string Evidence, string Provenance = "manual");
 /// <summary>A non-sensitive integrity diagnostic tied to a portable path.</summary>
 public sealed record BrainIssue(string Path, string Code);
 /// <summary>An immutable view published after a coherent scan.</summary>
@@ -70,6 +70,8 @@ public sealed record BrainHit(BrainNote Note, double Score, double Lexical, doub
     public BrainPassage? Passage { get; init; }
     /// <summary>Gets the actual source offset of the excerpt for progressive expansion.</summary>
     public int ExcerptStart { get; init; }
+    /// <summary>Gets an attributed authored path when retrieval reached this note through explicit relations.</summary>
+    public BrainActivation? Activation { get; init; }
 }
 /// <summary>An optimistic-write conflict whose draft was preserved without overwriting current knowledge.</summary>
 public sealed class BrainConflictException : IOException

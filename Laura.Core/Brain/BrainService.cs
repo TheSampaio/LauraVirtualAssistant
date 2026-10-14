@@ -17,6 +17,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     private readonly CancellationTokenSource _lifetime = new();
     private IBrainStorage? _storage;
     private BrainSnapshot _snapshot = BrainSnapshot.Empty;
+    private BrainGraphActivation _graph = new(BrainSnapshot.Empty);
     private FileSystemWatcher? _watcher;
     private Task? _worker;
     private int _dirty = 1;
@@ -94,7 +95,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         {
             foreach (BrainRelation relation in note.Relations)
             {
-                if (ids.Contains(relation.Target)) { edges.Add(new(note.Id, relation.Target, relation.Type, relation.Weight, relation.Confidence, relation.Evidence)); }
+                if (ids.Contains(relation.Target)) { edges.Add(new(note.Id, relation.Target, relation.Type, relation.Weight, relation.Confidence, relation.Evidence, relation.Source)); }
                 else { issues.Add(new(note.Path, "unresolved_relation")); }
             }
             foreach (string link in BrainMarkdown.Links(note.Body))
@@ -102,11 +103,12 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
                 string? target = ResolveLink(link, note.Path, valid);
                 if (target is null) { issues.Add(new(note.Path, "ambiguous_or_unresolved_link")); }
                 else if (target != note.Id && !edges.Any(edge => edge.Source == note.Id && edge.Target == target))
-                { edges.Add(new(note.Id, target, "related_to", .5, .5, "Authored wikilink")); }
+                { edges.Add(new(note.Id, target, "related_to", .5, .5, "Authored wikilink", "markdown_link")); }
             }
         }
         index.Update(Location, valid, rebuild);
-        Volatile.Write(ref _snapshot, new(notes, edges, issues)); Interlocked.Exchange(ref _dirty, 0);
+        var snapshot = new BrainSnapshot(notes, edges, issues); _graph = new(snapshot);
+        Volatile.Write(ref _snapshot, snapshot); Interlocked.Exchange(ref _dirty, 0);
     }
     /// <summary>Resolves ids first, then exact portable paths, then unique titles or aliases; ambiguous names remain unresolved.</summary>
     public static string? ResolveLink(string link, string fromPath, IReadOnlyList<BrainNote> notes)
@@ -374,22 +376,22 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 BrainCandidates candidates = index.Query(query); var lexical = candidates.Lexical; var semantic = candidates.Semantic; BrainSnapshot snapshot = Snapshot;
-                var seeds = lexical.Keys.Concat(semantic.Where(pair => pair.Value > .5).Select(pair => pair.Key)).ToHashSet(StringComparer.Ordinal);
-                var graph = new Dictionary<string, double>(StringComparer.Ordinal);
-                foreach (BrainEdge edge in snapshot.Edges.Where(edge => edge.Type != "contradicts"))
-                { if (seeds.Contains(edge.Source)) { graph[edge.Target] = Math.Max(graph.GetValueOrDefault(edge.Target), edge.Weight * edge.Confidence); } if (seeds.Contains(edge.Target)) { graph[edge.Source] = Math.Max(graph.GetValueOrDefault(edge.Source), edge.Weight * edge.Confidence); } }
                 BrainOptions options = settings.Current.Brain;
+                var seeds = lexical.Keys.Concat(semantic.Where(pair => pair.Value > .5).Select(pair => pair.Key)).Distinct(StringComparer.Ordinal)
+                    .ToDictionary(id => id, id => Math.Max(lexical.GetValueOrDefault(id), semantic.GetValueOrDefault(id)), StringComparer.Ordinal);
+                var graph = _graph.Expand(seeds, options, cancellationToken);
                 return (IReadOnlyList<BrainHit>)snapshot.Notes.Where(note => note.IsKnowledge && note.Confidence >= .35 && (since is null || note.UpdatedAt >= since)
                         && !snapshot.Issues.Any(issue => issue.Path == note.Path && issue.Code == "conflicting_id"))
                     .Select(note =>
                     {
-                        double lex = lexical.GetValueOrDefault(note.Id), sem = semantic.GetValueOrDefault(note.Id), neighbor = graph.GetValueOrDefault(note.Id);
+                        BrainActivation? activation = graph.GetValueOrDefault(note.Id);
+                        double lex = lexical.GetValueOrDefault(note.Id), sem = semantic.GetValueOrDefault(note.Id), neighbor = activation?.Score ?? 0;
                         double score = options.LexicalWeight * lex + options.SemanticWeight * sem + options.GraphWeight * neighbor;
                         if (query.Length == 0) { score = note.Importance * .5; }
                         if (score > 0) { score += options.TemporalWeight / (1 + Math.Max(0, (DateTimeOffset.UtcNow - note.UpdatedAt).TotalDays) / 90); score *= .5 + .3 * note.Confidence + .2 * note.Importance; }
                         BrainPassage? passage = candidates.Passages.GetValueOrDefault(note.Id);
                         var excerpt = BrainPassages.Excerpt(note, passage, candidates.Terms, 800);
-                        return new BrainHit(note, score, lex, sem, neighbor, excerpt.Text) { Passage = passage, ExcerptStart = excerpt.Start };
+                        return new BrainHit(note, score, lex, sem, neighbor, excerpt.Text) { Passage = passage, ExcerptStart = excerpt.Start, Activation = activation };
                     }).Where(hit => hit.Score > 0).OrderByDescending(hit => hit.Score).Take(Math.Clamp(limit, 1, 100)).ToArray();
             }, cancellationToken).ConfigureAwait(false);
         }
@@ -407,7 +409,9 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
             string[] conflicts = Snapshot.Edges.Where(edge => edge.Type == "contradicts" && (edge.Source == hit.Note.Id || edge.Target == hit.Note.Id)).Select(edge => edge.Source == hit.Note.Id ? edge.Target : edge.Source).Distinct(StringComparer.Ordinal).Take(4).ToArray();
             string warning = conflicts.Length > 0 ? "Conflicting evidence exists: " + string.Join(", ", conflicts) + ". Do not silently choose a version.\n" : "";
             string location = hit.Passage is null ? "" : $"Section: {hit.Passage.Heading}; source offset {hit.ExcerptStart}; hash {hit.Note.Hash}\n";
-            string piece = $"[{hit.Note.Id}] {hit.Note.Title} ({hit.Note.UpdatedAt:yyyy-MM-dd}, {hit.Note.MemoryType}, confidence {hit.Note.Confidence.ToString("F2", CultureInfo.InvariantCulture)}, evidence {hit.Note.Verification}, source {hit.Note.Source})\n{warning}{location}{hit.Excerpt}\n";
+            string association = hit.Activation is null ? "" : "Associated via authored relations: " + string.Join(" -> ", hit.Activation.Path.Select(step =>
+                step.Edge.Source + " " + step.Edge.Type + (step.Reversed ? " (reverse retrieval)" : "") + " " + step.Edge.Target + " [" + step.Edge.Provenance + "]")) + ". This retrieval path does not establish a new fact.\n";
+            string piece = $"[{hit.Note.Id}] {hit.Note.Title} ({hit.Note.UpdatedAt:yyyy-MM-dd}, {hit.Note.MemoryType}, confidence {hit.Note.Confidence.ToString("F2", CultureInfo.InvariantCulture)}, evidence {hit.Note.Verification}, source {hit.Note.Source})\n{warning}{location}{association}{hit.Excerpt}\n";
             if (builder.Length + piece.Length > budget) { builder.Append(piece.AsSpan(0, budget - builder.Length)); break; }
             builder.Append(piece);
         }

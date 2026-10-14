@@ -69,11 +69,13 @@ public sealed class IniSettingsStoreTests : IDisposable
     public async Task BrainOptionsRoundTripOutsideTheVaultAndBoundInvalidRankingValues()
     {
         var options = new Laura.Core.Brain.BrainOptions { Directory = "C:/Synthetic/brain", EmbeddingModel = "C:/Synthetic/model.onnx", EmbeddingVocabulary = "C:/Synthetic/vocab.txt", AutoLearn = false,
-            ContextCharacters = 2200, GraphLimit = 200, LexicalWeight = .6, SemanticWeight = .2, GraphWeight = .1, TemporalWeight = .1, TrustedSkills = ["fictional-id:fictional-hash"] };
+            ContextCharacters = 2200, GraphLimit = 200, RetrievalGraphDepth = 3, RetrievalGraphCandidates = 80, RetrievalGraphMilliseconds = 45,
+            LexicalWeight = .6, SemanticWeight = .2, GraphWeight = .1, TemporalWeight = .1, TrustedSkills = ["fictional-id:fictional-hash"] };
         IniSettingsStore store = CreateStore(); await store.SaveAsync(LauraSettings.Default with { Brain = options });
         var loaded = (await store.LoadAsync()).Brain;
         Assert.Equal(options.Directory, loaded.Directory); Assert.Equal(options.EmbeddingModel, loaded.EmbeddingModel); Assert.Equal(options.EmbeddingVocabulary, loaded.EmbeddingVocabulary);
         Assert.False(loaded.AutoLearn); Assert.Equal(2200, loaded.ContextCharacters); Assert.Equal(200, loaded.GraphLimit); Assert.Equal(options.TrustedSkills, loaded.TrustedSkills);
+        Assert.Equal(3, loaded.RetrievalGraphDepth); Assert.Equal(80, loaded.RetrievalGraphCandidates); Assert.Equal(45, loaded.RetrievalGraphMilliseconds);
         Assert.Equal(.6, loaded.LexicalWeight); Assert.Equal(.2, loaded.SemanticWeight); Assert.Equal(.1, loaded.GraphWeight); Assert.Equal(.1, loaded.TemporalWeight);
         var bounded = options with { ContextCharacters = -1, GraphLimit = int.MaxValue, SemanticWeight = double.NaN };
         Assert.Equal(500, bounded.Sanitized().ContextCharacters); Assert.Equal(1000, bounded.Sanitized().GraphLimit); Assert.Equal(.3, bounded.Sanitized().SemanticWeight);
