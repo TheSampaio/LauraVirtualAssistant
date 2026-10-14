@@ -86,6 +86,7 @@ public sealed class BrainGraphView : GraphicsView, IDrawable
     /// <summary>Filters before laying out; local view follows actual authored neighbors, and disconnected nodes remain visible.</summary>
     public async Task SetGraphAsync(BrainSnapshot snapshot, string query, string folder, string type, string? localId, int limit, int depth = 1)
     {
+        using var measurement = Laura.Core.Diagnostics.LauraDiagnostics.Measure("ui.graph.refresh");
         IEnumerable<BrainNote> candidates = snapshot.Notes.Where(note => !note.Path.StartsWith("archive/", StringComparison.OrdinalIgnoreCase) && note.Path != "README.md"
             && !snapshot.Issues.Any(issue => issue.Path == note.Path && issue.Code == "conflicting_id")
             && (query.Length == 0 || note.Title.Contains(query, StringComparison.OrdinalIgnoreCase) || note.Tags.Any(tag => tag.Contains(query, StringComparison.OrdinalIgnoreCase)))
@@ -109,7 +110,7 @@ public sealed class BrainGraphView : GraphicsView, IDrawable
             if (_layoutCache.TryGetValue(note.Id, out PointF old)) { positions[note.Id] = old; }
             else { uint seed = Convert.ToUInt32(FileBrainStorage.Hash(note.Id)[..8], 16); float angle = seed % 6283 / 1000f; positions[note.Id] = new(MathF.Cos(angle) * 180, MathF.Sin(angle) * 180); }
         }
-        bool grouped = _groupCommunities; await Task.Run(() => Layout(notes, edges, positions, grouped ? communities : null)).ConfigureAwait(true);
+        bool grouped = _groupCommunities; await Task.Run(() => { using var layoutMeasurement = Laura.Core.Diagnostics.LauraDiagnostics.Measure("ui.graph.layout"); Layout(notes, edges, positions, grouped ? communities : null); }).ConfigureAwait(true);
         if (generation != _generation) { return; }
         bool visibilityChanged = !_notes.Select(note => note.Id).ToHashSet(StringComparer.Ordinal).SetEquals(visibleIds);
         _notes = notes; _edges = edges; _communities = communities;

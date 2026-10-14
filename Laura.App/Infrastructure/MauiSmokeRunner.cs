@@ -19,6 +19,8 @@ public static class MauiSmokeRunner
         Directory.CreateDirectory(directory);
         try
         {
+            if (Environment.GetCommandLineArgs().Contains("--brain-performance-smoke", StringComparer.Ordinal))
+            { await BrainPerformanceSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             await Task.Delay(1000).ConfigureAwait(true);
             var shell = services.GetRequiredService<Laura.App.Shell.MauiShellController>();
             Laura.App.Platforms.Windows.WindowsWindowTheme.VerifyCloseAndReopenForSmoke((Microsoft.UI.Xaml.Window)window.Handler!.PlatformView!, shell.RevealForConfirmation);

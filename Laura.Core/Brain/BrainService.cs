@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Laura.Core.Abstractions;
 using Laura.Core.Localization;
 using Laura.Core.Text;
+using Laura.Core.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace Laura.Core.Brain;
@@ -71,6 +72,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     /// <summary>Indexes valid files and isolates malformed or conflicting nodes without guessing which version is correct.</summary>
     private void Scan(bool rebuild)
     {
+        using var measurement = LauraDiagnostics.Measure("brain.scan");
         var notes = new List<BrainNote>(); var issues = new List<BrainIssue>();
         foreach (string path in _storage!.EnumerateFiles().Where(path => path.EndsWith(".md", StringComparison.OrdinalIgnoreCase)))
         {
@@ -221,6 +223,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         => SaveAsync(note, preserveTimestamp, expectedLocation, [], cancellationToken);
     private async Task<BrainNote> SaveAsync(BrainNote note, bool preserveTimestamp, string? expectedLocation, IReadOnlyList<(string Path, string Hash)> sources, CancellationToken cancellationToken)
     {
+        using var measurement = LauraDiagnostics.Measure("brain.write");
         await InitializeAsync(cancellationToken).ConfigureAwait(false); await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -398,6 +401,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     /// <summary>Combines bounded lexical, neural, explicit graph, confidence, importance and temporal evidence.</summary>
     public async Task<IReadOnlyList<BrainHit>> SearchAsync(string query, int limit = 20, DateTimeOffset? since = null, CancellationToken cancellationToken = default)
     {
+        using var measurement = LauraDiagnostics.Measure("brain.search");
         ArgumentNullException.ThrowIfNull(query);
         if (query.Length > 4000) { throw new ArgumentException("Knowledge query exceeds its supported size.", nameof(query)); }
         await InitializeAsync(cancellationToken).ConfigureAwait(false);
@@ -435,6 +439,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         if (!settings.Current.RememberConversations) { return ""; }
         if (localizer is not null && Regex.IsMatch(TextNormalizer.Normalize(query), localizer.Get(LocalizationKeys.Brain.OverviewPattern), RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))) { query = ""; }
         IReadOnlyList<BrainHit> hits = await SearchAsync(query, 8, cancellationToken: cancellationToken).ConfigureAwait(false);
+        LauraDiagnostics.Record("brain.retrieved", amount: hits.Count, ids: hits.Select(hit => hit.Note.Id).ToArray());
         var builder = new StringBuilder(); int budget = settings.Current.Brain.ContextCharacters;
         foreach (BrainHit hit in hits)
         {

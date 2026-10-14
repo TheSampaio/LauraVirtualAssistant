@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Laura.Core.Abstractions;
+using Laura.Core.Diagnostics;
 using Microsoft.Data.Sqlite;
 
 namespace Laura.Core.Brain;
@@ -22,6 +23,7 @@ public sealed class BrainIndex(string directory, IBrainEmbedding embedding)
     /// <summary>Refreshes derived rows and embeds only changed content or model fingerprints.</summary>
     public void Update(string vault, IReadOnlyList<BrainNote> notes, bool rebuild)
     {
+        using var measurement = LauraDiagnostics.Measure("brain.index");
         lock (_gate)
         {
             Directory.CreateDirectory(directory); _path = Path.Combine(directory, "brain-index-" + FileBrainStorage.Hash(vault)[..16] + ".db");
