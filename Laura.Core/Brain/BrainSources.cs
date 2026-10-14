@@ -11,7 +11,7 @@ namespace Laura.Core.Brain;
 public sealed record BrainAcquisitionResult(string NoteId, int Imported, int Excluded, IReadOnlyList<string> Languages, IReadOnlyList<string> DeclaredDependencies);
 
 /// <summary>Acquires bounded local text/repository sources as untrusted knowledge through the actual permission gate; never executes imported code.</summary>
-public sealed class BrainSources(BrainService brain, PermissionManager permissions)
+public sealed partial class BrainSources(BrainService brain, PermissionManager permissions, IRemoteBrainSource? remote = null)
 {
     private static readonly HashSet<string> ExcludedFolders = new(StringComparer.OrdinalIgnoreCase)
     { ".git", ".ssh", ".aws", ".codex", ".agents", "node_modules", "bin", "obj", "Security", "Credentials", ".vs", ".idea" };

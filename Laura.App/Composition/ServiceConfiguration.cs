@@ -88,6 +88,7 @@ public static class ServiceConfiguration
         services.AddSingleton<BrainLearning>();
         services.AddSingleton<BrainExperiences>();
         services.AddSingleton<BrainApplications>();
+        services.AddSingleton<IRemoteBrainSource>(_ => new GitHubBrainSource(new HttpClient(GitHubBrainSource.CreateHandler()) { Timeout = TimeSpan.FromSeconds(25) }));
         services.AddSingleton<BrainSources>();
         services.AddSingleton(provider => new Laura.Core.Mcp.McpServerStore(Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Security", "mcp-servers.json")));
         services.AddSingleton(provider => new Laura.Core.Mcp.McpRuntime(provider.GetRequiredService<Laura.Core.Mcp.McpServerStore>(), provider.GetRequiredService<PermissionManager>(), WindowsMcpSession.ConnectAsync));
