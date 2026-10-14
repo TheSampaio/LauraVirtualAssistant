@@ -19,6 +19,13 @@ public static class MauiSmokeRunner
         Directory.CreateDirectory(directory);
         try
         {
+            if (Environment.GetCommandLineArgs().Contains("--audio-fragment-smoke", StringComparer.Ordinal))
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                var metrics = await Laura.Platform.Windows.Conversation.GeminiLiveClient.VerifyFragmentedPlaybackForSmokeAsync(timeout.Token).ConfigureAwait(true);
+                await File.WriteAllTextAsync(Path.Combine(directory, "audio-fragment.json"), System.Text.Json.JsonSerializer.Serialize(metrics, DiagnosticJson)).ConfigureAwait(true);
+                await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "Native fragmented PCM byte preservation measured; alignment counters are in audio-fragment.json.").ConfigureAwait(true); return;
+            }
             if (Environment.GetCommandLineArgs().Contains("--brain-performance-smoke", StringComparer.Ordinal))
             { await BrainPerformanceSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             await Task.Delay(1000).ConfigureAwait(true);

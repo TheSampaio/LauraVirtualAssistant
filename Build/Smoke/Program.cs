@@ -92,6 +92,26 @@ if (args.Contains("--gemini", StringComparer.Ordinal))
         }
         finally { live.ReturnToReady(); live.AudioOutputReceived -= CountFeedback; live.MessageReceived -= CountMessage; }
     }
+    if (args.Contains("--long-audio-smoke", StringComparer.Ordinal))
+    {
+        await settings.UpdateAsync(settings.Current with { Culture = "pt-BR", Voice = settings.Current.Voice with { Volume = 0 } }, timeout.Token);
+        await live.ReconfigureAsync();
+        using var capture = new PcmAudioDiagnosticCapture();
+        using var diagnostic = Laura.Core.Diagnostics.LauraDiagnostics.Capture();
+        live.ConversationAudioReceived += capture.Receive; live.ConversationAudioPlayed += capture.Play;
+        try
+        {
+            string? answer = await live.AskAsync(new("Leia um texto original de cerca de cento e vinte palavras, em português brasileiro, explicando como um jardim muda ao longo das estações. Fale com seu timbre natural constante, sem imitar personagens, sem cantar, sem ferramentas e sem mencionar este teste.", CultureInfo.GetCultureInfo("pt-BR"), "Synthetic Tester"), timeout.Token);
+            var comparison = capture.Compare();
+            await capture.ExportAsync(directory, timeout.Token);
+            await File.WriteAllTextAsync(Path.Combine(directory, "long-audio.json"), JsonSerializer.Serialize(new { comparison, Playback = live.PlaybackMetrics,
+                DurationSeconds = comparison.ReceivedBytes / 48000d, Diagnostics = Laura.Core.Diagnostics.LauraDiagnostics.Snapshot() }), timeout.Token);
+            if (string.IsNullOrWhiteSpace(answer) || comparison.ReceivedBytes == 0 || !comparison.Identical || live.PlaybackMetrics?.MisalignedReads != 0)
+            { throw new InvalidOperationException("Long provider playback failed transcript, A/B PCM identity or sample alignment."); }
+            Console.WriteLine("Long provider audio A/B bytes identical; native-rate WAVs and buffer counters exported. Subjective timbre and device output require separate listening.");
+        }
+        finally { live.ConversationAudioReceived -= capture.Receive; live.ConversationAudioPlayed -= capture.Play; }
+    }
     if (args.Contains("--vad", StringComparer.Ordinal))
     {
         await settings.UpdateAsync(settings.Current with { Culture = "pt-BR" }, timeout.Token);

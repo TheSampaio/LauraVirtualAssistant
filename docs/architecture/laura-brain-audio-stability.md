@@ -86,3 +86,19 @@ Gravação relê apenas o documento e a revisão realmente escritos, publica sna
 | Working set ao fim | 271.978.496 B | 275.771.392 B |
 
 Artefatos: `_Output/BrainStability/After/brain-performance.json`. São dois ensaios nesta máquina, não garantia estatística. Alocação caiu 46,2% e CPU 17,3%; frequência de indexação e p95 não melhoraram. Pausas do último GC passaram de 2,81 para 12,13 ms, sem atribuição causal; não foi somado o histórico completo de GC. A instrumentação permite investigar carga maior sem esconder essas limitações.
+
+### Etapa 8 — formato, alinhamento e áudio A/B
+
+Contrato do provedor: [Gemini Live capabilities](https://ai.google.dev/gemini-api/docs/live-api/capabilities) documenta PCM little-endian 16 bit e saída 24 kHz. `PcmAudioFormat` valida PCM/rate/canais recebidos; não foi introduzida conversão ou mudança de sample rate/voz. `PcmPlaybackBuffer` retém fragmentos incompletos de amostra, só entrega pares de bytes e sinaliza término truncado. Depois de um gap ativo, reprime sem descartar palavras; priming/silêncio de turno concluído não são underruns.
+
+Defeito local reproduzido **antes** da correção: dispositivo nativo recebeu duas leituras com bytes ímpares no fixture de 144.000 bytes com metade de amostra atrasada. A concatenação de bytes reais era igual, mas a inserção de padding/silêncio entre metades podia deformar a interpretação PCM. **Depois**: 144.000 bytes íntegros, zero leituras desalinhadas. Houve um gap contado em cada ensaio curto; não foi escondido. Artefatos `_Output/BrainStability/AudioBefore` / `AudioAfter`.
+
+`PcmAudioDiagnosticCapture` é explicitamente instanciado pelo harness, limita A/B a 8 MiB cada, captura em memória sem I/O no callback e exporta WAV 24 kHz depois de drenar. A é PCM recebido; B contém bytes reais enviados ao queue do dispositivo, excluindo silêncio introduzido em gaps/priming. Igualdade de hashes comprova integridade/ordem dos bytes, não ausência de gaps ou timbre subjetivo, mixer/driver/DAC. Nenhum áudio é gravado no uso normal.
+
+Resultados executados:
+
+- 29 testes de áudio/contratos relacionados passaram; inclui 90 segundos de PCM fragmentado em teste determinístico, fila limitada, cancelamento/truncamento e rebuffer.
+- Native integrado: **90 s**, 4.320.000 bytes recebidos/lidos, zero underruns e zero leituras desalinhadas, enquanto 32 revisões do Brain e UI estavam ativos. 3.385 ticks UI; p95 31,64 ms, máximo 68,96 ms. Arquivos `_Output/BrainStability/Integrated`. Trace detalhado é limitado a 4.096 linhas; grupos retidos não representam a contagem total de todo o ensaio.
+- Gemini real, texto sintético e voz Charon, volume zero, sem microfone: **36,960 s**, 1.774.082 bytes A/B com SHA-256 idêntico, zero desalinhamentos. **Dois underruns** observados; maiores intervalos de chegada 1.406 / 1.328 / 953 ms. Isso mostra irregularidade de entrega, mas ainda não distingue atraso do provedor, rede ou agendamento do receiver em cada episódio. WAVs e `long-audio.json` em `_Output/BrainStability/LiveAudio` permitem escuta e correlação reproduzível.
+
+A degradação subjetiva do relato original não foi reproduzida com o documento/conversa exatos. Não se atribui timbre ao modelo por exclusão. O defeito de alinhamento demonstrado foi corrigido; gaps de transporte e diagnóstico de voz metálica continuam limites explícitos. Nenhuma equalização/estiramento/resampling foi usada para mascarar som.

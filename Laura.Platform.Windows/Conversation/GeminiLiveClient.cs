@@ -67,6 +67,12 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     public event EventHandler<ConversationMessage>? MessageReceived;
     /// <summary>Publishes transient generated PCM for explicit recording/verification subscribers; never persists audio itself.</summary>
     public event EventHandler<byte[]>? AudioOutputReceived;
+    /// <summary>Publishes only main-conversation provider PCM to explicitly enabled A/B diagnostic subscribers.</summary>
+    public event Action<byte[]>? ConversationAudioReceived;
+    /// <summary>Publishes real PCM copied to the playback queue only while an explicit diagnostic subscriber exists.</summary>
+    public event Action<byte[]>? ConversationAudioPlayed;
+    /// <summary>Gets content-free playback counters from the main conversation.</summary>
+    public PcmPlaybackMetrics? PlaybackMetrics => _session?.Player.Metrics;
     /// <summary>Reports an explicit request to return to standby without shutting the application down.</summary>
     public event EventHandler? StandbyRequested;
     /// <summary>Reports explicit interruption so an unfinished wake cannot enable capture afterward.</summary>
@@ -118,6 +124,28 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
                 if (player.BytesPlayed - before != audio.Length) { throw new InvalidOperationException("Playback discarded samples during fragment priming or restart."); }
             }
         }, token).ConfigureAwait(false);
+    }
+    /// <summary>Measures native playback of fragmented PCM, including a deliberately delayed half-sample, without network or microphone.</summary>
+    public static Task<PcmPlaybackMetrics> VerifyFragmentedPlaybackForSmokeAsync(CancellationToken token, int seconds = 3)
+    {
+        if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Native playback diagnostics require isolated UI smoke mode."); }
+        if (seconds is < 1 or > 120) { throw new ArgumentOutOfRangeException(nameof(seconds)); }
+        return Task.Run(async () =>
+        {
+            using var capture = new PcmAudioDiagnosticCapture();
+            using var player = new LiveAudioPlayer(-1, 0, () => capture.Play);
+            byte[] pcm = new byte[48000 * seconds];
+            for (int offset = 0; offset < pcm.Length; offset += 2) { global::System.Buffers.Binary.BinaryPrimitives.WriteInt16LittleEndian(pcm.AsSpan(offset), (short)(12000 * Math.Sin(offset / 2d * Math.PI / 24))); }
+            capture.Receive(pcm); player.BeginTurn(); player.Add(pcm[..1]); await Task.Delay(550, token).ConfigureAwait(false);
+            for (int offset = 1; offset < pcm.Length;)
+            {
+                int length = Math.Min(961, pcm.Length - offset); player.Add(pcm.AsSpan(offset, length).ToArray()); offset += length;
+                await Task.Delay(15, token).ConfigureAwait(false);
+            }
+            player.CompleteTurn(); await player.DrainAsync(token).ConfigureAwait(false);
+            if (!capture.Compare().Identical) { throw new InvalidOperationException("Fragmented playback altered or lost real PCM bytes."); }
+            return player.Metrics;
+        }, token);
     }
 
     /// <summary>Verifies a candidate credential through Live setup before persisting it; records no microphone or conversation.</summary>
@@ -543,8 +571,8 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
         {
             var session = await Task.Run(() => new Session(_settings.Current.OutputDevice, _settings.Current.Voice.Volume,
                 tools ? PublishVoiceTurn : null, tools ? ExecuteToolAsync : null,
-                reportStatus ? ReportStatus : static _ => { }, pushToTalk, bytes => AudioOutputReceived?.Invoke(this, bytes), tools ? HandleInputControl : null, tools ? (input, visual) => _ = AnalyzeVoiceImageAsync(input, visual) : null,
-                tools ? (input, first) => { if (first) { _memory.SetWorkingContext(input); } else { _memory.UpdateWorkingContext(input); } } : null), cancellationToken).ConfigureAwait(false);
+                reportStatus ? ReportStatus : static _ => { }, pushToTalk, bytes => { AudioOutputReceived?.Invoke(this, bytes); if (tools) { ConversationAudioReceived?.Invoke(bytes); } }, tools ? HandleInputControl : null, tools ? (input, visual) => _ = AnalyzeVoiceImageAsync(input, visual) : null,
+                tools ? (input, first) => { if (first) { _memory.SetWorkingContext(input); } else { _memory.UpdateWorkingContext(input); } } : null, tools ? () => ConversationAudioPlayed : null), cancellationToken).ConfigureAwait(false);
             try
             {
                 await session.ConnectAsync(_keys.Read(), GeminiLiveProtocol.Setup(model, _settings.Current.GenerativeAi.LiveVoice,
@@ -715,8 +743,8 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
         private int _aborted;
 
         /// <summary>Creates a session with its own bounded audio playback queue.</summary>
-        public Session(int device, int volume, Action<string, string>? publish, Func<string, JsonElement, CancellationToken, Task<AssistantToolResult>>? tool, Action<string> status, bool manualActivity, Action<byte[]> audio, Func<string, bool>? inputControl = null, Action<string, AssistantToolResult>? visualFollowup = null, Action<string, bool>? userInput = null)
-        { Player = new LiveAudioPlayer(device, volume); _publish = publish; _tool = tool; _status = status; ManualActivity = manualActivity; _audio = audio; _inputControl = inputControl; _visualFollowup = visualFollowup; _userInput = userInput; }
+        public Session(int device, int volume, Action<string, string>? publish, Func<string, JsonElement, CancellationToken, Task<AssistantToolResult>>? tool, Action<string> status, bool manualActivity, Action<byte[]> audio, Func<string, bool>? inputControl = null, Action<string, AssistantToolResult>? visualFollowup = null, Action<string, bool>? userInput = null, Func<Action<byte[]>?>? capture = null)
+        { Player = new LiveAudioPlayer(device, volume, capture); _publish = publish; _tool = tool; _status = status; ManualActivity = manualActivity; _audio = audio; _inputControl = inputControl; _visualFollowup = visualFollowup; _userInput = userInput; }
         internal AssistantToolResult? TakeVisual() => Interlocked.Exchange(ref _queuedVisual, null);
         /// <summary>Starts a native justified continuation without changing original user context or replaying prior tool calls.</summary>
         internal void ResetOutputForContinuation() => _output.Clear();
@@ -860,6 +888,8 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
                 {
                     if (part.TryGetProperty("inlineData", out JsonElement audio) && audio.TryGetProperty("data", out JsonElement data))
                     {
+                        if (!audio.TryGetProperty("mimeType", out JsonElement mime) || mime.ValueKind != JsonValueKind.String || !PcmAudioFormat.IsNativeOutput(mime.GetString() ?? ""))
+                        { FailureCategory = "audio_format"; throw new InvalidOperationException("Unexpected provider PCM format."); }
                         byte[] pcm = Convert.FromBase64String(data.GetString()!);
                         lock (_playbackGate)
                         {

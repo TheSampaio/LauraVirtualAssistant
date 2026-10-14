@@ -15,11 +15,12 @@ internal sealed class LiveAudioPlayer : IDisposable
     private TaskCompletionSource? _stopped;
     private Exception? _playbackError;
     private bool _disposed;
+    private long _lastChunk;
     /// <summary>Creates an audio sink without opening a microphone.</summary>
-    public LiveAudioPlayer(int device, int volume)
+    public LiveAudioPlayer(int device, int volume, Func<Action<byte[]>?>? capture = null)
     {
         _output = new WaveOutEvent { DeviceNumber = device >= -1 && device < WaveInterop.waveOutGetNumDevs() ? device : -1, DesiredLatency = 180, NumberOfBuffers = 3, Volume = volume / 100f };
-        _meter = new(_buffer, Environment.TickCount64 + 300); _output.Init(_meter);
+        _meter = new(_buffer, Environment.TickCount64 + 300, capture); _output.Init(_meter);
         _output.PlaybackStopped += (_, args) => { if (args.Exception is not null) { Volatile.Write(ref _playbackError, args.Exception); } _stopped?.TrySetResult(); };
         _output.Play();
     }
@@ -31,13 +32,20 @@ internal sealed class LiveAudioPlayer : IDisposable
     public long BytesReceived { get; private set; }
     /// <summary>Queues a PCM fragment and begins playback.</summary>
     public void Add(byte[] audio)
-    { if (Volatile.Read(ref _playbackError) is { } error) { throw new InvalidOperationException("The selected playback device failed.", error); } BytesReceived += audio.Length; _buffer.Add(audio, Environment.TickCount64); }
+    {
+        if (Volatile.Read(ref _playbackError) is { } error) { throw new InvalidOperationException("The selected playback device failed.", error); }
+        long now = Environment.TickCount64, previous = Interlocked.Exchange(ref _lastChunk, now);
+        Laura.Core.Diagnostics.LauraDiagnostics.Record("audio.chunk.arrival", previous == 0 ? 0 : now - previous, audio.Length);
+        BytesReceived += audio.Length; _buffer.Add(audio, now);
+    }
     /// <summary>Primes the next utterance without clearing its leading PCM fragments.</summary>
     public void BeginTurn() => _buffer.BeginTurn();
     /// <summary>Flushes short utterances after the model finishes generating.</summary>
     public void CompleteTurn() => _buffer.CompleteTurn();
     /// <summary>Gets the number of real PCM bytes read into the output device queue.</summary>
     public long BytesPlayed => _meter.BytesPlayed;
+    /// <summary>Gets content-free queue health counters.</summary>
+    public PcmPlaybackMetrics Metrics => _buffer.Metrics;
     /// <summary>Discards sound immediately for interruption.</summary>
     public void Clear()
     {
@@ -81,7 +89,7 @@ internal sealed class LiveAudioPlayer : IDisposable
     { lock (_gate) { if (_disposed) { return; } _disposed = true; _lifetime.Cancel(); _buffer.Clear(); _output.Stop(); _output.Dispose(); _lifetime.Dispose(); } GC.SuppressFinalize(this); }
 
     /// <summary>Measures output-device reads, keeping animation synchronized with audible playback.</summary>
-    private sealed class MeteredProvider(PcmPlaybackBuffer source, long readyAfter) : IWaveProvider
+    private sealed class MeteredProvider(PcmPlaybackBuffer source, long readyAfter, Func<Action<byte[]>?>? capture) : IWaveProvider
     {
         private float _level;
         private long _lastAudioRead = long.MinValue / 2;
@@ -104,7 +112,11 @@ internal sealed class LiveAudioPlayer : IDisposable
             Span<byte> output = buffer.AsSpan(offset, count); output.Clear();
             int read = now < ReadyAfter ? 0 : source.Read(output, now);
             Volatile.Write(ref _level, read == 0 ? 0 : AudioLevel.Measure(output[..read]));
-            if (read > 0) { Interlocked.Exchange(ref _lastAudioRead, now); Interlocked.Add(ref _bytesPlayed, read); }
+            if (read > 0)
+            {
+                Interlocked.Exchange(ref _lastAudioRead, now); Interlocked.Add(ref _bytesPlayed, read);
+                if (capture?.Invoke() is { } observer) { observer(output[..read].ToArray()); }
+            }
             return count;
         }
         /// <summary>Clears amplitude and playback-tail tracking after interruption.</summary>
