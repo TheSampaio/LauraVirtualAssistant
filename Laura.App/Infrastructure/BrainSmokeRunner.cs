@@ -181,6 +181,8 @@ public static class BrainSmokeRunner
             results.Add("Actual list_brain_skills ranked task metadata through the local index, distinguished reviewed instructions from blocked MCP dependencies and excluded full procedure steps without asking for execution permissions.");
             stage = "native_skill_usage_adapter";
             results.Add(await BrainSkillUsageSmokeRunner.RunAsync(services, workspace, episode).ConfigureAwait(true));
+            stage = "native_cognitive_evidence_inspector";
+            results.AddRange(await BrainEvidenceSmokeRunner.RunAsync(services, directory).ConfigureAwait(true));
             if (args.Contains("--brain-live-smoke", StringComparer.Ordinal))
             {
                 var live = services.GetRequiredService<GeminiLiveClient>(); if (!live.IsAvailable) { throw new InvalidOperationException("A configured model credential is required for live diagnostics."); }

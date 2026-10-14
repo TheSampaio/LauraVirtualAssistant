@@ -196,6 +196,16 @@ Validação: **330 testes passaram**, zero falhas/skips (`_Output/CognitiveMaint
 
 Integração nativa: `_Output/CognitiveNativeMaintenance/result.txt` passou. Os botões MAUI/WinUI reais negaram/aplicaram limpeza e escolheram a nota canônica antes de arquivar a cópia. O adaptador `recall_memory` recuperou o conteúdo consolidado; sair da página cancelou a confirmação em aberto. Uma ação `apply` inventada pelo modelo não gravou nada. As capturas normal/compacta foram produzidas e a versão compacta inspecionada. O teste usou somente dados sintéticos e não abriu microfone/nuvem nem criou grants de execução. A inspeção mais completa de habilidades, fontes, histórico e estados fica na unidade seguinte de observabilidade.
 
+## Fase 9 — fontes, estados e observabilidade na interface existente
+
+`BrainEvidenceView` integra o inspetor da página Cérebro com seções nativas recolhíveis de requisitos, fontes/componentes, observações de processos e revisões. Distingue revisão pendente, requisitos bloqueados, instruções disponíveis e instruções importadas sem execução avaliada. Aprovação de leitura é exibida separadamente de testes/execução; procedimento com requisito ausente não oferece ativação impossível. Verificação declarada no YAML, confiança e observação nativa são diferenciadas, sem conceder privilégios.
+
+As fontes mostram correspondência da versão citada, trecho literal e acesso à nota atual por ID real; referências ambíguas não escolhem uma origem arbitrária. Histórico abre revisões existentes de `Archive/Revisions`, preservando o controle de alterações não salvas. Uma divergência entre bytes lidos e snapshot provoca reconciliação antes de apresentar o nó. O inspetor confere escopo do vault e separa registros de versões anteriores. Contagens são de até 50 observações retidas de processos, não taxas de sucesso da habilidade/tarefa; execuções MCP permanecem no histórico de autorizações. `Gerenciar → Atividade do aprendizado` apresenta somente contadores de fila da sessão e explica que processar evento pode não criar memória.
+
+Validação: **330 testes passaram**, zero falhas/skips (`_Output/CognitiveEvidence/evidence-regression.trx`); build Release sem avisos/erros. `_Output/CognitiveNativeEvidenceVerified/result.txt` passou pelo fluxo nativo completo, incluindo as dez fontes públicas REA, propostas/revisão, execução SDK real, descoberta por tarefa e novo inspetor EN/PT. Os botões reais abriram a fonte e uma revisão arquivada. Habilidade MCP ausente exibiu o bloqueio; uma revisão fundamentada no episódio nativo de falha preservou o mesmo ID, permaneceu draft e não herdou a validação dos dois resultados da versão anterior. A interface normal/compacta foi capturada e inspecionada, sem microfone/nuvem.
+
+O primeiro ensaio do inspetor foi encerrado somente em seu processo isolado: a rolagem diagnóstica aguardava o evento que o WinUI não emite ao manter a posição. A espera foi removida da sondagem, sem bloquear os controles do usuário. A inspeção visual também detectou expansão indevida de botão dentro do `ContentView`; alinhamento natural e margens corrigiram o layout. O cenário final mediu 44 px no botão de fonte em ambos os idiomas e completou todos os caminhos. Esses testes usam automation peers nativos, não interação física de mouse nem uma avaliação completa com Narrator. A qualidade de seleção semântica com modelo ONNX real e linguagem natural arbitrária não é afirmada por esses testes.
+
 ## Registro de commits e reprodução
 
 ### Fonte real indicada: REA
@@ -233,6 +243,7 @@ A preparação HTTP é uma ferramenta explícita de validação, não um leitor 
 | `457e69b` | Descoberta de metadados de habilidades por tarefa com índice híbrido local |
 | `d4fcbea` | Monitoramento por versão/turno a partir de resultados nativos de processos |
 | `86dfb76` | Cliente MCP stdio nativo, aprovações críticas e capacidades conectadas |
+| `8baba6c` | Manutenção incremental e consolidação revisada, reversível e por versão |
 
 O diagnóstico público REA é registrado no commit subsequente desta documentação. Artefatos `_Output` são ignorados pelo Git e não contêm a credencial protegida.
 
