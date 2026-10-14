@@ -130,6 +130,24 @@ Limites: esta unidade cobre arquivos locais; URLs/HTTP, PDF e documentos binári
 
 ## Registro de commits e reprodução
 
+### Fonte real indicada: REA
+
+O cenário público usa [morluto/rea](https://github.com/morluto/rea), revisão fixa `c7105d9723c835b5e0122f5fc6cfbea86265c349`. `Build/Smoke/Get-ReaSourceFixture.ps1` baixa dez arquivos textuais específicos (README, manifesto npm, quatro documentos e quatro fontes TypeScript), confere hashes SHA-256 fixados e preserva a licença no fixture ignorado pelo Git. Não clona submódulos, executa scripts nem instala Node/npm/REA. Isso valida um recorte de **156.391 bytes**, não o repositório inteiro.
+
+`BrainSourceSmokeRunner` amplia o diagnóstico nativo com `--brain-rea-smoke`. O adaptador real `study_source` importou **10/10**, excluiu zero, identificou TypeScript e dependências apenas declaradas, exigiu confirmação crítica nas duas aquisições e preservou IDs/hashes na repetição. As instruções de instalação permaneceram referências `unverified`; não apareceram skills ou concessões de permissões.
+
+Quatro consultas substantivas recuperaram os documentos de política de startup MCP, inspeção managed/ILSpy, orçamento de transporte MCP e identidade do servidor nas posições **1, 1, 3 e 1**. A informação esperada apareceu diretamente no excerpt em **1/4**; a expansão contextual do mesmo documento, com ID/hash e até **4.000 caracteres**, recuperou as quatro evidências. Os dois primeiros ensaios falharam ao procurar a evidência apenas a partir do início do trecho escolhido: o contexto relevante podia precedê-lo. O diagnóstico final explicita a leitura de até 600 caracteres anteriores e mantém os resultados iniciais como evidência dessa limitação; não se afirma precisão perfeita dos excerpts nem compreensão pelo modelo.
+
+Um novo `BrainService`, com índice lexical vazio, reabriu o Markdown, preservou as dez identidades e recuperou a política de startup. Não foi um reinício completo do Windows/processo. O inventário/bytes das fontes e as concessões de permissões ficaram inalterados. Evidências finais: `_Output/CognitiveNativeReaVerified/result.txt` e `rea-checks.txt` (PASS); **283 testes** em `_Output/CognitiveRea/rea-source-regression.trx`; build Release sem avisos/erros. Nenhum servidor MCP real REA foi iniciado e o teste não avalia qualidade neural ou resposta semântica de um modelo.
+
+```powershell
+# Usar uma raiz de diagnóstico nova. Somente esta preparação acessa HTTP.
+./Build/Smoke/Get-ReaSourceFixture.ps1 -Destination "$PWD/_Output/ReaCheck/Workspace/ReaSourceFixture"
+Laura.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/Laura.exe --storage "$PWD/_Output/ReaCheck" --brain-smoke "$PWD/_Output/ReaCheck" --brain-rea-smoke
+```
+
+A preparação HTTP é uma ferramenta explícita de validação, não um leitor de URL implementado no produto. A aquisição da LAURA permanece local e autorizada; os dados públicos ficam somente no Brain isolado do diagnóstico. O conhecimento da documentação do REA não é apresentado como capacidade de executá-lo.
+
 | Commit | Unidade testada |
 |---|---|
 | `efa7f32` | Base de permissões e captura integrada |
@@ -140,8 +158,9 @@ Limites: esta unidade cobre arquivos locais; URLs/HTTP, PDF e documentos binári
 | `bf39162` | Grafo limitado e proveniência |
 | `813a9f2` | Experiências observadas e reflexões draft |
 | `6d603d3` | Aplicativos aprendidos e hash no momento da execução |
+| `c5bab8f` | Aquisição local autorizada, sem executar código |
 
-Aquisição local é registrada no commit subsequente desta documentação. Artefatos `_Output` são ignorados pelo Git e não contêm a credencial protegida.
+O diagnóstico público REA é registrado no commit subsequente desta documentação. Artefatos `_Output` são ignorados pelo Git e não contêm a credencial protegida.
 
 ```powershell
 dotnet test Laura.Core.Tests/Laura.Core.Tests.csproj -c Release --no-restore

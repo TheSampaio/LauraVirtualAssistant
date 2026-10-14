@@ -14,7 +14,7 @@ namespace Laura.App.Infrastructure;
 public static class BrainSmokeRunner
 {
     private static readonly string[] PassedHeader = ["PASS"];
-    /// <summary>Verifies the real tool adapter and optionally the configured model; never starts a microphone or authorizes system actions.</summary>
+    /// <summary>Verifies actual adapters with isolated diagnostic actions and optional public-source/model checks; never starts a microphone.</summary>
     public static async Task RunAsync(IServiceProvider services, string directory)
     {
         directory = Path.GetFullPath(directory); Directory.CreateDirectory(directory);
@@ -117,6 +117,11 @@ public static class BrainSmokeRunner
             { throw new InvalidOperationException("Native source acquisition did not remain a read-only study of the selected repository."); }
             if (!(await brain.SearchAsync("inspect value").ConfigureAwait(true)).Any(hit => hit.Note.Source == "external_source")) { throw new InvalidOperationException("Imported source was not recoverable."); }
             results.Add("Actual study_source adapter required exact reinforced source approval, recovered TypeScript knowledge and declared dependency metadata without executing postinstall or installing anything.");
+            if (args.Contains("--brain-rea-smoke", StringComparer.Ordinal))
+            {
+                stage = "public_rea_source_adapter";
+                results.AddRange(await BrainSourceSmokeRunner.RunAsync(services, directory).ConfigureAwait(true));
+            }
             if (args.Contains("--brain-live-smoke", StringComparer.Ordinal))
             {
                 var live = services.GetRequiredService<GeminiLiveClient>(); if (!live.IsAvailable) { throw new InvalidOperationException("A configured model credential is required for live diagnostics."); }
