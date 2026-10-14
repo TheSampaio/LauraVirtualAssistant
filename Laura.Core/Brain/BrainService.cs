@@ -6,6 +6,7 @@ using Laura.Core.Abstractions;
 using Laura.Core.Localization;
 using Laura.Core.Text;
 using Laura.Core.Diagnostics;
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 
 namespace Laura.Core.Brain;
@@ -22,6 +23,8 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     private FileSystemWatcher? _watcher;
     private Task? _worker;
     private int _dirty = 1;
+    private readonly ConcurrentDictionary<string, byte> _changedPaths = new(StringComparer.Ordinal);
+    private string _graphFingerprint = "";
     /// <summary>Reports coherent changes without exposing note text in diagnostics.</summary>
     public event EventHandler? Changed;
     /// <summary>Gets the current portable vault root.</summary>
@@ -73,13 +76,17 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     public async Task RefreshIfDirtyAsync(CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken).ConfigureAwait(false);
-        if (Volatile.Read(ref _dirty) == 0) { return; }
+        if (Volatile.Read(ref _dirty) == 0 && _changedPaths.IsEmpty) { return; }
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         bool changed = false;
         try
         {
-            if (Volatile.Read(ref _dirty) != 0) { await Task.Run(() => Scan(false), cancellationToken).ConfigureAwait(false); changed = true; }
+            BrainSnapshot before = Snapshot;
+            bool full = Interlocked.Exchange(ref _dirty, 0) != 0;
+            await Task.Run(() => { if (full) { Scan(false); } else { ReconcilePaths(); } }, cancellationToken).ConfigureAwait(false);
+            changed = full || !ReferenceEquals(before, Snapshot);
         }
+        catch { Interlocked.Exchange(ref _dirty, 1); throw; }
         finally { _gate.Release(); }
         if (changed) { Changed?.Invoke(this, EventArgs.Empty); }
     }
@@ -87,6 +94,9 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     private void Scan(bool rebuild)
     {
         using var measurement = LauraDiagnostics.Measure("brain.scan");
+        string[] pending = _changedPaths.Keys.ToArray(); foreach (string path in pending) { _changedPaths.TryRemove(path, out _); }
+        Interlocked.Exchange(ref _dirty, 0);
+        var cached = Snapshot.Notes.ToDictionary(note => note.Path, StringComparer.Ordinal);
         var notes = new List<BrainNote>(); var issues = new List<BrainIssue>();
         foreach (string path in _storage!.EnumerateFiles().Where(path => path.EndsWith(".md", StringComparison.OrdinalIgnoreCase)))
         {
@@ -94,7 +104,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
             {
                 string content = _storage.Read(path);
                 string hash = FileBrainStorage.Hash(content);
-                BrainNote note = Snapshot.Notes.FirstOrDefault(note => note.Path == path && note.Hash == hash) ?? BrainMarkdown.Parse(content, path);
+                BrainNote note = cached.TryGetValue(path, out BrainNote? prior) && prior.Hash == hash ? prior : BrainMarkdown.Parse(content, path);
                 if (note.Id.Length == 0)
                 {
                     note = note with { Id = Guid.NewGuid().ToString("D"), Revision = Guid.NewGuid().ToString("N") };
@@ -106,6 +116,38 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or FormatException or YamlDotNet.Core.YamlException)
             { issues.Add(new(path, "invalid_or_unreadable")); }
         }
+        PublishDocuments(notes, issues, rebuild);
+    }
+    /// <summary>Reconciles exact changed documents; own watcher echoes do not republish a snapshot or rebuild topology.</summary>
+    private void ReconcilePaths()
+    {
+        var notes = Snapshot.Notes.ToDictionary(note => note.Path, StringComparer.Ordinal);
+        var issues = Snapshot.Issues.Where(issue => issue.Code == "invalid_or_unreadable").ToList();
+        bool changed = false;
+        foreach (string path in _changedPaths.Keys.ToArray())
+        {
+            if (!_changedPaths.TryRemove(path, out _)) { continue; }
+            try
+            {
+                string content = _storage!.Read(path);
+                if (notes.TryGetValue(path, out BrainNote? prior) && prior.Hash == FileBrainStorage.Hash(content)) { continue; }
+                BrainNote parsed = BrainMarkdown.Parse(content, path);
+                if (parsed.Id.Length == 0) { Interlocked.Exchange(ref _dirty, 1); continue; }
+                notes[path] = parsed; issues.RemoveAll(issue => issue.Path == path); changed = true;
+            }
+            catch (FileNotFoundException) { changed |= notes.Remove(path); issues.RemoveAll(issue => issue.Path == path); }
+            catch (DirectoryNotFoundException) { changed |= notes.Remove(path); issues.RemoveAll(issue => issue.Path == path); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or FormatException or YamlDotNet.Core.YamlException)
+            { notes.Remove(path); issues.RemoveAll(issue => issue.Path == path); issues.Add(new(path, "invalid_or_unreadable")); changed = true; }
+        }
+        if (changed) { PublishDocuments(notes.Values.ToList(), issues, false); }
+    }
+    /// <summary>Publishes coherent graph/index state from actual documents without rescanning unrelated files.</summary>
+    private void PublishDocuments(List<BrainNote> notes, List<BrainIssue> issues, bool rebuild)
+    {
+        if (!rebuild && notes.Count == Snapshot.Notes.Count && notes.Zip(Snapshot.Notes).All(pair => pair.First.Path == pair.Second.Path && pair.First.Hash == pair.Second.Hash)
+            && issues.SequenceEqual(Snapshot.Issues.Where(issue => issue.Code == "invalid_or_unreadable")))
+        { index.Update(Location, Snapshot.Notes.Where(note => !Snapshot.Issues.Any(issue => issue.Path == note.Path && issue.Code == "conflicting_id")).ToArray(), false); return; }
         var duplicates = notes.GroupBy(note => note.Id, StringComparer.Ordinal).Where(group => group.Count() > 1).ToArray();
         var duplicateIds = duplicates.Select(group => group.Key).ToHashSet(StringComparer.Ordinal);
         foreach (var group in duplicates) { foreach (BrainNote note in group) { issues.Add(new(note.Path, "conflicting_id")); } }
@@ -128,8 +170,13 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
             }
         }
         index.Update(Location, valid, rebuild);
-        var snapshot = new BrainSnapshot(notes, edges, issues); _graph = new(snapshot);
-        Volatile.Write(ref _snapshot, snapshot); Interlocked.Exchange(ref _dirty, 0);
+        var snapshot = new BrainSnapshot(notes, edges, issues);
+        var eligible = valid.Where(note => note.IsKnowledge && note.Confidence >= .35).Select(note => note.Id).ToHashSet(StringComparer.Ordinal);
+        string graphFingerprint = FileBrainStorage.Hash(string.Join('|', eligible.Order(StringComparer.Ordinal))
+            + string.Join('|', edges.Where(edge => eligible.Contains(edge.Source) && eligible.Contains(edge.Target)).OrderBy(edge => edge.Source).ThenBy(edge => edge.Target).ThenBy(edge => edge.Type)));
+        if (graphFingerprint != _graphFingerprint)
+        { using var graphMeasurement = LauraDiagnostics.Measure("brain.graph.rebuild"); _graph = new(snapshot); _graphFingerprint = graphFingerprint; }
+        Volatile.Write(ref _snapshot, snapshot);
     }
     /// <summary>Resolves ids first, then exact portable paths, then unique titles or aliases; ambiguous names remain unresolved.</summary>
     public static string? ResolveLink(string link, string fromPath, IReadOnlyList<BrainNote> notes)
@@ -243,6 +290,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         {
             return await Task.Run(() =>
             {
+                var writtenPaths = new List<string>();
                 if (expectedLocation is not null) { EnsureLocation(expectedLocation); }
                 foreach (var source in sources)
                 { if (FileBrainStorage.Hash(_storage!.Read(source.Path)) != source.Hash) { throw new IOException("A reviewed maintenance source changed before writing."); } }
@@ -255,19 +303,24 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
                 {
                     string previousContent = _storage!.Read(note.Path);
                     if (FileBrainStorage.Hash(previousContent) != note.Hash) { PreserveDraft(saved); throw new BrainConflictException(); }
-                    try { PreserveRevision(BrainMarkdown.Parse(previousContent, note.Path)); }
+                    try { writtenPaths.Add(PreserveRevision(BrainMarkdown.Parse(previousContent, note.Path))); }
                     catch (FormatException)
                     {
                         var original = new BrainNote { Path = "Archive/Revisions/" + Guid.NewGuid().ToString("N") + ".md", Title = "Original document before repair", Status = "archived", Source = "manual_repair",
                             Body = previousContent, Relations = [new(saved.Id, "derived_from", 1, .5, "Original malformed source preserved before user repair", "manual_repair")] };
-                        _storage.Write(DestinationPath(original.Path), BrainMarkdown.Render(original), null);
+                        string preserved = DestinationPath(original.Path); _storage.Write(preserved, BrainMarkdown.Render(original), null); writtenPaths.Add(preserved);
                     }
                 }
                 try { _storage!.Write(note.Path, BrainMarkdown.Render(saved), note.Hash.Length > 0 ? note.Hash : null); }
                 catch (BrainConflictException) { PreserveDraft(saved); throw; }
-                Scan(false); return BrainMarkdown.Parse(_storage!.Read(note.Path), note.Path);
+                writtenPaths.Add(note.Path);
+                var documents = Snapshot.Notes.ToDictionary(item => item.Path, StringComparer.Ordinal);
+                foreach (string path in writtenPaths) { documents[path] = BrainMarkdown.Parse(_storage!.Read(path), path); }
+                PublishDocuments(documents.Values.ToList(), Snapshot.Issues.Where(issue => issue.Code == "invalid_or_unreadable" && !writtenPaths.Contains(issue.Path)).ToList(), false);
+                return documents[note.Path];
             }, cancellationToken).ConfigureAwait(false);
         }
+        catch { Interlocked.Exchange(ref _dirty, 1); throw; }
         finally { _gate.Release(); Changed?.Invoke(this, EventArgs.Empty); }
     }
     private void EnsureLocation(string expected)
@@ -284,12 +337,12 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         _storage!.Write(DestinationPath(draft.Path), BrainMarkdown.Render(draft), null); Interlocked.Exchange(ref _dirty, 1);
     }
     /// <summary>Preserves authored content before edits; history remains Markdown and survives index deletion.</summary>
-    private void PreserveRevision(BrainNote note)
+    private string PreserveRevision(BrainNote note)
     {
         var revision = note with { Id = Guid.NewGuid().ToString("D"), Path = "Archive/Revisions/" + Guid.NewGuid().ToString("N") + ".md", Status = "archived", Hash = "",
             Relations = [new(note.Id, "derived_from", 1, note.Confidence, "Previous authored revision", note.Source)] };
         revision = revision with { Body = RebaseImages(note.Body, note.Path, revision.Path) };
-        _storage!.Write(DestinationPath(revision.Path), BrainMarkdown.Render(revision), null);
+        string path = DestinationPath(revision.Path); _storage!.Write(path, BrainMarkdown.Render(revision), null); return path;
     }
     /// <summary>Validates a new destination before applying the directory naming policy.</summary>
     private string DestinationPath(string path, bool directory = false)
@@ -572,7 +625,15 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         _worker ??= Task.Run(WatchAsync);
     }
     /// <summary>Debounces provider notifications without doing file I/O on callback threads.</summary>
-    private void MarkDirty(object sender, FileSystemEventArgs args) => Interlocked.Exchange(ref _dirty, 1);
+    private void MarkDirty(object sender, FileSystemEventArgs args)
+    {
+        if (!ReferenceEquals(sender, _watcher)) { return; }
+        if (args.FullPath.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(args.FullPath) == ".laura-write.lock") { return; }
+        if (!args.FullPath.EndsWith(".md", StringComparison.OrdinalIgnoreCase)) { Interlocked.Exchange(ref _dirty, 1); return; }
+        _changedPaths[Path.GetRelativePath(Location, args.FullPath).Replace('\\', '/')] = 0;
+        if (args is RenamedEventArgs renamed && renamed.OldFullPath.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+        { _changedPaths[Path.GetRelativePath(Location, renamed.OldFullPath).Replace('\\', '/')] = 0; }
+    }
     /// <summary>Recovers lost events and transient sync failures, reporting only failure types.</summary>
     private async Task WatchAsync()
     {
@@ -582,8 +643,9 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
             while (await timer.WaitForNextTickAsync(_lifetime.Token).ConfigureAwait(false))
             {
-                if (++ticks % 30 != 0 && Volatile.Read(ref _dirty) == 0) { continue; }
-                try { await RefreshAsync(cancellationToken: _lifetime.Token).ConfigureAwait(false); }
+                bool periodic = ++ticks % 30 == 0;
+                if (!periodic && Volatile.Read(ref _dirty) == 0 && _changedPaths.IsEmpty) { continue; }
+                try { if (periodic) { await RefreshAsync(cancellationToken: _lifetime.Token).ConfigureAwait(false); } else { await RefreshIfDirtyAsync(_lifetime.Token).ConfigureAwait(false); } }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
                 { logger.LogWarning("Brain reconciliation unavailable ({ErrorType}).", error.GetType().Name); }
             }

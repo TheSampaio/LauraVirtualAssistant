@@ -68,3 +68,21 @@ Transcrição completa passa a ter origem `UserVoice`, com os mesmos recibos/pol
 ### Etapa 6 — callbacks e coalescência
 
 Conclusão de voz sai do receiver antes de SQLite/Brain e é serializada. Continuação/captura conserva o token original; histórico atrasado não substitui o contexto de uma solicitação mais nova. Ferramentas também cedem imediatamente o receiver e têm quatro slots reais, eliminando a corrida no limite contado pelo dicionário. `MemoryPage` agrupa bursts por 120 ms, no dispatcher, e atualiza novamente se houve mudança durante a renderização; não faz retry visual infinito de falha. Stamp do grafo usa identidades/topologia, então editar corpo atualiza dados/inspector sem repetir layout. Seis testes relacionados passaram, incluindo backpressure/shutdown de aprendizado e preservação de turno mais novo. A medição nativa comparável será repetida após a etapa 7, separadamente desses contratos.
+
+### Etapa 7 — publicação e índice incrementais
+
+Gravação relê apenas o documento e a revisão realmente escritos, publica snapshot coerente e preserva as validações/hash/flush/rename. Watcher guarda paths alterados e reconcilia conteúdo/exclusão; echoes de hashes iguais não republisham. Eventos de diretório/anexos e rescan periódico mantêm reconciliação completa. Falha marca nova reconciliação; arquivo Markdown confirmado não é apagado. Topologia de recuperação reutiliza vizinhanças quando identidades elegíveis e arestas não mudam; índice não repete SQL/vetores de notas iguais no mesmo modelo. Mudança de vault/modelo, schema, arquivo de índice ou falha invalida o cache. Vetor ausente após erro continua elegível para retry. Dois novos testes provam ausência de leituras alheias e reconciliação real por watcher; 186 testes do Brain passaram antes dos últimos guards, com regressão final prevista na etapa 9.
+
+| Mesmo fixture nativo | Antes | Depois |
+|---|---:|---:|
+| Total (32 revisões) | 15.469,33 ms | 13.396,55 ms |
+| CPU | 8.234,38 ms | 6.812,50 ms |
+| Bytes alocados | 127.091.824 | 68.415.576 |
+| Scans completos | 45 | 13 |
+| Layouts visuais | 20 | 0 |
+| Atualizações do índice | 45 | 45 |
+| Total medido de indexação | 2.659,38 ms | 2.881,85 ms |
+| Timer UI p95 / máximo | 31,29 / 68,24 ms | 31,95 / 63,15 ms |
+| Working set ao fim | 271.978.496 B | 275.771.392 B |
+
+Artefatos: `_Output/BrainStability/After/brain-performance.json`. São dois ensaios nesta máquina, não garantia estatística. Alocação caiu 46,2% e CPU 17,3%; frequência de indexação e p95 não melhoraram. Pausas do último GC passaram de 2,81 para 12,13 ms, sem atribuição causal; não foi somado o histórico completo de GC. A instrumentação permite investigar carga maior sem esconder essas limitações.
