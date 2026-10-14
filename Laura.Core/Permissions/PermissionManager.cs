@@ -45,6 +45,7 @@ public sealed class PermissionManager : IDisposable
         {
             if (_stopped || !Enum.IsDefined(choice) || !_pending.TryGetValue(id, out var pending) || pending.Request.Expires <= DateTimeOffset.UtcNow) { return false; }
             if (choice is ApprovalChoice.Session or ApprovalChoice.Persistent && !pending.Request.CanRemember) { return false; }
+            if (folder && pending.Request.Action.Operation == PermissionOperation.ApplicationLaunch) { return false; }
             return pending.Completion.TrySetResult((choice, folder));
         }
     }
@@ -52,7 +53,10 @@ public sealed class PermissionManager : IDisposable
     public bool Cancel(Guid id) { lock (_gate) { return _pending.TryGetValue(id, out var pending) && pending.Completion.TrySetCanceled(); } }
 
     /// <summary>Authorizes and revalidates immediately before invoking the actual effect. Revocation applies to every new dispatch.</summary>
-    public async Task<T> ExecuteAsync<T>(PermissionAction action, Func<CancellationToken, Task<T>> execute, CancellationToken cancellationToken = default)
+    public Task<T> ExecuteAsync<T>(PermissionAction action, Func<CancellationToken, Task<T>> execute, CancellationToken cancellationToken = default)
+        => ExecuteAsync(action, execute, null, cancellationToken);
+    /// <summary>Also records native backend refusal/nonzero outcomes separately from successful authorization.</summary>
+    public async Task<T> ExecuteAsync<T>(PermissionAction action, Func<CancellationToken, Task<T>> execute, Func<T, bool>? succeeded, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(action); ArgumentNullException.ThrowIfNull(execute);
         long version;
@@ -72,7 +76,8 @@ public sealed class PermissionManager : IDisposable
             PermissionGrant? grant;
             lock (_gate) { grant = _grants.FirstOrDefault(item => PermissionPolicy.Matches(item, action)); }
             bool nativeConsent = action.UserInitiated && risk <= PermissionRisk.Moderate && action.Operation is PermissionOperation.LocalCapture or PermissionOperation.ScreenshotExport or PermissionOperation.BrainAttachment or PermissionOperation.ClipboardWrite;
-            bool allowed = nativeConsent || action.Operation == PermissionOperation.Internal || grant is not null
+            bool automaticPolicy = PermissionPolicy.AllowsAutomatic(action, _options());
+            bool allowed = automaticPolicy || nativeConsent || action.Operation == PermissionOperation.Internal || grant is not null
                 && (_options().Mode == ApprovalMode.Automatic || !grant.DirectoryScope);
             if (allowed) { outcome = nativeConsent ? ApprovalOutcome.Approved : ApprovalOutcome.Automatic; }
             else
@@ -116,6 +121,7 @@ public sealed class PermissionManager : IDisposable
                 { outcome = ApprovalOutcome.Expired; throw new PermissionDeniedException("Approval expired before dispatch."); }
                 if (grant is { DirectoryScope: true } && _options().Mode != ApprovalMode.Automatic)
                 { throw new PermissionDeniedException("Approval mode changed before dispatch."); }
+                if (automaticPolicy && !PermissionPolicy.AllowsAutomatic(action, _options())) { throw new PermissionDeniedException("Automatic opening policy changed before dispatch."); }
                 if (proposedGrant is not null)
                 { _grants.Add(proposedGrant); try { Save(); } catch { _grants.Remove(proposedGrant); throw; } }
                 cancellationToken.ThrowIfCancellationRequested();
@@ -127,7 +133,9 @@ public sealed class PermissionManager : IDisposable
                 operation = execute(cancellationToken);
             }
             reason = "Authorized dispatch.";
-            return await operation.ConfigureAwait(false);
+            T result = await operation.ConfigureAwait(false);
+            if (succeeded is not null && !succeeded(result)) { outcome = ApprovalOutcome.Failed; reason = "Authorized operation reported failure."; }
+            return result;
         }
         catch (OperationCanceledException) { outcome = ApprovalOutcome.Cancelled; reason = "Action cancelled."; throw; }
         catch (PermissionDeniedException error) { reason = error.Message; if (outcome is not (ApprovalOutcome.Denied or ApprovalOutcome.Expired)) { outcome = ApprovalOutcome.Blocked; } throw; }

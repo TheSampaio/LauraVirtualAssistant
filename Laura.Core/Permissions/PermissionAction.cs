@@ -51,7 +51,9 @@ public enum PermissionOperation
     /// <summary>Attach an explicitly selected image through bounded Brain APIs.</summary>
     BrainAttachment,
     /// <summary>Transmit an exact image to a known cloud model destination.</summary>
-    ImageCloud
+    ImageCloud,
+    /// <summary>Open a code-verified installed GUI application without arguments, elevation or command execution.</summary>
+    ApplicationLaunch
 }
 
 /// <summary>Immutable execution identity constructed by trusted adapters, never deserialized from a model.</summary>
@@ -59,10 +61,11 @@ public sealed class PermissionAction
 {
     /// <summary>Snapshots relevant parameters. Only their SHA-256 digest enters the audit/store.</summary>
     public PermissionAction(PermissionOperation operation, string origin, string description,
-        IEnumerable<string>? resources = null, string parameters = "", string destination = "", bool userInitiated = false)
+        IEnumerable<string>? resources = null, string parameters = "", string destination = "", bool userInitiated = false, bool automaticEligible = false)
     {
         Operation = operation; Origin = origin; Description = description; Destination = destination;
         UserInitiated = userInitiated;
+        AutomaticEligible = automaticEligible;
         Resources = (resources ?? []).ToImmutableArray();
         Fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         { operation, origin, resources = Resources, parameters, destination, userInitiated }))));
@@ -81,6 +84,8 @@ public sealed class PermissionAction
     public string Fingerprint { get; }
     /// <summary>Gets a trusted native gesture marker. Tool adapters never read this marker from model JSON.</summary>
     public bool UserInitiated { get; }
+    /// <summary>Gets native installation-policy evidence; model JSON is never allowed to supply this value.</summary>
+    public bool AutomaticEligible { get; }
 }
 
 /// <summary>A pending immutable request. Its ID accepts exactly one timely UI decision.</summary>

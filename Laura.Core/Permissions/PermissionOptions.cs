@@ -5,7 +5,7 @@ public enum ApprovalMode
 {
     /// <summary>Ask for every ungranted protected effect.</summary>
     Ask,
-    /// <summary>Also honor explicit directory policies for local data operations.</summary>
+    /// <summary>Also honor explicit directory and bounded installed-application opening policies.</summary>
     Automatic
 }
 /// <summary>When the existing voice service announces a pending request.</summary>
@@ -65,6 +65,8 @@ public sealed record PermissionOptions
 {
     /// <summary>Gets the safe default approval mode.</summary>
     public ApprovalMode Mode { get; init; }
+    /// <summary>Allows ordinary installed GUI applications without arguments only in automatic mode; native code verifies the installation and executable.</summary>
+    public bool OpenInstalledApplications { get; init; } = true;
     /// <summary>Gets announcement behavior; never enables microphone authorization.</summary>
     public ApprovalVoiceMode Voice { get; init; } = ApprovalVoiceMode.WhenHidden;
     /// <summary>Gets whether generic native tray notifications are enabled.</summary>

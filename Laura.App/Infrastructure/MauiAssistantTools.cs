@@ -30,7 +30,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
     public IReadOnlyList<string> StartedApplications => _startedApplications.ToArray();
     /// <inheritdoc />
     public object[] Declarations { get; } = [new { googleSearch = new { } }, new { functionDeclarations = new object[] {
-        Function("open_app", "Open ANY installed or portable application by name. Discovers shortcuts and registry entries; supports Steam, PCSX2 and other applications. Use this tool rather than claiming that you cannot open apps.", ["name"], ("name", "STRING", "Requested application name")),
+        Function("open_app", "Open an installed or portable graphical application by name OR absolute executable path. Uses the application's directory and returns on launch; does not wait for a GUI application to exit. Use this for opening programs, including when the user supplies a full path.", ["name"], ("name", "STRING", "Requested application name or absolute executable path")),
         Function("list_apps", "Find actual installed applications and launch targets; refresh discovery when needed.", [], ("query", "STRING", "Optional app name")),
         Function("system_status", "Read real CPU, RAM, disk and network traffic measurements.", []),
         Function("stop_listening", "Return Laura to standby when the user says that's all, rest, stop listening, or equivalent. End microphone capture; do not shut down the application.", []),
@@ -81,6 +81,14 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         {
             if (name == "confirm_action") { return new("This tool cannot grant a future authorization. Execute the concrete structured tool; its adapter requires its own exact UI approval."); }
             var frozen = JsonNode.Parse(arguments.GetRawText())?.AsObject() ?? throw new ArgumentException("Expected object arguments.");
+            // A GUI with no arguments is an interactive opening, even if a model chose the CLI tool.
+            string? graphicalDirectory = null;
+            if (name == "run_program" && Value(arguments, "arguments", "[]") is var guiArguments
+                && JsonSerializer.Deserialize<string[]>(guiArguments) is { Length: 0 } && WindowsApplicationLaunchPolicy.IsGraphical(Value(arguments, "executable")))
+            {
+                graphicalDirectory = string.IsNullOrWhiteSpace(Value(arguments, "directory")) ? null : ResolvePath(Value(arguments, "directory"));
+                name = "open_app"; frozen = new JsonObject { ["name"] = Value(arguments, "executable") };
+            }
             string action = Value(arguments, "action");
             if (name == "computer_control" && action != "list_windows" || name == "browser_control" && action is not ("open" or "search")
                 || name == "computer_settings" && action is "minimize" or "maximize")
@@ -100,7 +108,8 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             using var document = JsonDocument.Parse(frozen.ToJsonString());
             JsonElement snapshot = document.RootElement.Clone();
             AssistantToolResult result = await permissions.ExecuteAsync(MauiToolPermissions.Describe(name, snapshot),
-                token => ExecuteAuthorizedAsync(name, snapshot, workingUserText, token), cancellationToken).ConfigureAwait(false);
+                token => ExecuteAuthorizedAsync(name, snapshot, workingUserText, graphicalDirectory, token),
+                succeeded: result => !result.Failed && (result.Observation is null || result.Observation.ExitCode == 0), cancellationToken: cancellationToken).ConfigureAwait(false);
             if (result.Observation is not null && !cancellationToken.IsCancellationRequested)
             {
                 BrainMemoryResult learned = await services.GetRequiredService<BrainExperiences>().ObserveAsync(result.Observation, workingUserText, learningVault, cancellationToken).ConfigureAwait(false);
@@ -116,7 +125,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         finally { _actions.Release(); }
     }
 
-    private async Task<AssistantToolResult> ExecuteAuthorizedAsync(string name, JsonElement arguments, string workingUserText, CancellationToken cancellationToken)
+    private async Task<AssistantToolResult> ExecuteAuthorizedAsync(string name, JsonElement arguments, string workingUserText, string? graphicalDirectory, CancellationToken cancellationToken)
     {
         try
         {
@@ -137,13 +146,23 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                 case "open_app":
                     string requested = Value(arguments, "name");
                     BrainApplications rememberedApps = services.GetRequiredService<BrainApplications>();
+                    if (Path.IsPathFullyQualified(requested))
+                    {
+                        string directVault = rememberedApps.Location;
+                        ProcessLaunchResult direct = graphicalDirectory is not null && launcher is WindowsProcessLauncher graphical
+                            ? await graphical.TryStartGraphicalAsync(requested, graphicalDirectory, cancellationToken).ConfigureAwait(false)
+                            : await launcher.TryStartObservedAsync(requested, cancellationToken: cancellationToken).ConfigureAwait(false);
+                        if (direct.Accepted) { TrackLaunch(Path.GetFileNameWithoutExtension(direct.Target)); await rememberedApps.TryRememberAsync(Path.GetFileNameWithoutExtension(direct.Target), requested, direct, directVault, cancellationToken).ConfigureAwait(false); }
+                        return new(direct.Accepted ? "Windows accepted application launch: " + direct.Target + ". Process creation " + (direct.ProcessId is not null ? "observed" : "unverified") + "; window readiness is unverified."
+                            : "Application could not be opened: " + direct.Reason) { Failed = !direct.Accepted };
+                    }
                     BrainApplicationReference? remembered = await rememberedApps.FindAsync(requested, cancellationToken).ConfigureAwait(false);
                     if (remembered is not null)
                     {
                         ProcessLaunchResult reused = await launcher.TryStartObservedAsync(remembered.Target, expectedHash: remembered.Hash, cancellationToken: cancellationToken).ConfigureAwait(false);
                         if (reused.Accepted) { TrackLaunch(remembered.Name); }
                         return new(reused.Accepted ? "Windows accepted the revalidated learned application: " + remembered.Name + (reused.ProcessId is not null ? ". Process creation observed; window readiness is unverified." : ". Shell acceptance only; process creation is unverified.")
-                            : "Learned application launch denied, changed or unavailable. No fallback was attempted after this decision.");
+                            : "Learned application launch denied, changed or unavailable. No fallback was attempted after this decision.") { Failed = !reused.Accepted };
                     }
                     if (applications.Applications.Count == 0) { await applications.RefreshAsync(cancellationToken).ConfigureAwait(false); }
                     IReadOnlyList<InstalledApplication> matches = applications.Find(requested);
@@ -160,7 +179,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                         TrackLaunch(target.Name);
                         await rememberedApps.TryRememberAsync(target.Name, requested, started, observedVault, cancellationToken).ConfigureAwait(false);
                     }
-                    return new(started.Accepted ? "Windows accepted application launch: " + target.Name + (started.ProcessId is not null ? ". Process creation observed; window readiness is unverified." : ". Shell acceptance only; process creation is unverified.") : "Windows refused to start: " + target.Name);
+                    return new(started.Accepted ? "Windows accepted application launch: " + target.Name + (started.ProcessId is not null ? ". Process creation observed; window readiness is unverified." : ". Shell acceptance only; process creation is unverified.") : "Windows refused to start: " + target.Name + ". " + started.Reason) { Failed = !started.Accepted };
                 case "list_apps":
                     await applications.RefreshAsync(cancellationToken).ConfigureAwait(false);
                     string query = Value(arguments, "query");
@@ -261,7 +280,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
-        { return new("Action failed: " + error.GetType().Name + ". Do not claim that it succeeded."); }
+        { return new("Action failed: " + error.GetType().Name + ". Do not claim that it succeeded.") { Failed = true }; }
     }
     private void TrackLaunch(string name)
     { _startedApplications.Enqueue(name); while (_startedApplications.Count > 100) { _startedApplications.TryDequeue(out _); } }
@@ -418,7 +437,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         try { await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false); }
         catch (OperationCanceledException) { if (!process.HasExited) { process.Kill(entireProcessTree: true); } throw; }
         var observation = new BrainExecutionObservation(Guid.NewGuid(), Path.GetFileName(executable), process.ExitCode, MauiToolPermissions.Describe("run_program", args).Fingerprint, DateTimeOffset.UtcNow);
-        lock (output) { return new("Exit code: " + process.ExitCode + "\n" + output) { Observation = observation }; }
+        lock (output) { return new("Exit code: " + process.ExitCode + "\n" + output) { Observation = observation, Failed = process.ExitCode != 0 }; }
     }
     /// <summary>Loads actual Markdown only after local approval of its exact contents; changed files require renewed review.</summary>
     private async Task<AssistantToolResult> ReadBrainSkillAsync(string identifier, CancellationToken token)

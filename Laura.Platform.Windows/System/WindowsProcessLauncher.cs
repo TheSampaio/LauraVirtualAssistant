@@ -59,7 +59,7 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
         {
             return await _permissions.ExecuteAsync(new(PermissionOperation.ExternalNavigation, "Windows launcher", address,
                 parameters: address, destination: uri.Scheme == "ms-settings" ? "" : uri.Host),
-                token => { token.ThrowIfCancellationRequested(); return Task.FromResult(TryStartProcess(new(address) { UseShellExecute = true }, "external navigation")); }, cancellationToken).ConfigureAwait(false);
+                token => { token.ThrowIfCancellationRequested(); return Task.FromResult(TryStartProcess(new(address) { UseShellExecute = true }, "external navigation")); }, succeeded: result => result, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (PermissionDeniedException) { return false; }
     }
@@ -69,7 +69,13 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
         => (await TryStartObservedAsync(fileName, arguments, cancellationToken: cancellationToken).ConfigureAwait(false)).Accepted;
 
     /// <inheritdoc />
-    public async Task<ProcessLaunchResult> TryStartObservedAsync(string fileName, string? arguments = null, string? expectedHash = null, CancellationToken cancellationToken = default)
+    public Task<ProcessLaunchResult> TryStartObservedAsync(string fileName, string? arguments = null, string? expectedHash = null, CancellationToken cancellationToken = default)
+        => LaunchAsync(fileName, arguments, expectedHash, null, cancellationToken);
+    /// <summary>Opens an actual GUI without redirected streams or an exit timeout, preserving any explicitly requested working directory.</summary>
+    public Task<ProcessLaunchResult> TryStartGraphicalAsync(string fileName, string? workingDirectory, CancellationToken cancellationToken = default)
+        => WindowsApplicationLaunchPolicy.IsGraphical(fileName) ? LaunchAsync(fileName, null, null, workingDirectory, cancellationToken)
+            : Task.FromResult(new ProcessLaunchResult(false, fileName, Reason: "Graphical executable unavailable.") { StopFallback = true });
+    private async Task<ProcessLaunchResult> LaunchAsync(string fileName, string? arguments, string? expectedHash, string? workingDirectory, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
         if (expectedHash is not null && (expectedHash.Length != 64 || !expectedHash.All(Uri.IsHexDigit))) { return new(false, fileName, Reason: "Invalid expected identity.") { StopFallback = true }; }
@@ -81,17 +87,32 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
         string target = matches.Count > 0 ? matches[0].Target : fileName;
         try { if (!File.Exists(target)) { target = ResolveExecutable(target); } target = Path.GetFullPath(target); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException) { return new(false, target, Reason: "Executable unavailable."); }
+        if (!File.Exists(target)) { return new(false, target, Reason: "Executable unavailable."); }
+        string applicationDirectory = Path.GetDirectoryName(target)!;
+        workingDirectory = workingDirectory is null ? applicationDirectory : Path.GetFullPath(workingDirectory);
+        if (!Directory.Exists(workingDirectory)) { return new(false, target, Reason: "Working directory unavailable."); }
+        bool defaultDirectory = workingDirectory.Equals(applicationDirectory, StringComparison.OrdinalIgnoreCase);
         var startInfo = new ProcessStartInfo(target)
         {
             UseShellExecute = true,
             Arguments = arguments ?? string.Empty,
+            WorkingDirectory = workingDirectory,
         };
         if (Environment.GetCommandLineArgs().Contains("--brain-smoke", StringComparer.Ordinal)) { startInfo.WindowStyle = ProcessWindowStyle.Hidden; }
 
         try
         {
-            var action = new PermissionAction(PermissionOperation.Process, "Windows launcher", target + "\n" + arguments,
-                [target], JsonSerializer.Serialize(new { arguments, expectedHash }));
+            (bool Bounded, bool Automatic, string Hash) identity = await Task.Run(() =>
+            {
+                bool bounded = defaultDirectory && WindowsApplicationLaunchPolicy.IsBoundedInstalledApplication(target, arguments);
+                bool automatic = bounded && WindowsApplicationLaunchPolicy.CanOpenAutomatically(target, arguments);
+                using FileStream? preview = target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? File.OpenRead(target) : null;
+                string hash = preview is null || preview.Length > 64 * 1024 * 1024 ? "" : Convert.ToHexString(SHA256.HashData(preview));
+                return (bounded && hash.Length > 0, automatic && hash.Length > 0, hash);
+            }, cancellationToken).ConfigureAwait(false);
+            if (expectedHash is not null && !identity.Hash.Equals(expectedHash, StringComparison.OrdinalIgnoreCase)) { return new(false, target, Reason: "Learned executable changed.") { StopFallback = true }; }
+            var action = new PermissionAction(identity.Bounded ? PermissionOperation.ApplicationLaunch : PermissionOperation.Process, "Windows launcher", target + "\n" + arguments,
+                defaultDirectory ? [target] : [target, workingDirectory], JsonSerializer.Serialize(new { arguments = arguments ?? "", identity.Hash, startInfo.WorkingDirectory }), automaticEligible: identity.Automatic);
             return await _permissions.ExecuteAsync(action, token => Task.Run(() =>
             {
                 token.ThrowIfCancellationRequested(); PermissionPolicy.ValidateResources(action, []);
@@ -100,15 +121,21 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
                     using FileStream? artifact = target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? new FileStream(target, FileMode.Open, FileAccess.Read, FileShare.Read) : null;
                     string hash = artifact is null || artifact.Length > 64 * 1024 * 1024 ? "" : Convert.ToHexString(SHA256.HashData(artifact));
                     if (expectedHash is not null && !hash.Equals(expectedHash, StringComparison.OrdinalIgnoreCase)) { return new ProcessLaunchResult(false, target, Reason: "Learned executable changed.") { StopFallback = true }; }
+                    if (identity.Hash.Length > 0 && hash != identity.Hash) { return new ProcessLaunchResult(false, target, Reason: "Executable changed while awaiting launch.") { StopFallback = true }; }
+                    if (identity.Automatic && !WindowsApplicationLaunchPolicy.CanOpenAutomatically(target, arguments))
+                    { return new ProcessLaunchResult(false, target, Reason: "Installed application policy changed before launch.") { StopFallback = true }; }
+                    if (identity.Bounded && !WindowsApplicationLaunchPolicy.IsBoundedInstalledApplication(target, arguments))
+                    { return new ProcessLaunchResult(false, target, Reason: "Application requirements changed before launch.") { StopFallback = true }; }
                     token.ThrowIfCancellationRequested();
                     using Process? process = Process.Start(startInfo);
                     return new ProcessLaunchResult(true, target, process?.Id, hash);
                 }
                 catch (Exception error) when (error is Win32Exception or InvalidOperationException or PlatformNotSupportedException or IOException or UnauthorizedAccessException)
-                { _logger.LogWarning("Application launch failed ({ErrorType}).", error.GetType().Name); return new(false, target, Reason: "Windows refused launch."); }
-            }, token), cancellationToken).ConfigureAwait(false);
+                { _logger.LogWarning("Application launch failed ({ErrorType}; native code {NativeCode}).", error.GetType().Name, error is Win32Exception native ? native.NativeErrorCode : 0); return new(false, target, Reason: error is Win32Exception win32 ? "Windows refused launch (code " + win32.NativeErrorCode.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + ")." : "Windows refused launch."); }
+            }, token), succeeded: result => result.Accepted, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (PermissionDeniedException) { return new(false, target, Reason: "Authorization denied.") { StopFallback = true }; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return new(false, target, Reason: "Executable could not be read.") { StopFallback = true }; }
     }
 
     /// <summary>Resolves executables before approval so PATH changes cannot redirect an approved launch.</summary>

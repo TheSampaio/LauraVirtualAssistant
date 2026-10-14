@@ -127,13 +127,14 @@ public sealed class WindowsApprovalCenter(PermissionManager permissions, ISettin
             choices.Children.Add(primaryActions);
             if (request.CanRemember)
             {
+                bool application = request.Action.Operation == PermissionOperation.ApplicationLaunch;
                 var folder = new Microsoft.UI.Xaml.Controls.CheckBox { Content = WindowsDialogs.Text(T("folderScope") + "\n" + Path.GetDirectoryName(request.Action.Resources[0]), 12), Foreground = WindowsDialogs.Brush(Theme.Text) };
-                choices.Children.Add(folder);
+                if (!application) { choices.Children.Add(folder); }
                 var remembered = new XStack { Orientation = Microsoft.UI.Xaml.Controls.Orientation.Horizontal, Spacing = 8 };
                 remembered.Children.Add(WindowsDialogs.Button(T("session"), () => Submit(request.Id, ApprovalChoice.Session, folder.IsChecked == true)));
                 remembered.Children.Add(WindowsDialogs.Button(T("persistent"), () => Submit(request.Id, ApprovalChoice.Persistent, folder.IsChecked == true)));
                 choices.Children.Add(remembered);
-                choices.Children.Add(WindowsDialogs.Text(T("scopeHelp"), 12, true));
+                choices.Children.Add(WindowsDialogs.Text(T(application ? "applicationScopeHelp" : "scopeHelp"), 12, true));
             }
             content.Children.Add(choices); _body!.Children.Add(Card(content));
         }

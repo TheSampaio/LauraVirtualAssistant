@@ -126,6 +126,7 @@ public sealed class IniSettingsStore : ISettingsStore
             Permissions = new Laura.Core.Permissions.PermissionOptions
             {
                 Mode = (Laura.Core.Permissions.ApprovalMode)document.GetInt32("Permissions", "Mode", 0),
+                OpenInstalledApplications = document.GetBoolean("Permissions", "OpenInstalledApplications", true),
                 Voice = (Laura.Core.Permissions.ApprovalVoiceMode)document.GetInt32("Permissions", "Voice", 1),
                 Notifications = document.GetBoolean("Permissions", "Notifications", true),
                 TimeoutSeconds = document.GetInt32("Permissions", "TimeoutSeconds", 120),
@@ -203,6 +204,7 @@ public sealed class IniSettingsStore : ISettingsStore
         document.SetNumber(VoiceSection, "ClapWakeSensitivity", settings.ClapWakeSensitivity);
         document.SetBoolean(GeneralSection, "RememberConversations", settings.RememberConversations);
         document.SetNumber("Permissions", "Mode", (int)settings.Permissions.Mode);
+        document.SetBoolean("Permissions", "OpenInstalledApplications", settings.Permissions.OpenInstalledApplications);
         document.SetNumber("Permissions", "Voice", (int)settings.Permissions.Voice);
         document.SetBoolean("Permissions", "Notifications", settings.Permissions.Notifications);
         document.SetNumber("Permissions", "TimeoutSeconds", settings.Permissions.TimeoutSeconds);

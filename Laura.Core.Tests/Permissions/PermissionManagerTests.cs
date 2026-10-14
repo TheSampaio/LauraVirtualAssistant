@@ -220,10 +220,83 @@ public sealed class PermissionManagerTests : IDisposable
     public async Task SettingsRoundTripAndInvalidModesFallBackSafely()
     {
         var store = new IniSettingsStore(Path.Combine(_root, "settings.ini"), NullLogger<IniSettingsStore>.Instance);
-        var original = new PermissionOptions { Mode = ApprovalMode.Automatic, Voice = ApprovalVoiceMode.Never, Notifications = false, TimeoutSeconds = 90, HistoryDays = 7 };
+        var original = new PermissionOptions { Mode = ApprovalMode.Automatic, OpenInstalledApplications = false, Voice = ApprovalVoiceMode.Never, Notifications = false, TimeoutSeconds = 90, HistoryDays = 7 };
         await store.SaveAsync(LauraSettings.Default with { Permissions = original }); Assert.Equal(original, (await store.LoadAsync()).Permissions);
         var invalid = new PermissionOptions { Mode = (ApprovalMode)999, Voice = (ApprovalVoiceMode)999, TimeoutSeconds = -1, HistoryDays = 999 }.Sanitized();
         Assert.Equal(ApprovalMode.Ask, invalid.Mode); Assert.Equal(ApprovalVoiceMode.Never, invalid.Voice); Assert.Equal(10, invalid.TimeoutSeconds); Assert.Equal(365, invalid.HistoryDays);
+    }
+    [Fact]
+    public async Task AutomaticInstalledGuiPolicyDoesNotAuthorizeCommandsDisclosureOrRememberedProcessGrants()
+    {
+        _options = new() { Mode = ApprovalMode.Automatic }; using var manager = Create();
+        var gui = new PermissionAction(PermissionOperation.ApplicationLaunch, "native GUI adapter", "Verified installed GUI", [Path.Combine(_root, "Gui.exe")], "exact hash, empty arguments", automaticEligible: true);
+        Assert.Equal(1, await Run(manager, gui)); Assert.Empty(manager.PendingRequests); Assert.Empty(manager.Grants); Assert.True(PermissionPolicy.CanRemember(gui));
+        Assert.Equal(ApprovalOutcome.Automatic, Assert.Single(manager.History).Outcome);
+        foreach (PermissionAction action in new[] { new PermissionAction(PermissionOperation.Process, "native GUI adapter", "command", gui.Resources),
+            new PermissionAction(PermissionOperation.ApplicationLaunch, "native GUI adapter", "disclosure", gui.Resources, destination: "example.invalid") })
+        { Task<int> next = Run(manager, action); manager.Decide(Request(manager).Id, ApprovalChoice.Deny); await Assert.ThrowsAsync<PermissionDeniedException>(() => next); }
+        Assert.Equal(1, _executions);
+    }
+    [Theory]
+    [InlineData(ApprovalMode.Ask, true)]
+    [InlineData(ApprovalMode.Automatic, false)]
+    public async Task AskModeOrDisabledInstalledGuiPolicyStillRequiresAnExactDecision(ApprovalMode mode, bool applications)
+    {
+        _options = new() { Mode = mode, OpenInstalledApplications = applications }; using var manager = Create();
+        Task<int> run = Run(manager, new(PermissionOperation.ApplicationLaunch, "native GUI adapter", "GUI", [Path.Combine(_root, "Gui.exe")], automaticEligible: true));
+        Assert.Equal(PermissionRisk.Moderate, Request(manager).Risk); manager.Decide(Request(manager).Id, ApprovalChoice.Once); Assert.Equal(1, await run); Assert.Empty(manager.Grants);
+    }
+    [Fact]
+    public async Task AcceptedApprovalDoesNotReportBackendRefusalAsSuccessfulExecution()
+    {
+        using var manager = Create(); Task<bool> run = manager.ExecuteAsync(Write(), _ => Task.FromResult(false), succeeded: result => result);
+        manager.Decide(Request(manager).Id, ApprovalChoice.Once); Assert.False(await run); Assert.Equal(ApprovalOutcome.Failed, Assert.Single(manager.History).Outcome);
+    }
+    [Fact]
+    public async Task AutomaticPolicyIsRevalidatedBeforeDispatch()
+    {
+        int reads = 0;
+        using var manager = new PermissionManager(new(Path.Combine(_root, "Security", "permissions.json")),
+            () => new() { Mode = Interlocked.Increment(ref reads) == 1 ? ApprovalMode.Automatic : ApprovalMode.Ask });
+        await Assert.ThrowsAsync<PermissionDeniedException>(() => Run(manager, new(PermissionOperation.ApplicationLaunch, "native GUI adapter", "GUI", [Path.Combine(_root, "Gui.exe")], automaticEligible: true)));
+        Assert.Equal(0, _executions);
+    }
+    [Fact]
+    public async Task WritableInstallationNeedsExplicitExactAppGrantAndCannotAuthorizeFolderOtherBytesOrArguments()
+    {
+        _options = new() { Mode = ApprovalMode.Automatic }; using var manager = Create();
+        string target = Path.Combine(_root, "Gui.exe");
+        var first = new PermissionAction(PermissionOperation.ApplicationLaunch, "native GUI adapter", "Writable installation", [target], "hash1 empty arguments");
+        Task<int> pending = Run(manager, first); Assert.False(manager.Decide(Request(manager).Id, ApprovalChoice.Persistent, folder: true));
+        Assert.True(manager.Decide(Request(manager).Id, ApprovalChoice.Persistent)); await pending;
+        Assert.Equal(2, await Run(manager, first)); Assert.False(Assert.Single(manager.Grants).DirectoryScope);
+        foreach (PermissionAction different in new[] {
+            new PermissionAction(PermissionOperation.ApplicationLaunch, "native GUI adapter", "changed bytes", [target], "hash2 empty arguments"),
+            new PermissionAction(PermissionOperation.ApplicationLaunch, "native GUI adapter", "arguments", [target], "hash1 unsafe arguments"),
+            new PermissionAction(PermissionOperation.ApplicationLaunch, "native GUI adapter", "other app", [Path.Combine(_root, "Other.exe")], "hash1 empty arguments") })
+        { Task<int> next = Run(manager, different); manager.Decide(Request(manager).Id, ApprovalChoice.Deny); await Assert.ThrowsAsync<PermissionDeniedException>(() => next); }
+        manager.Revoke(Assert.Single(manager.Grants).Id);
+        Task<int> revoked = Run(manager, first); manager.Decide(Request(manager).Id, ApprovalChoice.Deny); await Assert.ThrowsAsync<PermissionDeniedException>(() => revoked);
+        Assert.Equal(2, _executions);
+    }
+    [Fact]
+    public void NativeEligibilityMetadataDoesNotInvalidateExistingDataGrantFingerprints()
+    {
+        PermissionAction action = Write();
+        string legacy = System.Text.Json.JsonSerializer.Serialize(new { operation = action.Operation, origin = action.Origin, resources = action.Resources,
+            parameters = "first", destination = "", userInitiated = false });
+        Assert.Equal(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(legacy))), action.Fingerprint);
+    }
+    [Fact]
+    public async Task ReviewedApplicationGrantSurvivesRestartButNeverRestoresADirectoryGrant()
+    {
+        var app = new PermissionAction(PermissionOperation.ApplicationLaunch, "native GUI adapter", "Reviewed GUI", [Path.Combine(_root, "Gui.exe")], "hash and empty arguments");
+        using (var manager = Create()) { Task<int> run = Run(manager, app); manager.Decide(Request(manager).Id, ApprovalChoice.Persistent); await run; }
+        using (var restored = Create()) { Assert.Equal(2, await Run(restored, app)); Assert.False(Assert.Single(restored.Grants).DirectoryScope); }
+        var store = new PermissionStore(Path.Combine(_root, "Security", "permissions.json")); PermissionSnapshot snapshot = store.Load();
+        store.Save(snapshot with { Grants = snapshot.Grants.Select(grant => grant with { DirectoryScope = true }).ToArray() });
+        using var manipulated = Create(); Assert.Empty(manipulated.Grants);
+        Task<int> rejected = Run(manipulated, app); manipulated.Decide(Request(manipulated).Id, ApprovalChoice.Deny); await Assert.ThrowsAsync<PermissionDeniedException>(() => rejected);
     }
     public void Dispose() { if (Directory.Exists(_root)) { Directory.Delete(_root, true); } }
 }

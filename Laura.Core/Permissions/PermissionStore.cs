@@ -15,7 +15,8 @@ public sealed class PermissionStore(string filePath)
         var snapshot = JsonSerializer.Deserialize<PermissionSnapshot>(File.ReadAllText(_path)) ?? throw new JsonException("Invalid permission store.");
         if (snapshot.Grants is null || snapshot.History is null) { throw new JsonException("Invalid permission store."); }
         return new(snapshot.Grants.Where(grant => grant.Persistent
-            && grant.Operation is PermissionOperation.FileWrite or PermissionOperation.FileCreateDirectory
+            && grant.Operation is PermissionOperation.FileWrite or PermissionOperation.FileCreateDirectory or PermissionOperation.ApplicationLaunch
+            && (grant.Operation != PermissionOperation.ApplicationLaunch || !grant.DirectoryScope)
             && grant.Fingerprint.Length == 64 && grant.Scope.Length > 0).Take(1000).ToArray(), snapshot.History.TakeLast(2000).ToArray());
     }
     /// <summary>Flushes a new snapshot before atomically replacing the original; failures propagate and never permit execution.</summary>

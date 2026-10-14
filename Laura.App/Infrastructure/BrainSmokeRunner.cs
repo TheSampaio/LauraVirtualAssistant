@@ -30,6 +30,15 @@ public static class BrainSmokeRunner
                 RememberConversations = true, Voice = settings.Current.Voice with { Volume = 0 }, Brain = settings.Current.Brain with { AutoLearn = true },
                 Permissions = settings.Current.Permissions with { Voice = ApprovalVoiceMode.Never }, Screenshots = settings.Current.Screenshots with { ShortcutsEnabled = false } }).ConfigureAwait(true);
             var memory = services.GetRequiredService<IConversationMemory>(); var tools = services.GetRequiredService<IAssistantTools>(); var permissions = services.GetRequiredService<PermissionManager>();
+            int guiFixture = Array.IndexOf(args, "--gui-launch-smoke");
+            if (guiFixture >= 0 && guiFixture + 1 < args.Length)
+            {
+                stage = "graphical_application_launch";
+                int installed = Array.IndexOf(args, "--gui-installed-target");
+                results.AddRange(await ApplicationLaunchSmokeRunner.RunAsync(services, directory, args[guiFixture + 1], installed >= 0 && installed + 1 < args.Length ? args[installed + 1] : null).ConfigureAwait(true));
+                await File.WriteAllLinesAsync(Path.Combine(directory, "result.txt"), PassedHeader.Concat(results)).ConfigureAwait(true);
+                return;
+            }
             stage = "grounded_tool_adapter";
             const string project = "Synthetic Comet is my fictional integration project.";
             memory.SetWorkingContext(project);

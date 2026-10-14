@@ -20,4 +20,6 @@ public sealed record AssistantToolResult(string Text, byte[]? Image = null, stri
     public Laura.Core.Brain.BrainExecutionObservation? Observation { get; init; }
     /// <summary>Gets the separate outcome of optional knowledge consolidation; it never changes the execution result.</summary>
     public Laura.Core.Brain.BrainMemoryResult? Learning { get; init; }
+    /// <summary>Gets a native adapter failure/refusal indicator; successful authorization alone is not execution success.</summary>
+    public bool Failed { get; init; }
 }

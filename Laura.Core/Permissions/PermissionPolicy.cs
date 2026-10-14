@@ -1,6 +1,6 @@
 namespace Laura.Core.Permissions;
 
-/// <summary>Code-defined risk and scope rules. Cloud disclosure, input injection and process execution always require explicit UI approval.</summary>
+/// <summary>Code-defined risk and scope rules. Commands, disclosure and input injection require explicit approval; installed GUI opening has a separate bounded policy.</summary>
 public static class PermissionPolicy
 {
     private static readonly HashSet<string> DataExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -14,6 +14,7 @@ public static class PermissionPolicy
         PermissionOperation.Internal => PermissionRisk.Low,
         PermissionOperation.FileWrite when action.Resources.Length == 1 && DataExtensions.Contains(Path.GetExtension(action.Resources[0])) => PermissionRisk.Moderate,
         PermissionOperation.FileCreateDirectory or PermissionOperation.ClipboardWrite or PermissionOperation.LocalCapture or PermissionOperation.ScreenshotExport or PermissionOperation.BrainAttachment => PermissionRisk.Moderate,
+        PermissionOperation.ApplicationLaunch when action.Resources.Length == 1 && action.Destination.Length == 0 => PermissionRisk.Moderate,
         PermissionOperation.FileCopy or PermissionOperation.FileMove or PermissionOperation.FileTrash => PermissionRisk.High,
         PermissionOperation.Process when action.Destination.Length > 0 => PermissionRisk.Critical,
         PermissionOperation.FileReadCloud or PermissionOperation.ScreenCloud or PermissionOperation.CameraCloud or PermissionOperation.ClipboardCloud or PermissionOperation.DesktopInput or PermissionOperation.Undo or PermissionOperation.ImageCloud => PermissionRisk.Critical,
@@ -22,6 +23,9 @@ public static class PermissionPolicy
         if (action.Operation != PermissionOperation.Internal && action.Destination.Length > 0 && risk <= PermissionRisk.Moderate) { return PermissionRisk.Critical; }
         return action.Operation != PermissionOperation.Internal && risk < PermissionRisk.High && action.Resources.Any(SensitivePath) ? PermissionRisk.High : risk;
     }
+    /// <summary>Only trusted native application adapters may describe this bounded effect; arbitrary processes never inherit the policy.</summary>
+    public static bool AllowsAutomatic(PermissionAction action, PermissionOptions options) => options.Mode == ApprovalMode.Automatic && options.OpenInstalledApplications && action.AutomaticEligible
+        && action.Operation == PermissionOperation.ApplicationLaunch && Risk(action) == PermissionRisk.Moderate;
     private static bool SensitivePath(string path)
     {
         string[] segments = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -31,8 +35,8 @@ public static class PermissionPolicy
             || Path.GetFileName(path).Contains("credential", StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Only bounded local data operations can create session/persistent grants.</summary>
-    public static bool CanRemember(PermissionAction action) => action.Operation is PermissionOperation.FileWrite or PermissionOperation.FileCreateDirectory
+    /// <summary>Only bounded local data operations or exact native GUI identities can create session/persistent grants; applications never grant a directory.</summary>
+    public static bool CanRemember(PermissionAction action) => action.Operation is PermissionOperation.FileWrite or PermissionOperation.FileCreateDirectory or PermissionOperation.ApplicationLaunch
         && Risk(action) <= PermissionRisk.Moderate && action.Resources.Length == 1 && action.Destination.Length == 0;
 
     /// <summary>Uses separator boundaries, rejecting sibling prefixes and traversal after canonicalization.</summary>
@@ -81,5 +85,6 @@ public static class PermissionPolicy
     /// <summary>Matches the exact effect, origin and destination. Higher risks never reuse grants.</summary>
     public static bool Matches(PermissionGrant grant, PermissionAction action) => CanRemember(action)
         && grant.Operation == action.Operation && grant.Origin == action.Origin
+        && !(action.Operation == PermissionOperation.ApplicationLaunch && grant.DirectoryScope)
         && (grant.DirectoryScope ? action.Resources.Length == 1 && Within(action.Resources[0], grant.Scope) : grant.Fingerprint == action.Fingerprint);
 }
