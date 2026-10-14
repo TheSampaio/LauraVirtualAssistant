@@ -37,8 +37,34 @@ internal static class BrainGitHubSmokeRunner
             { if (!brain.Snapshot.Notes.Any(note => note.Id == version.Id && note.Path == version.Path && note.Hash == version.Hash)) { throw new IOException("Persisted public source evidence changed across restart."); } }
             if (!(await brain.SearchAsync(manifest.Query, 20).ConfigureAwait(true)).Any(hit => hit.Note.Id == manifest.ExpectedId)) { throw new IOException("Public source knowledge was not recovered after restart."); }
             if (permissions.PendingRequests.Count != 0 || permissions.Grants.Count != 0) { throw new IOException("Restart retained a pending or remembered source authorization."); }
-            return ["Actual new process " + Environment.ProcessId + " recovered " + manifest.Versions.Count + " exact Markdown IDs/paths/hashes with a rebuilt index; original process " + manifest.Process + " had exited.",
-                "Public source query recovered the recorded source ID/provenance without network acquisition, code execution or an authorization replay."];
+            results.Add("Actual new process " + Environment.ProcessId + " recovered " + manifest.Versions.Count + " exact Markdown IDs/paths/hashes with a rebuilt index; original process " + manifest.Process + " had exited.");
+            results.Add("Public source query recovered the recorded source ID/provenance without network acquisition, code execution or an authorization replay.");
+            if (args.Contains("--brain-live-smoke", StringComparer.Ordinal))
+            {
+                await settings.UpdateAsync(settings.Current with { GenerativeAi = settings.Current.GenerativeAi with { Enabled = true, Timeout = TimeSpan.FromMinutes(3) } }).ConfigureAwait(true);
+                var live = services.GetRequiredService<GeminiLiveClient>(); if (!live.IsAvailable) { throw new InvalidOperationException("Existing protected Gemini credential is required for live reuse."); }
+                using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+                Task<string?> reuse = live.AskAsync(new("Use somente o conhecimento já salvo sobre " + manifest.Query
+                    + " para explicar o papel do MCP e os requisitos da habilidade proposta. Consulte o Brain; não faça nova aquisição, instalação ou execução.",
+                    CultureInfo.GetCultureInfo("pt-BR"), "Synthetic repository learner"), deadline.Token);
+                var denied = new HashSet<Guid>();
+                while (!reuse.IsCompleted)
+                {
+                    foreach (ApprovalRequest pending in permissions.PendingRequests.Where(request => !denied.Contains(request.Id)))
+                    { denied.Add(pending.Id); await Task.Delay(250, deadline.Token).ConfigureAwait(true); center.InvokeForSmoke("deny"); }
+                    await Task.Delay(40, deadline.Token).ConfigureAwait(true);
+                }
+                string? answer = await reuse.ConfigureAwait(true);
+                object observed = ((MauiAssistantTools)tools).ObservedTaskForSmoke(memory.WorkingContext.TurnId);
+                await File.WriteAllTextAsync(Path.Combine(directory, "live-reuse-task.json"), JsonSerializer.Serialize(observed, Json)).ConfigureAwait(true);
+                await File.WriteAllTextAsync(Path.Combine(directory, "live-reuse-answer.txt"), answer ?? "No completed model response.").ConfigureAwait(true);
+                using var state = JsonDocument.Parse(JsonSerializer.Serialize(observed));
+                if (string.IsNullOrWhiteSpace(answer) || denied.Count > 0 || state.RootElement.TryGetProperty("observations", out JsonElement observations)
+                    && observations.EnumerateArray().Any(item => item.GetProperty("Tool").GetString() is "study_github_repository" or "propose_brain_skill"))
+                { throw new InvalidOperationException("Live reuse attempted new acquisition/proposal or did not complete from retained knowledge."); }
+                results.Add("Actual Gemini Live answered a related MCP/skill-requirements request from the reopened Brain, without new acquisition, draft creation, installation, execution or an approval replay. See live-reuse-answer.txt and live-reuse-task.json.");
+            }
+            return results;
         }
         bool liveMode = args.Contains("--brain-live-smoke", StringComparer.Ordinal);
         if (liveMode)

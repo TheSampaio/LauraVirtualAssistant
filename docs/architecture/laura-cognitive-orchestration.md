@@ -83,6 +83,8 @@ São referências recuperáveis sobre o framework, integração MCP, dependênci
 
 O GitHub limitou a última leitura desse lote. A falha parcial contém reset `2026-10-14T12:09:42Z` (**09:09:42 de 2026-10-14, America/Sao_Paulo**); os 11 documentos anteriores foram conservados. A repetição `_Output/AutonomyPublicFinal` foi bloqueada nesse mesmo limite, sem contornar autenticação ou procurar tokens. Esse horário registra o evento observado, não um bloqueio permanente.
 
+Reutilização real adicional (Teste L): processo Debug **18572**, após reconstrução/verificação dos mesmos 13 documentos, recebeu uma solicitação relacionada ao papel do MCP e aos requisitos da proposta, usando somente o conhecimento salvo. Gemini respondeu com os requisitos retidos (Node.js, TypeScript e configuração MCP), sem nova aquisição, proposta, instalação, execução ou aprovação. A recuperação automática de `AskAsync` forneceu contexto Brain antes da geração; nenhuma chamada de ferramenta foi necessária nesse turno. Evidências: [resposta de reutilização](../../_Output/AutonomyLiveFinal/live-reuse-answer.txt), [estado sem novas ferramentas](../../_Output/AutonomyLiveFinal/live-reuse-task.json) e [resultado do reinício/reutilização](../../_Output/AutonomyLiveFinal/github-restart-result.txt). Isso comprova o cenário sintético executado, não uma taxa universal de precisão/conclusão.
+
 Generalização pública anterior: [resultado de dois repositórios](../../_Output/AutonomyPublic/result.txt) confirmou REA e **dotnet/ClangSharp**, de estrutura C# diferente. ClangSharp em `0c1c4098a7aab7cb392a2367b75d447bbac05d58`, licença MIT: 12 documentos, 3.078 arquivos inventariados, 15 requisições, 1.159.882 bytes e 16.024 ms. O primeiro reinício público recuperou 27 versões exatas. A proposta produzida por esse harness é integração direta de adaptadores e está separada da proposta efetivamente criada pelo Gemini na demonstração final.
 
 Regressão final: **377 testes passaram**, zero falhas/ignorados (`_Output/AutonomyAcceptance/acceptance-all.trx`), incluindo cancelamento imediatamente após o primeiro arquivo remoto realmente persistido e recuperação desse arquivo em um serviço com índice novo. Base anterior: 330 testes. Não se estima taxa universal de seleção/conclusão a partir desses poucos ensaios; houve recusas de schema/evidência e uma conversa sem resposta final nos builds intermediários, preservados nos diretórios de diagnóstico. O ensaio final confirmou a sequência acima.
@@ -107,6 +109,8 @@ Laura.App/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Laura.exe --storage <roo
 Laura.App/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Laura.exe --storage <root> --brain-smoke <root> --brain-github-smoke --brain-live-smoke
 # Depois do processo anterior encerrar; não realiza nova aquisição.
 Laura.App/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Laura.exe --storage <root> --brain-smoke <root> --brain-github-smoke --github-restart
+# Opcional: conversa real relacionada usando somente o Brain reaberto; o harness nega novas operações externas.
+Laura.App/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Laura.exe --storage <root> --brain-smoke <root> --brain-github-smoke --github-restart --brain-live-smoke
 ```
 
 Commits funcionais: `1134661` (aquisição remota) e `641e7ad` (catálogo, estado, continuação, recuperação e proposta integrada). O commit subsequente registra o harness público/Gemini e as evidências finais. Nenhum push/PR, instalação ou alteração no Brain pessoal foi realizado.
