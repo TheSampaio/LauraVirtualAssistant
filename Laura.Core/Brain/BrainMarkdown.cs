@@ -46,7 +46,9 @@ public static partial class BrainMarkdown
             Tags = Strings(map, "tags"), Aliases = Strings(map, "aliases"), Source = Scalar(map, "source", "manual"), Verification = Scalar(map, "verification", "unspecified"), Key = Scalar(map, "key", ""),
             Revision = Scalar(map, "revision", ""), PreviousRevision = Scalar(map, "previous_revision", ""), Relations = relations,
             Application = Node(map, "application") is YamlMappingNode application && Scalar(application, "target", "").Length <= 4096
-                && Scalar(application, "sha256", "").Length == 64 ? new(Scalar(map, "title", ""), Scalar(application, "target", ""), Scalar(application, "sha256", "")) : null,
+                && (Scalar(application, "sha256", "").Length == 64 || Scalar(application, "sha256", "").Length == 0
+                    && Scalar(map, "source", "") == "user_application_declaration" && Scalar(map, "verification", "") is "user_reported" or "unverified")
+                ? new(Scalar(map, "title", ""), Scalar(application, "target", ""), Scalar(application, "sha256", "")) : null,
             Body = body, Frontmatter = yaml, Hash = FileBrainStorage.Hash(content)
         };
     }
