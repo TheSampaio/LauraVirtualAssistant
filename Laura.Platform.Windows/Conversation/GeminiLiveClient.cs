@@ -40,6 +40,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     private readonly SemaphoreSlim _reconfiguration = new(1, 1);
     private CancellationTokenSource _operations = new();
     private readonly object _operationGate = new();
+    private bool _reconfiguring, _disposed;
     private bool _manualCapture;
     private float _inputLevel;
     private readonly ListeningControl? _listeningControl;
@@ -78,7 +79,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     /// <summary>Reports explicit interruption so an unfinished wake cannot enable capture afterward.</summary>
     public event EventHandler? Interrupted;
     /// <inheritdoc />
-    public bool IsAvailable => _settings.Current.GenerativeAi is { Enabled: true, Provider: "gemini" } && !string.IsNullOrEmpty(_keys.Read());
+    public bool IsAvailable => !Volatile.Read(ref _disposed) && _settings.Current.GenerativeAi is { Enabled: true, Provider: "gemini" } && !string.IsNullOrEmpty(_keys.Read());
     /// <summary>Gets verified image support for the two reviewed Live models. Unknown overrides never pretend to accept vision.</summary>
     public bool SupportsImages => IsAvailable && GeminiLiveOptions.HasVerifiedImageSupport(_settings.Current.GenerativeAi.Model);
     /// <summary>Gets a payload-free protocol failure category for troubleshooting, never a server error description or credential.</summary>
@@ -505,12 +506,15 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
 
     /// <summary>Registers cancellation before an interrupt can dispose the previous operation source.</summary>
     private CancellationTokenSource LinkOperation(CancellationToken token)
-    { lock (_operationGate) { return CancellationTokenSource.CreateLinkedTokenSource(token, _operations.Token); } }
+    { lock (_operationGate) { ObjectDisposedException.ThrowIf(_disposed, this); return CancellationTokenSource.CreateLinkedTokenSource(token, _operations.Token); } }
+    private CancellationTokenSource? LinkVoiceCompletion()
+    { lock (_operationGate) { return _reconfiguring || _disposed ? null : CancellationTokenSource.CreateLinkedTokenSource(_operations.Token); } }
 
     /// <summary>Disconnects before changing credentials, voice, language or microphone mode.</summary>
     public async Task ReconfigureAsync()
     {
         await _reconfiguration.WaitAsync().ConfigureAwait(false);
+        lock (_operationGate) { _reconfiguring = true; }
         try
         {
         Interrupt();
@@ -530,12 +534,16 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
         }
         finally { _requests.Release(); }
         }
-        finally { _reconfiguration.Release(); }
+        finally { lock (_operationGate) { _reconfiguring = false; } _reconfiguration.Release(); }
     }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
-    { await ReconfigureAsync().ConfigureAwait(false); _operations.Dispose(); _requests.Dispose(); _readAloud.Dispose(); _voiceCompletion.Dispose(); _connections.Dispose(); _capture.Dispose(); _reconfiguration.Dispose(); }
+    {
+        lock (_operationGate) { if (_disposed) { return; } _disposed = true; }
+        await ReconfigureAsync().ConfigureAwait(false);
+        _operations.Dispose(); _requests.Dispose(); _readAloud.Dispose(); _voiceCompletion.Dispose(); _connections.Dispose(); _capture.Dispose(); _reconfiguration.Dispose();
+    }
 
     /// <summary>Reuses an active conversation or reconnects with bounded saved context.</summary>
     private async Task<Session> EnsureSessionAsync(CancellationToken cancellationToken, bool pushToTalk = false)
@@ -572,7 +580,8 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
             var session = await Task.Run(() => new Session(_settings.Current.OutputDevice, _settings.Current.Voice.Volume,
                 tools ? PublishVoiceTurn : null, tools ? ExecuteToolAsync : null,
                 reportStatus ? ReportStatus : static _ => { }, pushToTalk, bytes => { AudioOutputReceived?.Invoke(this, bytes); if (tools) { ConversationAudioReceived?.Invoke(bytes); } }, tools ? HandleInputControl : null, tools ? (input, visual) => _ = AnalyzeVoiceImageAsync(input, visual) : null,
-                tools ? (input, first) => { if (first) { _memory.SetWorkingContext(input); } else { _memory.UpdateWorkingContext(input); } } : null, tools ? () => ConversationAudioPlayed : null), cancellationToken).ConfigureAwait(false);
+                tools ? (input, first) => { if (first) { _memory.SetWorkingContext(input); } else { _memory.UpdateWorkingContext(input); } } : null, tools ? () => ConversationAudioPlayed : null,
+                tools ? () => _memory.WorkingTurnId : null), cancellationToken).ConfigureAwait(false);
             try
             {
                 await session.ConnectAsync(_keys.Read(), GeminiLiveProtocol.Setup(model, _settings.Current.GenerativeAi.LiveVoice,
@@ -632,13 +641,16 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
         bool resume = IsListening;
         bool acquired = false;
         Guid original = _memory.WorkingContext.TurnId;
-        using var operation = LinkOperation(CancellationToken.None);
+        using var operation = LinkVoiceCompletion();
+        if (operation is null) { return; }
         try
         {
             await _voiceCompletion.WaitAsync(operation.Token).ConfigureAwait(false); acquired = true;
             // The receive loop must return before any SQLite, Brain or continuation work begins.
             await Task.Yield();
-            string? pending = _tools is null || string.IsNullOrWhiteSpace(input) ? null : await _tools.PendingTaskContinuationAsync(operation.Token).ConfigureAwait(false);
+            operation.Token.ThrowIfCancellationRequested();
+            string? pending = _tools is null || string.IsNullOrWhiteSpace(input) || original == Guid.Empty || _memory.WorkingContext.TurnId != original
+                ? null : await _tools.PendingTaskContinuationAsync(operation.Token).ConfigureAwait(false);
             if (pending is not null && original != Guid.Empty && _memory.WorkingContext.TurnId == original)
             {
                 string? continued = await AskAsync(new(pending, _settings.Current.ResolveCulture(), _settings.Current.UserNickname) { ContinuingTaskTurnId = original }, operation.Token).ConfigureAwait(false);
@@ -650,6 +662,37 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
         catch (Exception error) when (error is OperationCanceledException or IOException or InvalidOperationException)
         { ReportStatus("Task continuation cancelled or unavailable; retained knowledge remains partial."); }
         finally { if (acquired) { _voiceCompletion.Release(); } }
+    }
+    /// <summary>Exercises late completed-voice callbacks across reconfiguration, without creating network or microphone input.</summary>
+    public async Task VerifyVoiceCancellationForSmokeAsync(CancellationToken token)
+    {
+        if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Voice callback diagnostics require isolated UI smoke mode."); }
+        int delivered = 0;
+        void Count(object? sender, ConversationMessage message) => Interlocked.Increment(ref delivered);
+        MessageReceived += Count;
+        try
+        {
+            for (int attempt = 0; attempt < 8; attempt++)
+            {
+                _memory.SetWorkingContext("Synthetic queued voice input");
+                PublishVoiceTurn("Synthetic queued voice input", "Synthetic queued output");
+                await ReconfigureAsync().ConfigureAwait(false);
+                int settled = Volatile.Read(ref delivered); await Task.Delay(80, token).ConfigureAwait(false);
+                if (Volatile.Read(ref delivered) != settled || IsListening) { throw new InvalidOperationException("Late voice work survived reconfiguration or opened microphone capture."); }
+            }
+            for (int attempt = 0; attempt < 4; attempt++)
+            {
+                var closing = new GeminiLiveClient(_settings, _keys, _memory, [], _shell);
+                closing.MessageReceived += Count;
+                _memory.SetWorkingContext("Synthetic closing voice input");
+                closing.PublishVoiceTurn("Synthetic closing voice input", "Synthetic closing output");
+                await closing.DisposeAsync().ConfigureAwait(false);
+                int settled = Volatile.Read(ref delivered); await Task.Delay(80, token).ConfigureAwait(false);
+                closing.MessageReceived -= Count;
+                if (Volatile.Read(ref delivered) != settled || closing.IsAvailable) { throw new InvalidOperationException("Late voice work survived client disposal."); }
+            }
+        }
+        finally { MessageReceived -= Count; }
     }
 
     /// <summary>Publishes only the final conversation result while preserving the original real user input for learning.</summary>
@@ -743,8 +786,8 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
         private int _aborted;
 
         /// <summary>Creates a session with its own bounded audio playback queue.</summary>
-        public Session(int device, int volume, Action<string, string>? publish, Func<string, JsonElement, CancellationToken, Task<AssistantToolResult>>? tool, Action<string> status, bool manualActivity, Action<byte[]> audio, Func<string, bool>? inputControl = null, Action<string, AssistantToolResult>? visualFollowup = null, Action<string, bool>? userInput = null, Func<Action<byte[]>?>? capture = null)
-        { Player = new LiveAudioPlayer(device, volume, capture); _publish = publish; _tool = tool; _status = status; ManualActivity = manualActivity; _audio = audio; _inputControl = inputControl; _visualFollowup = visualFollowup; _userInput = userInput; }
+        public Session(int device, int volume, Action<string, string>? publish, Func<string, JsonElement, CancellationToken, Task<AssistantToolResult>>? tool, Action<string> status, bool manualActivity, Action<byte[]> audio, Func<string, bool>? inputControl = null, Action<string, AssistantToolResult>? visualFollowup = null, Action<string, bool>? userInput = null, Func<Action<byte[]>?>? capture = null, Func<Guid>? interaction = null)
+        { Player = new LiveAudioPlayer(device, volume, capture, interaction); _publish = publish; _tool = tool; _status = status; ManualActivity = manualActivity; _audio = audio; _inputControl = inputControl; _visualFollowup = visualFollowup; _userInput = userInput; }
         internal AssistantToolResult? TakeVisual() => Interlocked.Exchange(ref _queuedVisual, null);
         /// <summary>Starts a native justified continuation without changing original user context or replaying prior tool calls.</summary>
         internal void ResetOutputForContinuation() => _output.Clear();

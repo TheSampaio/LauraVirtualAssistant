@@ -16,9 +16,11 @@ internal sealed class LiveAudioPlayer : IDisposable
     private Exception? _playbackError;
     private bool _disposed;
     private long _lastChunk;
+    private readonly Func<Guid>? _interaction;
     /// <summary>Creates an audio sink without opening a microphone.</summary>
-    public LiveAudioPlayer(int device, int volume, Func<Action<byte[]>?>? capture = null)
+    public LiveAudioPlayer(int device, int volume, Func<Action<byte[]>?>? capture = null, Func<Guid>? interaction = null)
     {
+        _interaction = interaction;
         _output = new WaveOutEvent { DeviceNumber = device >= -1 && device < WaveInterop.waveOutGetNumDevs() ? device : -1, DesiredLatency = 180, NumberOfBuffers = 3, Volume = volume / 100f };
         _meter = new(_buffer, Environment.TickCount64 + 300, capture); _output.Init(_meter);
         _output.PlaybackStopped += (_, args) => { if (args.Exception is not null) { Volatile.Write(ref _playbackError, args.Exception); } _stopped?.TrySetResult(); };
@@ -35,8 +37,9 @@ internal sealed class LiveAudioPlayer : IDisposable
     {
         if (Volatile.Read(ref _playbackError) is { } error) { throw new InvalidOperationException("The selected playback device failed.", error); }
         long now = Environment.TickCount64, previous = Interlocked.Exchange(ref _lastChunk, now);
-        Laura.Core.Diagnostics.LauraDiagnostics.Record("audio.chunk.arrival", previous == 0 ? 0 : now - previous, audio.Length);
-        BytesReceived += audio.Length; _buffer.Add(audio, now);
+        Guid interaction = _interaction?.Invoke() ?? Guid.Empty;
+        Laura.Core.Diagnostics.LauraDiagnostics.Record("audio.chunk.arrival", previous == 0 ? 0 : now - previous, audio.Length, interactionId: interaction == Guid.Empty ? null : interaction);
+        BytesReceived += audio.Length; _buffer.Add(audio, now, interaction);
     }
     /// <summary>Primes the next utterance without clearing its leading PCM fragments.</summary>
     public void BeginTurn() => _buffer.BeginTurn();

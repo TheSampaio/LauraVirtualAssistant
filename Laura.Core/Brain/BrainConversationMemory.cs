@@ -8,6 +8,7 @@ namespace Laura.Core.Brain;
 public sealed class BrainConversationMemory(BrainService brain, BrainLearning learning, SqliteConversationMemory transcripts) : IConversationMemory
 {
     private readonly object _gate = new();
+    private readonly object _initializationGate = new();
     private bool _initialized;
     private string _lastUserText = "";
     private Guid _turnId;
@@ -18,6 +19,8 @@ public sealed class BrainConversationMemory(BrainService brain, BrainLearning le
     /// <inheritdoc />
     public ConversationWorkingContext WorkingContext { get { lock (_gate) { return new(_turnId, _lastUserText); } } }
     /// <inheritdoc />
+    public Guid WorkingTurnId { get { lock (_gate) { return _turnId; } } }
+    /// <inheritdoc />
     public void SetWorkingContext(string text)
     { ArgumentNullException.ThrowIfNull(text); lock (_gate) { _lastUserText = text.Length <= 4000 ? text : ""; _turnId = Guid.NewGuid(); } }
     /// <inheritdoc />
@@ -26,7 +29,7 @@ public sealed class BrainConversationMemory(BrainService brain, BrainLearning le
     /// <inheritdoc />
     public void Initialize()
     {
-        lock (_gate)
+        lock (_initializationGate)
         {
             if (_initialized) { return; }
             transcripts.Initialize(); brain.InitializeAsync().GetAwaiter().GetResult();

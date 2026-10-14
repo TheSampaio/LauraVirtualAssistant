@@ -21,11 +21,11 @@ public static class LauraDiagnostics
     /// <summary>Gets the currently retained diagnostic rows; no conversation content is present.</summary>
     public static IReadOnlyList<LauraDiagnosticSample> Snapshot() => Samples.ToArray();
     /// <summary>Publishes numeric measurements with bounded optional identity metadata, never note text or filesystem paths.</summary>
-    public static void Record(string operation, double milliseconds = 0, long amount = 0, string outcome = "", IReadOnlyList<string>? ids = null)
+    public static void Record(string operation, double milliseconds = 0, long amount = 0, string outcome = "", IReadOnlyList<string>? ids = null, IReadOnlyList<double>? scores = null, Guid? interactionId = null)
     {
         Duration.Record(milliseconds, new KeyValuePair<string, object?>("operation", operation));
         if (Volatile.Read(ref _captures) == 0) { return; }
-        Samples.Enqueue(new(Interaction.Value, DateTimeOffset.UtcNow, operation, milliseconds, amount, outcome, ids?.Take(16).ToArray() ?? []));
+        Samples.Enqueue(new(interactionId ?? Interaction.Value, DateTimeOffset.UtcNow, operation, milliseconds, amount, outcome, ids?.Take(16).ToArray() ?? [], scores?.Take(16).ToArray() ?? []));
         while (Samples.Count > 4096) { Samples.TryDequeue(out _); }
     }
     private sealed class Measurement(string operation) : IDisposable
@@ -47,4 +47,4 @@ public static class LauraDiagnostics
 }
 
 /// <summary>A numeric operation measurement; optional IDs are bounded stable knowledge identities, not contents.</summary>
-public sealed record LauraDiagnosticSample(Guid InteractionId, DateTimeOffset Timestamp, string Operation, double Milliseconds, long Amount, string Outcome, IReadOnlyList<string> Ids);
+public sealed record LauraDiagnosticSample(Guid InteractionId, DateTimeOffset Timestamp, string Operation, double Milliseconds, long Amount, string Outcome, IReadOnlyList<string> Ids, IReadOnlyList<double> Scores);

@@ -19,6 +19,12 @@ public static class MauiSmokeRunner
         Directory.CreateDirectory(directory);
         try
         {
+            if (Environment.GetCommandLineArgs().Contains("--voice-cancellation-smoke", StringComparer.Ordinal))
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                await services.GetRequiredService<Laura.Platform.Windows.Conversation.GeminiLiveClient>().VerifyVoiceCancellationForSmokeAsync(timeout.Token).ConfigureAwait(true);
+                await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "Eight reconfigurations and four client disposals drained/canceled completed-voice callbacks; no late history notification, retained availability or microphone capture occurred.").ConfigureAwait(true); return;
+            }
             if (Environment.GetCommandLineArgs().Contains("--audio-fragment-smoke", StringComparer.Ordinal))
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));

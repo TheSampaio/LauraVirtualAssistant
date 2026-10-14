@@ -10,6 +10,8 @@ public interface IConversationMemory
     string WorkingUserText => "";
     /// <summary>Atomically snapshots the current user turn. Adapters without turn tracking cannot attribute skill usage.</summary>
     ConversationWorkingContext WorkingContext => new(Guid.Empty, WorkingUserText);
+    /// <summary>Gets the current transient identity without requiring a text snapshot on real-time diagnostic paths.</summary>
+    Guid WorkingTurnId => WorkingContext.TurnId;
     /// <summary>Updates current user input before tool dispatch without creating a persistent fact.</summary>
     void SetWorkingContext(string text) { }
     /// <summary>Updates a partial transcription within the same user turn, without changing its identity or persisting it.</summary>

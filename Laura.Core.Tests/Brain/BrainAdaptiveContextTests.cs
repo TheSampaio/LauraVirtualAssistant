@@ -4,6 +4,14 @@ namespace Laura.Core.Tests.Brain;
 
 public sealed partial class BrainTests
 {
+    [Fact]
+    public async Task LongInputsUseABoundedRetrievalQueryWithoutBreakingTheInteraction()
+    {
+        BrainService brain = Create(); await brain.SaveAsync(Note("Knowledge/Long.md", "Synthetic editor fixture", "Editor knowledge remains available."));
+        string input = "Editor " + new string('x', 10000) + " editor";
+        BrainContext context = await new BrainContextBuilder(brain, _settings).BuildAsync(input);
+        Assert.Contains("Editor knowledge", context.Memories); Assert.InRange(context.Memories.Length, 1, _settings.Current.Brain.ContextCharacters);
+    }
     [Theory]
     [InlineData("Olá!", false)]
     [InlineData("Thanks.", false)]

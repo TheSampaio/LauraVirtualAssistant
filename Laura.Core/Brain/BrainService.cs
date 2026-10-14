@@ -506,7 +506,8 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         if (!settings.Current.RememberConversations) { return ""; }
         if (localizer is not null && Regex.IsMatch(TextNormalizer.Normalize(query), localizer.Get(LocalizationKeys.Brain.OverviewPattern), RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))) { query = ""; }
         IReadOnlyList<BrainHit> hits = await SearchAsync(query, 8, cancellationToken: cancellationToken).ConfigureAwait(false);
-        LauraDiagnostics.Record("brain.retrieved", amount: hits.Count, ids: hits.Select(hit => hit.Note.Id).ToArray());
+        LauraDiagnostics.Record("brain.retrieved", amount: hits.Count, outcome: index.SemanticAvailable ? "hybrid" : "lexical",
+            ids: hits.Select(hit => hit.Note.Id).ToArray(), scores: hits.Select(hit => hit.Score).ToArray());
         var builder = new StringBuilder(); int budget = settings.Current.Brain.ContextCharacters;
         foreach (BrainHit hit in hits)
         {
