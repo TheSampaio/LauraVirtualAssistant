@@ -1,4 +1,6 @@
 {
+  "ModelContextProtocol.Core-2.2.0-LICENSE.txt": "https://raw.githubusercontent.com/modelcontextprotocol/csharp-sdk/6fa3825973949a9c4f0cd8af344e15a8db09dc35/LICENSE",
+  "Microsoft.Extensions.AI.Abstractions-10.8.3-LICENSE.txt": "https://raw.githubusercontent.com/dotnet/extensions/ccb356f31db9d894807c4fd0c97c2f41553d1524/LICENSE",
   "LLamaSharp-LICENSE": "https://raw.githubusercontent.com/SciSharp/LLamaSharp/7cbbc45e421d55794d5050d126e0b96511007007/LICENSE",
   "llama.cpp-LICENSE": "https://raw.githubusercontent.com/ggml-org/llama.cpp/3f7c29d318e317b63f54c558bc69803963d7d88c/LICENSE",
   "sherpa-onnx-LICENSE": "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/142807252687d81b40d6315f23470a1512a00de3/LICENSE",

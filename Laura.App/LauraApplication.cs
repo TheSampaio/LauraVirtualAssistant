@@ -155,6 +155,7 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         _shortcuts?.Dispose(); _shortcuts = null;
         _screenshotShortcuts?.Dispose(); _screenshotShortcuts = null;
         await services.GetRequiredService<ScreenshotCoordinator>().StopAsync().ConfigureAwait(true);
+        await services.GetRequiredService<Laura.Core.Mcp.McpRuntime>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<ClapWakeCoordinator>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<ReminderScheduler>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<GeminiLiveClient>().ReconfigureAsync().ConfigureAwait(true);

@@ -12,6 +12,7 @@ internal static class MauiToolPermissions
         string action = Text(args, "action");
         PermissionOperation operation = name switch
         {
+            "list_mcp_servers" or "connect_mcp_server" or "list_mcp_tools" or "call_mcp_tool" or "disconnect_mcp_server" => PermissionOperation.Internal, // the native MCP runtime gates the exact external effect
             // These dispatch through separately guarded adapters or are internal metadata operations.
             "open_app" or "run_local_command" or "list_apps" or "system_status" or "stop_listening" or "recall_memory" or "read_brain_passage" or "learn_memory" or "reflect_experience" or "study_source" or "list_brain_skills" or "read_brain_skill" or "read_brain_skill_usage" or "propose_brain_skill" => PermissionOperation.Internal,
             "save_memory" or "forget_memory" or "shutdown_assistant" => PermissionOperation.SystemSettings,

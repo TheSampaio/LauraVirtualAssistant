@@ -53,7 +53,9 @@ public enum PermissionOperation
     /// <summary>Transmit an exact image to a known cloud model destination.</summary>
     ImageCloud,
     /// <summary>Open a code-verified installed GUI application without arguments, elevation or command execution.</summary>
-    ApplicationLaunch
+    ApplicationLaunch,
+    /// <summary>Launch or invoke an external MCP server whose effects cannot be safely inferred from advertised annotations.</summary>
+    ExternalTool
 }
 
 /// <summary>Immutable execution identity constructed by trusted adapters, never deserialized from a model.</summary>

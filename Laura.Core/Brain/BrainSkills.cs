@@ -5,7 +5,7 @@ using Laura.Core.Text;
 namespace Laura.Core.Brain;
 
 /// <summary>Imports Markdown instructions as disabled, non-executable documents and loads only explicitly enabled, compatible skills on demand.</summary>
-public sealed partial class BrainSkills(BrainService brain, ISettingsService settings, Func<IReadOnlySet<string>>? availableTools = null, BrainIndex? discovery = null)
+public sealed partial class BrainSkills(BrainService brain, ISettingsService settings, Func<IReadOnlySet<string>>? availableTools = null, BrainIndex? discovery = null, Func<string, bool>? availableDependency = null)
 {
     /// <summary>Validates an external Markdown document and preserves it as an inert skill with no granted tools or scripts.</summary>
     public async Task<BrainNote> ImportAsync(string content, string name, CancellationToken cancellationToken = default)

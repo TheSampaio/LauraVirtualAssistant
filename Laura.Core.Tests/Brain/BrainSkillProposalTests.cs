@@ -4,6 +4,18 @@ namespace Laura.Core.Tests.Brain;
 
 public sealed partial class BrainTests
 {
+    [Fact]
+    public async Task McpSkillRequiresActualConnectedToolAndDependencyWithoutLosingExactReviewOnDisconnect()
+    {
+        BrainService brain = Create(); BrainNote source = await ProcedureSourceAsync(brain); bool connected = false;
+        var skills = new BrainSkills(brain, _settings, () => connected ? new HashSet<string> { "mcp.fixture.echo" } : new HashSet<string>(), availableDependency: dependency => connected && dependency == "mcp:fixture");
+        BrainSkillProposal proposal = Procedure(source, "Synthetic MCP procedure");
+        BrainNote draft = await skills.ProposeAsync(proposal with { Definition = proposal.Definition with { Kind = "mcp", Dependencies = ["mcp:fixture"], Tools = ["mcp.fixture.echo"] } });
+        Assert.Equal("blocked", skills.Inspect(draft).State); await Assert.ThrowsAsync<InvalidOperationException>(() => skills.SetEnabledAsync(draft, true));
+        connected = true; BrainNote approved = await skills.SetEnabledAsync(draft, true); Assert.True(skills.IsEnabled(approved));
+        connected = false; Assert.True(skills.Inspect(approved).Approved); Assert.False(skills.IsEnabled(approved)); Assert.Contains("unavailable_tool:mcp.fixture.echo", skills.Inspect(approved).Missing);
+        connected = true; Assert.True(skills.IsEnabled(approved)); Assert.Equal(Laura.Core.Permissions.ApprovalMode.Ask, _settings.Current.Permissions.Mode);
+    }
     private static BrainSkillProposal Procedure(BrainNote source, string name = "Synthetic verification") => new(name, "Inspect observed process outcomes without claiming task success.",
         new("guidance", "Distinguish process observations from task success.", ["Reviewing an observed process result"], [], [], [], [],
             ["Read the observed exit code and identify remaining uncertainty."], ["An exit code does not prove the full task outcome."],

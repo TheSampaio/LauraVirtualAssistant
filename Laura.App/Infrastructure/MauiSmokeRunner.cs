@@ -159,12 +159,12 @@ public static class MauiSmokeRunner
                             await CaptureAsync(window, Path.Combine(directory, "setup-key-masked.png")).ConfigureAwait(true);
                             await File.WriteAllTextAsync(Path.Combine(directory, "key-ui.txt"), "Valid key verified and masked; saving again preserved it; an edit during validation kept the verified credential and new draft; invalid replacement was rejected without changing the saved credential.").ConfigureAwait(true);
                         }
-                        for (int tab = 0; tab < 5; tab++)
+                        for (int tab = 0; tab < setup.TabCount; tab++)
                         {
                             setup.SelectTab(tab); await Task.Delay(250).ConfigureAwait(true);
                             if (tab == 3) { var native = (Microsoft.UI.Xaml.Window)window.Handler!.PlatformView!; string[] geometry = Describe(native.Content, native.Content).ToArray(); await File.WriteAllLinesAsync(Path.Combine(directory, "setup-apps-layout-" + culture + ".txt"), geometry).ConfigureAwait(true); }
                             setup.VerifySettingsForSmoke(); await CaptureAsync(window, Path.Combine(directory, "setup-tab-" + tab + "-" + culture + ".png")).ConfigureAwait(true);
-                            if (tab is 1 or 2 or 4)
+                            if (tab is 1 or 2 or 4 or 5)
                             {
                                 await setup.VerifySettingsScrollForSmokeAsync(true).ConfigureAwait(true);
                                 await CaptureAsync(window, Path.Combine(directory, "setup-bottom-" + tab + "-" + culture + ".png")).ConfigureAwait(true);
@@ -172,12 +172,12 @@ public static class MauiSmokeRunner
                             }
                         }
                         window.Width = 720; window.Height = 600;
-                        for (int tab = 0; tab < 5; tab++)
+                        for (int tab = 0; tab < setup.TabCount; tab++)
                         {
                             setup.SelectTab(tab); await Task.Delay(250).ConfigureAwait(true); setup.VerifySettingsForSmoke();
                             VerifyWorkspaceNavigation(window, setup, navigationStyles, services.GetRequiredService<IUiLocalizer>().Get("ui.navigation.backToLaura"));
                             await CaptureAsync(window, Path.Combine(directory, "setup-compact-" + tab + "-" + culture + ".png")).ConfigureAwait(true);
-                            if (tab is 1 or 2 or 4)
+                            if (tab is 1 or 2 or 4 or 5)
                             {
                                 await setup.VerifySettingsScrollForSmokeAsync(true).ConfigureAwait(true);
                                 await CaptureAsync(window, Path.Combine(directory, "setup-compact-bottom-" + tab + "-" + culture + ".png")).ConfigureAwait(true);

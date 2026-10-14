@@ -65,9 +65,9 @@ public sealed partial class BrainSkills
             if (candidate.Procedure is not { } definition) { visited.Remove(candidate.Id); return; }
             try { ValidateDefinition(candidate.Title, candidate.Description, definition); }
             catch (ArgumentException) { missing.Add("invalid_procedure_metadata"); visited.Remove(candidate.Id); return; }
-            foreach (string dependency in definition.Dependencies) { missing.Add("unverified_dependency:" + dependency); }
+            foreach (string dependency in definition.Dependencies.Where(dependency => availableDependency?.Invoke(dependency) != true)) { missing.Add("unverified_dependency:" + dependency); }
             foreach (string prerequisite in definition.Prerequisites) { missing.Add("unverified_prerequisite:" + prerequisite); }
-            if (definition.Kind is "mcp" or "code") { missing.Add("external_runtime_not_verified"); }
+            if (definition.Kind == "code" || definition.Kind == "mcp" && !definition.Tools.Any(tool => tool.StartsWith("mcp.", StringComparison.Ordinal))) { missing.Add("external_runtime_not_verified"); }
             IReadOnlySet<string> registered = availableTools?.Invoke() ?? new HashSet<string>(StringComparer.Ordinal);
             foreach (string tool in definition.Tools.Where(tool => !registered.Contains(tool))) { missing.Add("unavailable_tool:" + tool); }
             foreach (BrainSkillReference source in definition.Sources)

@@ -1,219 +1,12 @@
 [
   {
-    "Package": "Microsoft.Extensions.Logging.Abstractions",
-    "Version": "10.0.0",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/dotnet",
-    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
-    "NugetSHA512": "FU/IfjDfwaMuKr414SSQNTIti/69bHEMb+QKrskRb26oVqpx3lNFXMjs/RC9ZUuhBhcwDM2BwOgoMw+PZ+beqQ=="
-  },
-  {
-    "Package": "Microsoft.Maui.Core",
-    "Version": "10.0.20",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/maui.git",
-    "Commit": "0d1705adc4a6b4ec531e316ec956755abbe059c5",
-    "NugetSHA512": "xbrQSNTMJzwpR80ga7eWVTU544NJUJM6zXdmfx1LenuizoFc8oejr1nJ1zRgISTQ0ZuQEs6flF72DyF/YemP8w=="
-  },
-  {
-    "Package": "Microsoft.Extensions.Logging",
-    "Version": "10.0.0",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/dotnet",
-    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
-    "NugetSHA512": "BStFkd5CcnEtarlcgYDBcFzGYCuuNMzPs02wN3WBsOFoYIEmYoUdAiU+au6opzoqfTYJsMTW00AeqDdnXH2CvA=="
-  },
-  {
-    "Package": "SQLitePCLRaw.lib.e_sqlite3",
-    "Version": "2.1.12",
-    "License": "Apache-2.0",
-    "Copyright": "Copyright 2014-2024 SourceGear, LLC",
-    "Repository": "https://github.com/ericsink/SQLitePCL.raw",
-    "Commit": "",
-    "NugetSHA512": "fWi8Dbknuhgg72fWinIdjXVaqO1hHL4YBBwVLnr7e1c9TAZwJ0QE38j9syW1hwx6HaqEVTwI+O07WPdZn8Rp0w=="
-  },
-  {
-    "Package": "Microsoft.WindowsAppSDK",
-    "Version": "1.7.250909003",
-    "License": "license.txt",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "",
-    "Commit": "",
-    "NugetSHA512": "zeVFVrkFYPkAL1cmXo62D1LVC66VqBiMx+WfZ3aDUmizNECCJewMTk0JwjlgYQcIqxqsK1SjF1CeG74TsokWpQ=="
-  },
-  {
-    "Package": "Microsoft.Extensions.FileProviders.Abstractions",
-    "Version": "10.0.0",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/dotnet",
-    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
-    "NugetSHA512": "/ppSdehKk3fuXjlqCDgSOtjRK/pSHU8eWgzSHfHdwVm5BP4Dgejehkw+PtxKG2j98qTDEHDst2Y99aNsmJldmw=="
-  },
-  {
-    "Package": "NAudio.WinMM",
-    "Version": "2.2.1",
-    "License": "MIT",
-    "Copyright": "© Mark Heath 2023",
-    "Repository": "https://github.com/naudio/NAudio",
-    "Commit": "",
-    "NugetSHA512": "xFHRFwH4x6aq3IxRbewvO33ugJRvZFEOfO62i7uQJRUNW2cnu6BeBTHUS0JD5KBucZbHZaYqxQG8dwZ47ezQuQ=="
-  },
-  {
-    "Package": "Microsoft.ML.OnnxRuntime",
-    "Version": "1.31.0",
-    "License": "LICENSE",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/Microsoft/onnxruntime.git",
-    "Commit": "402979ac1bef89dcd55add41eaa7277c407599eb",
-    "NugetSHA512": "7v58S0xqY1ZmLui5BnK3FQEWagRhmhkR/9yLrxF5rQGppGfcMaw7W0a2wgT1SWnT6ug0dmr1B2I4VWhlY/yvng=="
-  },
-  {
-    "Package": "SQLitePCLRaw.core",
-    "Version": "2.1.12",
-    "License": "Apache-2.0",
-    "Copyright": "Copyright 2014-2024 SourceGear, LLC",
-    "Repository": "https://github.com/ericsink/SQLitePCL.raw",
-    "Commit": "",
-    "NugetSHA512": "ETpNw9DY3ckWLgRRAeCHj+GKOuPi61aeczkXhgHexUvqoZBAYg8RYESE2J7O1M7+o6QbdSEZwrw9bfqztUVWXg=="
-  },
-  {
-    "Package": "Microsoft.Extensions.Logging.Debug",
-    "Version": "10.0.0",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/dotnet",
-    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
-    "NugetSHA512": "A/4vBtVaySLBGj4qluye+KSbeVCCMa6GcTbxf2YgnSDHs9b9105+VojBJ1eJPel8F1ny0JOh+Ci3vgCKn69tNQ=="
-  },
-  {
-    "Package": "NAudio.Core",
-    "Version": "2.2.1",
-    "License": "MIT",
-    "Copyright": "© Mark Heath 2023",
-    "Repository": "https://github.com/naudio/NAudio",
-    "Commit": "",
-    "NugetSHA512": "GgkdP6K/7FqXFo7uHvoqGZTJvW4z8g2IffhOO4JHaLzKCdDOUEzVKtveoZkCuUX8eV2HAINqi7VFqlFndrnz/g=="
-  },
-  {
-    "Package": "Microsoft.ML.OnnxRuntime.Managed",
-    "Version": "1.31.0",
-    "License": "LICENSE.txt",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/microsoft/onnxruntime",
-    "Commit": "402979ac1bef89dcd55add41eaa7277c407599eb",
-    "NugetSHA512": "o9nvEiddLLlAMOHN0XZ/06Oal0W6S7iWiSb8lzQAwfQKNOZtX4C8he5/I7Mc/DlSprNfovAW6kCkwX2BAE0JHw=="
-  },
-  {
-    "Package": "YamlDotNet",
-    "Version": "18.1.0",
-    "License": "MIT",
-    "Copyright": "Copyright (c) Antoine Aubry and contributors",
-    "Repository": "https://github.com/aaubry/YamlDotNet",
-    "Commit": "748334a8fa7c227740018b284b71ad95cc6b7fc7",
-    "NugetSHA512": "5K+9KFg2TdTl7VXv88Qzi/0lqK6JFoNP3lRuImPYGRV7K/QYklDyTrj4+A+KAki1JsQi6qKY+hDyY7d6WRqjrw=="
-  },
-  {
-    "Package": "Microsoft.Extensions.Hosting.Abstractions",
-    "Version": "10.0.0",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/dotnet",
-    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
-    "NugetSHA512": "KrN6TGFwCwqOkLLk/idW/XtDQh+8In+CL9T4M1Dx+5ScsjTq4TlVbal8q532m82UYrMr6RiQJF2HvYCN0QwVsA=="
-  },
-  {
-    "Package": "Microsoft.Extensions.Diagnostics.Abstractions",
-    "Version": "10.0.0",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/dotnet",
-    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
-    "NugetSHA512": "SfK89ytD61S7DgzorFljSkUeluC1ncn6dtZgwc0ot39f/BEYWBl5jpgvodxduoYAs1d9HG8faCDRZxE95UMo2A=="
-  },
-  {
-    "Package": "Microsoft.Extensions.DependencyInjection",
-    "Version": "10.0.0",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/dotnet",
-    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
-    "NugetSHA512": "f0RBabswJq+gRu5a+hWIobrLWiUYPKMhCD9WO3sYBAdSy3FFH14LMvLVFZc2kPSCimBLxSuitUhsd6tb0TAY6A=="
-  },
-  {
-    "Package": "Microsoft.Data.Sqlite",
-    "Version": "9.0.10",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/efcore",
-    "Commit": "5452ff90a79084afd23df379388ae8bca24284f3",
-    "NugetSHA512": "1waeeEEM/Dp5l2laUByEEWfd6qyI00HExDduhLKGT2kPnHArjIDcMf2z9HIjeLPoR56iBHhvXTfAv1hiH/wAAQ=="
-  },
-  {
-    "Package": "Microsoft.Extensions.Primitives",
-    "Version": "10.0.0",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/dotnet",
-    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
-    "NugetSHA512": "inRnbpCS0nwO/RuoZIAqxQUuyjaknOOnCEZB55KSMMjRhl0RQDttSmLSGsUJN3RQ3ocf5NDLFd2mOQViHqMK5w=="
-  },
-  {
-    "Package": "System.Numerics.Tensors",
-    "Version": "9.0.0",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/runtime",
-    "Commit": "9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3",
-    "NugetSHA512": "hyJB4UlpAi19Xr9AXzu2NuagKC4lPfHObNMEAA0HmqFz2rX7wKgzeYzO/jM/eBHDhnUGFFEjk5cOoJaxqg5J4A=="
-  },
-  {
-    "Package": "System.Security.Cryptography.ProtectedData",
-    "Version": "9.0.13",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/runtime",
-    "Commit": "9ecbfd4f3f330dc9649bce49cb12570b19d48c87",
-    "NugetSHA512": "t8S9IDpjJKsLpLkeBdW8cWtcPyYqrGu93Dej1RO6WwuL/lkFSqWlan3rMJfortqz1mRIh+sys2AFsSA6jWJ3Jg=="
-  },
-  {
-    "Package": "Microsoft.Maui.Graphics.Win2D.WinUI.Desktop",
-    "Version": "10.0.20",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/maui.git",
-    "Commit": "0d1705adc4a6b4ec531e316ec956755abbe059c5",
-    "NugetSHA512": "3bvzJ0J8OD1csnfPkIiza0eDrgj2RSDLEVplI0Qfa7uKdYSSJIfreKZWaC7P2AgJioN6oFhEtZ2Zpnp4202Z9g=="
-  },
-  {
-    "Package": "Microsoft.Maui.Controls",
-    "Version": "10.0.20",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/maui.git",
-    "Commit": "0d1705adc4a6b4ec531e316ec956755abbe059c5",
-    "NugetSHA512": "c/Tsp1TGBQNkqpKd/aNkTnFV0FOtjyMyV04Naigg/7MphJwdc0ZI0Dw2P0TvC+tm//Ut+SnviTqlDow6V4tSmA=="
-  },
-  {
-    "Package": "Microsoft.Maui.Essentials",
-    "Version": "10.0.20",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/maui.git",
-    "Commit": "0d1705adc4a6b4ec531e316ec956755abbe059c5",
-    "NugetSHA512": "jalsUhCCL+T5qng/OXAkJhSaV/Uhml3s4LLExx/RBVz4z/kSIOjyXLkV/O66BBUxy/0nPFILeNx9p21TVqWrMg=="
-  },
-  {
-    "Package": "Microsoft.Web.WebView2",
-    "Version": "1.0.3179.45",
-    "License": "LICENSE.txt",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "",
-    "Commit": "",
-    "NugetSHA512": "3pokSH5CnN0G6rGhGFo1y87inxYhNxBQ2Vdf0wlvBj99KHxQJormjDACmqRnFeUsmuNFIhWwfAL1ztq7wD5qRA=="
+    "Package": "Markdig",
+    "Version": "1.4.0",
+    "License": "BSD-2-Clause",
+    "Copyright": "Alexandre Mutel",
+    "Repository": "https://github.com/xoofx/markdig",
+    "Commit": "56e9c238584a44a169f174c881855c049768634c",
+    "NugetSHA512": "8EkBFFlLoQCRS+LKLGdEUN6L57BGkQN2tiR2/zzrd+N2kVFANJzq24TKSeH7lE+ucHcA+OxhlNNmsJAZFJeTqg=="
   },
   {
     "Package": "Microsoft.Data.Sqlite.Core",
@@ -222,88 +15,25 @@
     "Copyright": "© Microsoft Corporation. All rights reserved.",
     "Repository": "https://github.com/dotnet/efcore",
     "Commit": "5452ff90a79084afd23df379388ae8bca24284f3",
-    "NugetSHA512": "tWbN2uzG4uBxxMjcHA3Oa9ecAYjyRTfDwRbgQ7ueyx7eEgyYbBiKADY2rllF8wO3dHUvN+/8fgylwSGMfiCtVg=="
+    "NugetSHA512": "0vQ4WU9CK/FDxgeuka0Wdxk466OFILNzCQAIlYoZh300KY15U6Op3H1jqhVZBtAd92s68X7T0SyTYQtBSenMRw=="
   },
   {
-    "Package": "Microsoft.Extensions.Configuration",
-    "Version": "10.0.0",
+    "Package": "Microsoft.Data.Sqlite",
+    "Version": "9.0.10",
     "License": "MIT",
     "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/dotnet",
-    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
-    "NugetSHA512": "H4SWETCh/cC5L1WtWchHR6LntGk3rDTTznZMssr4cL8IbDmMWBxY+MOGDc/ASnqNolLKPIWHWeuC1ddiL/iNPw=="
+    "Repository": "https://github.com/dotnet/efcore",
+    "Commit": "5452ff90a79084afd23df379388ae8bca24284f3",
+    "NugetSHA512": "FGGQK6WSU2q8orBmLV2nQk8Gk8DcBYPVQh5xOsTXTTy5gFBq6vJ0Jh0xyHvXdpc5lcI/s8kQ0kheG4ufJRmQNg=="
   },
   {
-    "Package": "Microsoft.Windows.SDK.BuildTools",
-    "Version": "10.0.22621.756",
-    "License": "",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "",
-    "Commit": "",
-    "NugetSHA512": "7ZL2sFSioYm1Ry067Kw1hg0SCcW5kuVezC2SwjGbcPE61Nn+gTbH86T73G3LcEOVj0S3IZzNuE/29gZvOLS7VA=="
-  },
-  {
-    "Package": "Microsoft.Extensions.DependencyInjection.Abstractions",
-    "Version": "10.0.0",
+    "Package": "Microsoft.Extensions.AI.Abstractions",
+    "Version": "10.8.3",
     "License": "MIT",
     "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/dotnet",
-    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
-    "NugetSHA512": "L3AdmZ1WOK4XXT5YFPEwyt0ep6l8lGIPs7F5OOBZc77Zqeo01Of7XXICy47628sdVl0v/owxYJTe86DTgFwKCA=="
-  },
-  {
-    "Package": "Microsoft.Maui.Resizetizer",
-    "Version": "10.0.20",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/maui.git",
-    "Commit": "0d1705adc4a6b4ec531e316ec956755abbe059c5",
-    "NugetSHA512": "lqGi/HjtGPvmzqSR+Ii3ZHdvZj811+sBAxyN+T3jrvKBKd13wdVh9vZEfjmTUE5KA6+6W+6iRk5h62CY8pVogg=="
-  },
-  {
-    "Package": "Microsoft.Maui.Graphics",
-    "Version": "10.0.20",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/maui.git",
-    "Commit": "0d1705adc4a6b4ec531e316ec956755abbe059c5",
-    "NugetSHA512": "X1IfBjN/0KcrcbaDU47xNrZufQeI/PJyBVPxt+3a/yNDhduGS+jlihi4sByil7E4VbQTFVPxclevnbhLtWxNQw=="
-  },
-  {
-    "Package": "Microsoft.Extensions.Options",
-    "Version": "10.0.0",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/dotnet",
-    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
-    "NugetSHA512": "8oCAgXOow5XDrY9HaXX1QmH3ORsyZO/ANVHBlhLyCeWTH5Sg4UuqZeOTWJi6484M+LqSx0RqQXDJtdYy2BNiLQ=="
-  },
-  {
-    "Package": "Markdig",
-    "Version": "1.4.0",
-    "License": "BSD-2-Clause",
-    "Copyright": "Alexandre Mutel",
-    "Repository": "https://github.com/xoofx/markdig",
-    "Commit": "56e9c238584a44a169f174c881855c049768634c",
-    "NugetSHA512": "lLhaiI/mNDTNzgLqnmknhf4LjgTqOAyjx5+GNz0X3AxYMxUhmFppF2WVMdER+SDqwhE5wUF1pzs/cuLwFxs7xA=="
-  },
-  {
-    "Package": "Microsoft.Graphics.Win2D",
-    "Version": "1.3.2",
-    "License": "",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "",
-    "Commit": "",
-    "NugetSHA512": "xAv4+Xj8wePW1innIUSXebX6UHMGDzOxwKPwYNUNY7mBrsRL/hPFEtuPLpBSxc3iBnuaCogPDCDeN7T4b1xV0Q=="
-  },
-  {
-    "Package": "Microsoft.IO.RecyclableMemoryStream",
-    "Version": "3.0.1",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/Microsoft/Microsoft.IO.RecyclableMemoryStream",
-    "Commit": "e29a28387da9018fa9605a1dcb3f7a0435aa9974",
-    "NugetSHA512": "s/s20YTVY9r9TPfTrN5g8zPF1YhwxyqO6PxUkrYTGI2B+OGPe9AdajWZrLhFqXIvqIW23fnUE4+ztrUWNU1+9g=="
+    "Repository": "https://github.com/dotnet/extensions",
+    "Commit": "ccb356f31db9d894807c4fd0c97c2f41553d1524",
+    "NugetSHA512": "uUAdAW+S2azZc2ev8ZkngeauRhlsKX6b4TQE7uaeAJUpb2XoASEwkBt2ZpeDU68loScgmGCR2bm1OfgsaZQwxQ=="
   },
   {
     "Package": "Microsoft.Extensions.Configuration.Abstractions",
@@ -312,7 +42,124 @@
     "Copyright": "© Microsoft Corporation. All rights reserved.",
     "Repository": "https://github.com/dotnet/dotnet",
     "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
-    "NugetSHA512": "d2kDKnCsJvY7mBVhcjPSp9BkJk48DsaHPg5u+Oy4f8XaOqnEedRy/USyvnpHL92wpJ6DrTPy7htppUUzskbCXQ=="
+    "NugetSHA512": "Y8QH4IjWknpk7NhN3qfodzXFFk6k86h3Q1um3h816DofDVZaIXnKfH6q3rz8zFBpKuzhDgISp8PVgDIpRGxuFg=="
+  },
+  {
+    "Package": "Microsoft.Extensions.Configuration",
+    "Version": "10.0.0",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/dotnet",
+    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
+    "NugetSHA512": "cUi/56QZA0Idt8SeyMEsjHkXX55smUqGnWDstFo2BoaKoEKbHY5/eOMqiVGTsc6OdsXq5Jy9fSLOORhhkS5LNQ=="
+  },
+  {
+    "Package": "Microsoft.Extensions.DependencyInjection.Abstractions",
+    "Version": "10.0.10",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/dotnet",
+    "Commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+    "NugetSHA512": "xArycDUtAEn73bZAPrC1IG8LYxh2AUboCTqZcrKrll16UhOijkc3QnEuVPersojqt6RmWbQcdCbUVOzuSpMerA=="
+  },
+  {
+    "Package": "Microsoft.Extensions.DependencyInjection",
+    "Version": "10.0.0",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/dotnet",
+    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
+    "NugetSHA512": "jKVOffyzW7yqmikvAQf69oCKjPlMiHmnqv4xroQRdNKQCYlUIc4rvJv6/YbQyqvUArvrzITxlhd0dA3MFVIpuw=="
+  },
+  {
+    "Package": "Microsoft.Extensions.Diagnostics.Abstractions",
+    "Version": "10.0.0",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/dotnet",
+    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
+    "NugetSHA512": "8dkT57qrPe80rEjtkQpo8mc6Z4cx1LkF0LbDF0h2uGUgQFJivXquaEpJVyMYGpDZnW9LprDN7IAqf7M18bwF6A=="
+  },
+  {
+    "Package": "Microsoft.Extensions.FileProviders.Abstractions",
+    "Version": "10.0.0",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/dotnet",
+    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
+    "NugetSHA512": "l0wkZS/2Ts65dSyBS+gHunb4DLrKy8Cp632ujR2dXBGE9Wp2efoMs286Ak9ID//GIHNQNN2tXFx66PeH+jqrTg=="
+  },
+  {
+    "Package": "Microsoft.Extensions.Hosting.Abstractions",
+    "Version": "10.0.0",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/dotnet",
+    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
+    "NugetSHA512": "1L/dJq4QoVCAIIY/T5X9pdwT/SFEMKLh/qs1NLBqt88N5CZkjtsb5JLj4R0q8PVhlvNLxJRAWdVYl+n45yxXZg=="
+  },
+  {
+    "Package": "Microsoft.Extensions.Logging.Abstractions",
+    "Version": "10.0.10",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/dotnet",
+    "Commit": "f7d90799ce4ef09a0bb257852a57248d2a8fb8dd",
+    "NugetSHA512": "b8xabNM7zKc7R8B3G9GtnMBE6sU9OvQ8AXzGhJMvHxB5gcegMSkiwU5uKqm43x06cGVd0Kzc+bl9POl1/CHViA=="
+  },
+  {
+    "Package": "Microsoft.Extensions.Logging.Debug",
+    "Version": "10.0.0",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/dotnet",
+    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
+    "NugetSHA512": "/ssRZt2ephlygJglGDsX1JKBIpeEhQPjp7LK8U29UatHuthgv65iZxKbciq25xBGDQO1lAPGYznAlmvhnXTGiw=="
+  },
+  {
+    "Package": "Microsoft.Extensions.Logging",
+    "Version": "10.0.0",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/dotnet",
+    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
+    "NugetSHA512": "4U8pXWCPfYUj/65LYjWT4eic4+bQTV1lO0X6Omw87AM8bp5FISmXRWFTR/8HHCWK6JitWdcnQjXkqVX8tk2nKQ=="
+  },
+  {
+    "Package": "Microsoft.Extensions.Options",
+    "Version": "10.0.0",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/dotnet",
+    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
+    "NugetSHA512": "olgvJlmRKzxNWACXtbRTNQBSj9IvAHQzJthPFZbHRULVVRg1wK98lWp20zUWGCePPtHEERkKg2O5G6RGZ1CzYw=="
+  },
+  {
+    "Package": "Microsoft.Extensions.Primitives",
+    "Version": "10.0.0",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/dotnet",
+    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
+    "NugetSHA512": "q7BfP5mrTfRnuM0qBFh+VWpXauE8LTzXtIL1SZg0h/MyOYGLKnsPPbXrRR0odHcYxA5On3IQdKLdqTOMNAk7bQ=="
+  },
+  {
+    "Package": "Microsoft.Graphics.Win2D",
+    "Version": "1.3.2",
+    "License": "",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "",
+    "Commit": "",
+    "NugetSHA512": "x4c9LbU03WQNaL0cWf6vYMtM+SiZkmRal4xyJ4mqlBFHCsR7EZ0O9n8AbtIm7YrbdfOSkvTe4GEaZuV8Q8UBuA=="
+  },
+  {
+    "Package": "Microsoft.IO.RecyclableMemoryStream",
+    "Version": "3.0.1",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/Microsoft/Microsoft.IO.RecyclableMemoryStream",
+    "Commit": "e29a28387da9018fa9605a1dcb3f7a0435aa9974",
+    "NugetSHA512": "xXlOonyQi1+yRC+qRB6fP4H/o9wp1BoxO1QmQ5I65hBwkFscFcLsrZgJLGubKjtCOsqXnnHtl5covVcrafIKRg=="
   },
   {
     "Package": "Microsoft.Maui.Controls.Build.Tasks",
@@ -321,7 +168,7 @@
     "Copyright": "© Microsoft Corporation. All rights reserved.",
     "Repository": "https://github.com/dotnet/maui.git",
     "Commit": "0d1705adc4a6b4ec531e316ec956755abbe059c5",
-    "NugetSHA512": "vQsyfUHHSkh9O9lxOcJBDEUxtS+VphI3uxYOB73AZURcj5CpZ0DfLiPKG9SBrp2PkiIFbXPJ2ABbpzMvZVliRw=="
+    "NugetSHA512": "KmZDyHkHaVnDJQriywxmcVpnRtouC8JkATVnUiiHLD9TpZb7PPfSC+JWVpG9W8NHKFxR/3EBka5ZPhkGLMZJsg=="
   },
   {
     "Package": "Microsoft.Maui.Controls.Core",
@@ -330,16 +177,7 @@
     "Copyright": "© Microsoft Corporation. All rights reserved.",
     "Repository": "https://github.com/dotnet/maui.git",
     "Commit": "0d1705adc4a6b4ec531e316ec956755abbe059c5",
-    "NugetSHA512": "Go8C7a0QaGiQ2EBMsxbbm52DI5+HipgT7C9AslfyfkCU8/H6gicLsPUxae5r9TyrZbgsw5KUnnPEUPJlUwtBcw=="
-  },
-  {
-    "Package": "SQLitePCLRaw.provider.e_sqlite3",
-    "Version": "2.1.12",
-    "License": "Apache-2.0",
-    "Copyright": "Copyright 2014-2024 SourceGear, LLC",
-    "Repository": "https://github.com/ericsink/SQLitePCL.raw",
-    "Commit": "",
-    "NugetSHA512": "W3oH4XIfCzFrgUSDKHhN6N+dgzA5YHOR2VxX8GB6Qy7CyrJJgxPEG8NirgYWlPQC5P2jz2knSsexWu4tDUL33g=="
+    "NugetSHA512": "Qa4z6i0c9AWb5KMqy+t4sBNqpxVbhbnDowR5Be+YZ2kNr5gvEiLFYIVkTpBvzFLcwx46AYPyf1NZkSGFgJIbdg=="
   },
   {
     "Package": "Microsoft.Maui.Controls.Xaml",
@@ -348,7 +186,133 @@
     "Copyright": "© Microsoft Corporation. All rights reserved.",
     "Repository": "https://github.com/dotnet/maui.git",
     "Commit": "0d1705adc4a6b4ec531e316ec956755abbe059c5",
-    "NugetSHA512": "Ih2rMfJ5B8HbFeNgwsOi31Ngo1A31Zixl8lEuJME+7mXE8VFwVcZcfeKljKG0XTULWxe4/ALZ/nL5tTMMjIFnw=="
+    "NugetSHA512": "CZe/sbzMXB44zYCkpfLIJ+AMQR0RRiNExY+GgSDxz5sEb6qHmGVqKcQBZ8emg8bAJU/+Hty6cOwbypFNFwFL+w=="
+  },
+  {
+    "Package": "Microsoft.Maui.Controls",
+    "Version": "10.0.20",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/maui.git",
+    "Commit": "0d1705adc4a6b4ec531e316ec956755abbe059c5",
+    "NugetSHA512": "gl9dQxx5KiUxbYRhDXpNtZZ4XWANjjEgbMR9HmincHP07P5/TrTsoRdlGO06iMEO211JiDCRiJ/Ocj/boXUUMA=="
+  },
+  {
+    "Package": "Microsoft.Maui.Core",
+    "Version": "10.0.20",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/maui.git",
+    "Commit": "0d1705adc4a6b4ec531e316ec956755abbe059c5",
+    "NugetSHA512": "hYiQAeWndER/OM0BsRl+/RvPHGrGWwi28OdWyebMFJ79i+axg+Qd9L/RbhhApzQQztgUWrTwpYzUqAYTQcBVYA=="
+  },
+  {
+    "Package": "Microsoft.Maui.Essentials",
+    "Version": "10.0.20",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/maui.git",
+    "Commit": "0d1705adc4a6b4ec531e316ec956755abbe059c5",
+    "NugetSHA512": "Gkc2YtWHBehin/PDHlhQ0qOzGQ69ZQX67RMQ4pszA2sdKrb0NqgkYudc3HKy67FyM2ChH9T3dJml+64r/iW8wQ=="
+  },
+  {
+    "Package": "Microsoft.Maui.Graphics.Win2D.WinUI.Desktop",
+    "Version": "10.0.20",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/maui.git",
+    "Commit": "0d1705adc4a6b4ec531e316ec956755abbe059c5",
+    "NugetSHA512": "d+3lW81ebOL6avyDJ6AU5jU4LkxawRoJuAq334FN4+c1LZ75ktpuENMDqu0GbWyzTAY+B0RwSuIUpvDysHQL9Q=="
+  },
+  {
+    "Package": "Microsoft.Maui.Graphics",
+    "Version": "10.0.20",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/maui.git",
+    "Commit": "0d1705adc4a6b4ec531e316ec956755abbe059c5",
+    "NugetSHA512": "PhUETeHqlKQCHG5d0Donhr2MjWtq30sz57mgfQo9lmAUM064okMiPowSc+EXJ9MIfxlbFH47bhfGtGfEsrJGRQ=="
+  },
+  {
+    "Package": "Microsoft.Maui.Resizetizer",
+    "Version": "10.0.20",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/maui.git",
+    "Commit": "0d1705adc4a6b4ec531e316ec956755abbe059c5",
+    "NugetSHA512": "piKq1dIcbUghRHRwP1tlPhpW5TduGthhxdMT/ptSaPIs0OOYowfkQcWJrGSfGpAExorjXDxOg/gSos0S7XRtnQ=="
+  },
+  {
+    "Package": "Microsoft.ML.OnnxRuntime.Managed",
+    "Version": "1.31.0",
+    "License": "LICENSE.txt",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/microsoft/onnxruntime",
+    "Commit": "402979ac1bef89dcd55add41eaa7277c407599eb",
+    "NugetSHA512": "NLs9uxHUPv6aFebte+Hse5/c9qMlEbtAnIbh908YRf1EyKLLTYZXmSHFWLMxUZDo0pUNqjx2tSMzqUAFsNq5bg=="
+  },
+  {
+    "Package": "Microsoft.ML.OnnxRuntime",
+    "Version": "1.31.0",
+    "License": "LICENSE",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/Microsoft/onnxruntime.git",
+    "Commit": "402979ac1bef89dcd55add41eaa7277c407599eb",
+    "NugetSHA512": "J7arTn+7nrWdZ+PF2Sl9aNW1/Ba5DCt1ywZ3r5l3LKqzj3w8oC7Cl/uagG3Xp1ivuYJYQAMSuew0ef/74f7XCw=="
+  },
+  {
+    "Package": "Microsoft.Web.WebView2",
+    "Version": "1.0.3179.45",
+    "License": "LICENSE.txt",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "",
+    "Commit": "",
+    "NugetSHA512": "AqvMjM6eGVbfvi4k/dTOYlqz4f8BOcm6mr7SZDOxnxZw9RNrpxwq+R8pjd5QeynZ3MZfCQ5d2bXrzsIZvk6A6Q=="
+  },
+  {
+    "Package": "Microsoft.Windows.SDK.BuildTools",
+    "Version": "10.0.22621.756",
+    "License": "",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "",
+    "Commit": "",
+    "NugetSHA512": "HVLQPn7m0liOupNNnzTU7hzy+++CHSXjikggbs+5ueHu6Ac+SFfXxgBfK4rr3Dqpti4mbqnIJvDIMtuWm0BtAw=="
+  },
+  {
+    "Package": "Microsoft.WindowsAppSDK",
+    "Version": "1.7.250909003",
+    "License": "license.txt",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "",
+    "Commit": "",
+    "NugetSHA512": "TquAx6P4taXpBnXGVXUcFlHxofWHy6qbRUsv/JInAGzzaEVG1ep8+wEP4ewu+d8pJVyTf7PqOncsCp5uIyrqZw=="
+  },
+  {
+    "Package": "ModelContextProtocol.Core",
+    "Version": "2.2.0",
+    "License": "Apache-2.0",
+    "Copyright": "© Model Context Protocol a Series of LF Projects, LLC.",
+    "Repository": "https://github.com/modelcontextprotocol/csharp-sdk",
+    "Commit": "6fa3825973949a9c4f0cd8af344e15a8db09dc35",
+    "NugetSHA512": "UwRRGhtrn6UM3X8Is5iT30Ag1SCUmz0lqQfRNmldkIf54mhpyULGVowL2cTNjc1MPh1S91AeltsmZcFqw6rIKQ=="
+  },
+  {
+    "Package": "NAudio.Core",
+    "Version": "2.2.1",
+    "License": "MIT",
+    "Copyright": "© Mark Heath 2023",
+    "Repository": "https://github.com/naudio/NAudio",
+    "Commit": "",
+    "NugetSHA512": "mI1gc6likH9pDzLEsKolvj9X+2rMunEw8s5tdOUN7tSRJAoXI3Fd6Ise6xrWsHvW1EQaWPItb5AyYk6S3ljrew=="
+  },
+  {
+    "Package": "NAudio.WinMM",
+    "Version": "2.2.1",
+    "License": "MIT",
+    "Copyright": "© Mark Heath 2023",
+    "Repository": "https://github.com/naudio/NAudio",
+    "Commit": "",
+    "NugetSHA512": "3+w4f7aGBfJjrRSgTCXwQJR8RGwSCnKGGs3Zmmikyji5NMp8UxTZTJBQyLvho0vjJd9lVerhz/nj7nnwD8JU8w=="
   },
   {
     "Package": "SQLitePCLRaw.bundle_e_sqlite3",
@@ -357,6 +321,60 @@
     "Copyright": "Copyright 2014-2024 SourceGear, LLC",
     "Repository": "https://github.com/ericsink/SQLitePCL.raw",
     "Commit": "",
-    "NugetSHA512": "mAgscpQMLw5/nfA1Q5oJVAT29yROUo1ifZGbbTpx/lwZpSxMUGoYbKfmvdm8oXER+RzxqBmmQzeBEVKfeHv2nw=="
+    "NugetSHA512": "KbeKXtiMrpxd7dFgsnorA1Gci/xVRDCBmkfZNdiiE1la6OdUEMtyTTJ3TBeCn9nIvZgXo5uCd9dVCji3Ay6LuA=="
+  },
+  {
+    "Package": "SQLitePCLRaw.core",
+    "Version": "2.1.12",
+    "License": "Apache-2.0",
+    "Copyright": "Copyright 2014-2024 SourceGear, LLC",
+    "Repository": "https://github.com/ericsink/SQLitePCL.raw",
+    "Commit": "",
+    "NugetSHA512": "WgmgyKwGLTR6ZfIf1+1dFNxsOyp9GmsU9YjjeUjgz+NZnw2hyjVB0U8taT1Z1vv21s5+gvhHQ3vtpZajsMKJYg=="
+  },
+  {
+    "Package": "SQLitePCLRaw.lib.e_sqlite3",
+    "Version": "2.1.12",
+    "License": "Apache-2.0",
+    "Copyright": "Copyright 2014-2024 SourceGear, LLC",
+    "Repository": "https://github.com/ericsink/SQLitePCL.raw",
+    "Commit": "",
+    "NugetSHA512": "Dli+ELKNuRX0g72Uq2I2OZa5zgi4fwSXV4Je3wyF7jH9oz6AKRA9wXIzMwuVeW7RfAZdSVgIcEeZZON59LdtiA=="
+  },
+  {
+    "Package": "SQLitePCLRaw.provider.e_sqlite3",
+    "Version": "2.1.12",
+    "License": "Apache-2.0",
+    "Copyright": "Copyright 2014-2024 SourceGear, LLC",
+    "Repository": "https://github.com/ericsink/SQLitePCL.raw",
+    "Commit": "",
+    "NugetSHA512": "k4RCblP+Hc1JAc77crV+fFZLiZeJPaY8VjMA8kvki00Z0dohG6xxXw4qkuVyCUC2+HChbhwW+ydhmjmlUZAXUQ=="
+  },
+  {
+    "Package": "System.Numerics.Tensors",
+    "Version": "9.0.0",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/runtime",
+    "Commit": "9d5a6a9aa463d6d10b0b0ba6d5982cc82f363dc3",
+    "NugetSHA512": "razlju7UgILQ/Vb7BoW1RR/xIEBDc8Ynq0sRk74KpLBHay3QMZJfgK8ly4IEzlJlbFYlCOxpdPa7DNBUYaYtIw=="
+  },
+  {
+    "Package": "System.Security.Cryptography.ProtectedData",
+    "Version": "9.0.13",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/runtime",
+    "Commit": "9ecbfd4f3f330dc9649bce49cb12570b19d48c87",
+    "NugetSHA512": "h8j18ju7NzUzn37Z0yR8ndJSaWKwhcTepHF9IjQ2sMjPSIz62kY8Ph1Ee9Qln2lDLKb6pvIQWuVGVB7yjH7cmg=="
+  },
+  {
+    "Package": "YamlDotNet",
+    "Version": "18.1.0",
+    "License": "MIT",
+    "Copyright": "Copyright (c) Antoine Aubry and contributors",
+    "Repository": "https://github.com/aaubry/YamlDotNet",
+    "Commit": "748334a8fa7c227740018b284b71ad95cc6b7fc7",
+    "NugetSHA512": "uexuIxt7kIGaWlp+Kj5VTtEAEiBflxLokLafpX9XDQKb2jaTddiolLlHbFcXZrmFxe6va0dLrpu51HtZQnSrzg=="
   }
 ]

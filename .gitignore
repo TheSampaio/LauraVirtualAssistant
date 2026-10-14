@@ -22,6 +22,7 @@ api_keys.json*
 settings.ini*
 memory.db*
 reminders.json*
+mcp-servers.json*
 /Workspace/
 /brain/
 # Custom vaults receive exact Git exclusions from FileBrainStorage.

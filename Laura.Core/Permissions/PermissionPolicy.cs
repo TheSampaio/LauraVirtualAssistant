@@ -17,7 +17,7 @@ public static class PermissionPolicy
         PermissionOperation.ApplicationLaunch when action.Resources.Length == 1 && action.Destination.Length == 0 => PermissionRisk.Moderate,
         PermissionOperation.FileCopy or PermissionOperation.FileMove or PermissionOperation.FileTrash => PermissionRisk.High,
         PermissionOperation.Process when action.Destination.Length > 0 => PermissionRisk.Critical,
-        PermissionOperation.FileReadCloud or PermissionOperation.ScreenCloud or PermissionOperation.CameraCloud or PermissionOperation.ClipboardCloud or PermissionOperation.DesktopInput or PermissionOperation.Undo or PermissionOperation.ImageCloud => PermissionRisk.Critical,
+        PermissionOperation.FileReadCloud or PermissionOperation.ScreenCloud or PermissionOperation.CameraCloud or PermissionOperation.ClipboardCloud or PermissionOperation.DesktopInput or PermissionOperation.Undo or PermissionOperation.ImageCloud or PermissionOperation.ExternalTool => PermissionRisk.Critical,
         _ => PermissionRisk.High
     };
         if (action.Operation != PermissionOperation.Internal && action.Destination.Length > 0 && risk <= PermissionRisk.Moderate) { return PermissionRisk.Critical; }

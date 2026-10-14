@@ -21,6 +21,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Official minimal MCP client; framing/version negotiation remain outside the cognitive Core. Apache-2.0. -->
+    <PackageReference Include="ModelContextProtocol.Core" Version="2.2.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.13" />
     <PackageReference Include="NAudio.Core" Version="2.2.1" />
     <PackageReference Include="NAudio.WinMM" Version="2.2.1" />

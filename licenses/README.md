@@ -1,5 +1,7 @@
 # License bundle
 
+The native MCP client adds the minimal official `ModelContextProtocol.Core` 2.2.0 SDK, with its complete upstream licensing-transition notice at the pinned package source commit. Its `Microsoft.Extensions.AI.Abstractions` 10.8.3 types are transitive protocol support; LAURA's existing model client remains unchanged. Logging/DI abstractions resolve to 10.0.10 as required by this SDK. `Build/Update-DependencyInventory.ps1` reproduces the inventory from restored application assets without retaining cache paths.
+
 These are unmodified upstream license and third-party attribution texts. `dependency-inventory.json` records the current resolved application NuGet graph, license declarations, package hashes, repositories and commits where supplied. Some upstream packages resolve additional architectures; the supported release is Windows x64. Lock files record the graph. `upstream-sources.json` identifies separately retrieved official texts; other texts were extracted from NuGet packages.
 
 The MAUI package includes .NET 10, Windows App SDK, NAudio and SQLite. Brain adds YamlDotNet (MIT), Markdig (BSD-2-Clause) and ONNX Runtime (MIT with third-party notices). Optional sentence model weights are user-provided and are not packaged. SQLite itself is public domain; its wrapper is Apache-2.0. See https://www.sqlite.org/copyright.html. Microsoft MIT packages also include their third-party notices; Windows App SDK/WebView2 have separate included terms.

@@ -50,7 +50,8 @@ public sealed class SetupPage : ContentPage
 
     /// <summary>Creates independent tabs with a fixed save footer and no offline provider controls.</summary>
     public SetupPage(ISettingsService settings, IApiKeyStore keys, GeminiLiveClient live, IUiLocalizer ui,
-        IStartupRegistration startup, ISpeechSynthesizer speech, WindowsApplicationCatalog applications, ILocalizer conversation, Laura.App.Platforms.Windows.WindowsApprovalCenter approvals, ScreenshotCoordinator screenshots)
+        IStartupRegistration startup, ISpeechSynthesizer speech, WindowsApplicationCatalog applications, ILocalizer conversation, Laura.App.Platforms.Windows.WindowsApprovalCenter approvals, ScreenshotCoordinator screenshots,
+        Laura.Core.Mcp.McpServerStore mcpStore, Laura.Core.Mcp.McpRuntime mcp)
     {
         using var performance = PerformanceTrace.Measure("settings.construct");
         _settings = settings; _keys = keys; _live = live; _ui = ui; _startup = startup; _speech = speech; _applications = applications; _conversation = conversation;
@@ -94,11 +95,11 @@ public sealed class SetupPage : ContentPage
         _revealKey.IsEnabled = false;
         _permissions = new(settings, ui, approvals);
         _screenshots = new(settings, ui, screenshots);
-        _pages = [ConnectionPanel(), VoicePanel(), PreferencesPanel(), ApplicationsPanel(), Panel(_permissions)];
-        string[] names = ["ui.maui.connectionTab", "ui.tab.voice", "ui.maui.preferencesTab", "ui.maui.appsTab", "ui.permissions.tab"];
-        string[] icons = ["link", "mic", "settings_2", "layout_grid", "shield_check"];
+        _pages = [ConnectionPanel(), VoicePanel(), PreferencesPanel(), ApplicationsPanel(), Panel(_permissions), Panel(new McpSettingsView(mcpStore, mcp, ui))];
+        string[] names = ["ui.maui.connectionTab", "ui.tab.voice", "ui.maui.preferencesTab", "ui.maui.appsTab", "ui.permissions.tab", "ui.mcp.title"];
+        string[] icons = ["link", "mic", "settings_2", "layout_grid", "shield_check", "network"];
         _tabs = names.Select((name, index) => ActionButton(name, icons[index], () => { SelectTab(index); return Task.CompletedTask; })).ToArray();
-        _tabLayout = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star)], ColumnSpacing = 8, RowSpacing = 8 };
+        _tabLayout = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star)], ColumnSpacing = 8, RowSpacing = 8 };
         for (int index = 0; index < _tabs.Length; index++) { _tabLayout.Add(_tabs[index], index); }
         _result.IsVisible = false; _result.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(Label.Text)) { _result.IsVisible = !string.IsNullOrEmpty(_result.Text); } };
         var footer = Theme.Stack(_result, ActionButton("ui.maui.save", "save", async () => { await SaveAsync().ConfigureAwait(true); }, true));
@@ -294,7 +295,7 @@ public sealed class SetupPage : ContentPage
         bool compact = Width < 900;
         if (_compact == compact) { return; }
         _compact = compact;
-        _tabLayout.ColumnDefinitions = compact ? [new(GridLength.Star), new(GridLength.Star), new(GridLength.Star)] : [new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star)];
+        _tabLayout.ColumnDefinitions = compact ? [new(GridLength.Star), new(GridLength.Star), new(GridLength.Star)] : [new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star)];
         _tabLayout.RowDefinitions = compact ? [new(GridLength.Auto), new(GridLength.Auto)] : [new(GridLength.Auto)];
         for (int index = 0; index < _tabs.Length; index++) { Grid.SetColumn(_tabs[index], compact ? index % 3 : index); Grid.SetRow(_tabs[index], compact ? index / 3 : 0); }
         foreach (var (row, control, toggle) in _responsiveRows)
@@ -340,6 +341,8 @@ public sealed class SetupPage : ContentPage
         await Task.Delay(180).ConfigureAwait(true);
         if (revision == _searchRevision && _activeTab == 3) { RefreshApplications(); }
     }
+    /// <summary>Gets the actual number of settings tabs, including native MCP configuration.</summary>
+    public int TabCount => _pages.Length;
     /// <summary>Verifies native tab geometry and draft preservation without cloud or microphone access.</summary>
     public void VerifySettingsForSmoke()
     {

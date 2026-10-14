@@ -31,6 +31,13 @@ public static class BrainSmokeRunner
                 Permissions = settings.Current.Permissions with { Voice = ApprovalVoiceMode.Never }, Screenshots = settings.Current.Screenshots with { ShortcutsEnabled = false } }).ConfigureAwait(true);
             var memory = services.GetRequiredService<IConversationMemory>(); var tools = services.GetRequiredService<IAssistantTools>(); var permissions = services.GetRequiredService<PermissionManager>();
             int guiFixture = Array.IndexOf(args, "--gui-launch-smoke");
+            int mcpFixture = Array.IndexOf(args, "--brain-mcp-smoke");
+            if (mcpFixture >= 0 && mcpFixture + 1 < args.Length)
+            {
+                stage = "native_mcp_protocol_and_permissions";
+                results.AddRange(await BrainMcpSmokeRunner.RunAsync(services, directory, args[mcpFixture + 1]).ConfigureAwait(true));
+                await File.WriteAllLinesAsync(Path.Combine(directory, "result.txt"), PassedHeader.Concat(results)).ConfigureAwait(true); return;
+            }
             if (guiFixture >= 0 && guiFixture + 1 < args.Length)
             {
                 stage = "graphical_application_launch";
