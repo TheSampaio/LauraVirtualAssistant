@@ -21,6 +21,9 @@ public sealed class BrainConversationMemory(BrainService brain, BrainLearning le
     public void SetWorkingContext(string text)
     { ArgumentNullException.ThrowIfNull(text); lock (_gate) { _lastUserText = text.Length <= 4000 ? text : ""; _turnId = Guid.NewGuid(); } }
     /// <inheritdoc />
+    public void UpdateWorkingContext(string text)
+    { ArgumentNullException.ThrowIfNull(text); lock (_gate) { _lastUserText = text.Length <= 4000 ? text : ""; if (_turnId == Guid.Empty) { _turnId = Guid.NewGuid(); } } }
+    /// <inheritdoc />
     public void Initialize()
     {
         lock (_gate)

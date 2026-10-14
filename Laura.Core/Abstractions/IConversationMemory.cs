@@ -12,6 +12,8 @@ public interface IConversationMemory
     ConversationWorkingContext WorkingContext => new(Guid.Empty, WorkingUserText);
     /// <summary>Updates current user input before tool dispatch without creating a persistent fact.</summary>
     void SetWorkingContext(string text) { }
+    /// <summary>Updates a partial transcription within the same user turn, without changing its identity or persisting it.</summary>
+    void UpdateWorkingContext(string text) => SetWorkingContext(text);
     /// <summary>Creates or migrates supported schema versions; unsupported/corrupt data is preserved.</summary>
     void Initialize();
     /// <summary>Appends one message, bounding retained conversation history.</summary>
