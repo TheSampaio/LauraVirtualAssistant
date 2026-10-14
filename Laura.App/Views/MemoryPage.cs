@@ -71,6 +71,8 @@ public sealed class MemoryPage : ContentPage
     private string _renderedQuery = "";
     private IReadOnlyList<string> _inventoryFiles = [], _inventoryFolders = [];
     private bool _needsRefresh = true;
+    private bool _brainRefreshQueued;
+    private int _brainChangeVersion;
     private int _renderedLimit;
     private int _layoutBucket = -1;
     private string _layoutMode = "";
@@ -286,7 +288,26 @@ public sealed class MemoryPage : ContentPage
     /// <inheritdoc />
     protected override void OnDisappearing() { _visible = false; _findShortcut.IsEnabled = false; _brain.Changed -= OnBrainChanged; base.OnDisappearing(); }
     /// <summary>Marshals storage notifications while preserving unsaved editor buffers.</summary>
-    private void OnBrainChanged(object? sender, EventArgs args) { _needsRefresh = true; _inventorySnapshot = null; if (_visible) { Dispatcher.Dispatch(async () => await RefreshSafelyAsync().ConfigureAwait(true)); } }
+    private void OnBrainChanged(object? sender, EventArgs args) => Dispatcher.Dispatch(() =>
+    {
+        _brainChangeVersion++; _needsRefresh = true; _inventorySnapshot = null;
+        ScheduleBrainRefresh();
+    });
+    /// <summary>Coalesces bursts while allowing bounded intermediate updates and preserving unsaved buffers.</summary>
+    private void ScheduleBrainRefresh()
+    { if (_visible && !_brainRefreshQueued) { _brainRefreshQueued = true; _ = RefreshBrainChangesAsync(); } }
+    private async Task RefreshBrainChangesAsync()
+    {
+        try
+        {
+            await Task.Delay(120).ConfigureAwait(true);
+            if (!_visible) { return; }
+            int observed = _brainChangeVersion;
+            await RefreshSafelyAsync().ConfigureAwait(true);
+            _needsRefresh = observed != _brainChangeVersion;
+        }
+        finally { _brainRefreshQueued = false; if (_needsRefresh) { ScheduleBrainRefresh(); } }
+    }
     /// <summary>Handles access failures without embedding note contents in exception reports.</summary>
     private async Task RefreshSafelyAsync()
     { try { await RefreshAsync().ConfigureAwait(true); } catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException) { _status.Text = T("failure") + " · " + error.GetType().Name; } }

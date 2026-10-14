@@ -101,8 +101,8 @@ public sealed class BrainGraphView : GraphicsView, IDrawable
         BrainNote[] notes = candidates.OrderByDescending(note => note.Importance).Take(limit).ToArray();
         var visibleIds = notes.Select(note => note.Id).ToHashSet(StringComparer.Ordinal);
         BrainEdge[] edges = snapshot.Edges.Where(edge => visibleIds.Contains(edge.Source) && visibleIds.Contains(edge.Target)).Take(limit * 6).ToArray();
-        string stamp = FileBrainStorage.Hash(string.Join('|', notes.Select(note => note.Id + note.Hash)) + string.Join('|', edges) + _groupCommunities);
-        if (stamp == _layoutStamp) { Invalidate(); return; } int generation = ++_generation;
+        string stamp = FileBrainStorage.Hash(string.Join('|', notes.Select(note => note.Id)) + string.Join('|', edges) + _groupCommunities);
+        if (stamp == _layoutStamp) { _notes = notes; _edges = edges; Invalidate(); return; } int generation = ++_generation;
         IReadOnlyDictionary<string, int> communities = BrainGraphTopology.Communities(notes, edges);
         var positions = new Dictionary<string, PointF>(StringComparer.Ordinal);
         foreach (BrainNote note in notes)

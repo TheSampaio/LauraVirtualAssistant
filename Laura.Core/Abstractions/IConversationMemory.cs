@@ -18,6 +18,8 @@ public interface IConversationMemory
     void Initialize();
     /// <summary>Appends one message, bounding retained conversation history.</summary>
     void Append(ConversationMessage message);
+    /// <summary>Retains a completed historical turn without replacing a newer user's active working context.</summary>
+    void AppendHistory(ConversationMessage message) => Append(message);
     /// <summary>Returns recent messages in chronological order.</summary>
     IReadOnlyList<ConversationMessage> ReadRecent(int limit);
     /// <summary>Searches explicit user memories using literal text.</summary>

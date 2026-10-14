@@ -32,6 +32,8 @@ public sealed partial class BrainTests
         memory.UpdateWorkingContext("O Neural Screen está instalado");
         Assert.Equal(turn, memory.WorkingContext.TurnId); Assert.Contains("Screen", memory.WorkingUserText);
         memory.SetWorkingContext("Another actual request"); Assert.NotEqual(turn, memory.WorkingContext.TurnId);
-        Assert.Empty(brain.Snapshot.Notes);
+        Guid latest = memory.WorkingContext.TurnId;
+        await Task.Run(() => memory.AppendHistory(new(ConversationMessageSource.UserVoice, "Old completed transcript", DateTimeOffset.UtcNow)));
+        Assert.Equal(latest, memory.WorkingContext.TurnId); Assert.Equal("Another actual request", memory.WorkingUserText);
     }
 }

@@ -50,12 +50,16 @@ public sealed class BrainConversationMemory(BrainService brain, BrainLearning le
     }
     /// <inheritdoc />
     public void Append(ConversationMessage message)
+        => AppendCore(message, true);
+    /// <inheritdoc />
+    public void AppendHistory(ConversationMessage message) => AppendCore(message, false);
+    private void AppendCore(ConversationMessage message, bool updateContext)
     {
         Initialize();
         if (message.Source != ConversationMessageSource.Assistant && learning.CanObserve(message.Text))
         { transcripts.AppendForLearning(message, FileBrainStorage.Hash(brain.Location)); learning.RecoverPending(transcripts); }
         else { transcripts.Append(message); }
-        if (message.Source != ConversationMessageSource.Assistant)
+        if (updateContext && message.Source != ConversationMessageSource.Assistant)
         { SetWorkingContext(message.Text); }
     }
     /// <inheritdoc />

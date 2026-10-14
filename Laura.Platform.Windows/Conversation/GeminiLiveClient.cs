@@ -27,6 +27,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     private readonly IAssistantTools? _tools;
     private readonly SemaphoreSlim _requests = new(1, 1);
     private readonly SemaphoreSlim _readAloud = new(1, 1);
+    private readonly SemaphoreSlim _voiceCompletion = new(1, 1);
     private Session? _session;
     private string? _spokenAnswer;
     private WaveInEvent? _microphone;
@@ -486,6 +487,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
         {
         Interrupt();
         await StopListeningAsync().ConfigureAwait(false);
+        await _voiceCompletion.WaitAsync().ConfigureAwait(false); _voiceCompletion.Release();
         await _requests.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -505,7 +507,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
-    { await ReconfigureAsync().ConfigureAwait(false); _operations.Dispose(); _requests.Dispose(); _readAloud.Dispose(); _connections.Dispose(); _capture.Dispose(); _reconfiguration.Dispose(); }
+    { await ReconfigureAsync().ConfigureAwait(false); _operations.Dispose(); _requests.Dispose(); _readAloud.Dispose(); _voiceCompletion.Dispose(); _connections.Dispose(); _capture.Dispose(); _reconfiguration.Dispose(); }
 
     /// <summary>Reuses an active conversation or reconnects with bounded saved context.</summary>
     private async Task<Session> EnsureSessionAsync(CancellationToken cancellationToken, bool pushToTalk = false)
@@ -600,21 +602,26 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     private async Task ContinueVoiceTurnAsync(string input, string output)
     {
         bool resume = IsListening;
+        bool acquired = false;
+        Guid original = _memory.WorkingContext.TurnId;
+        using var operation = LinkOperation(CancellationToken.None);
         try
         {
-            using var operation = LinkOperation(CancellationToken.None);
-            Guid original = _memory.WorkingContext.TurnId;
+            await _voiceCompletion.WaitAsync(operation.Token).ConfigureAwait(false); acquired = true;
+            // The receive loop must return before any SQLite, Brain or continuation work begins.
+            await Task.Yield();
             string? pending = _tools is null || string.IsNullOrWhiteSpace(input) ? null : await _tools.PendingTaskContinuationAsync(operation.Token).ConfigureAwait(false);
             if (pending is not null && original != Guid.Empty && _memory.WorkingContext.TurnId == original)
             {
                 string? continued = await AskAsync(new(pending, _settings.Current.ResolveCulture(), _settings.Current.UserNickname) { ContinuingTaskTurnId = original }, operation.Token).ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(continued)) { output = continued; }
-                if (resume && _settings.Current.GenerativeAi.ContinuousListening && !_settings.Current.MicrophoneMuted) { await StartListeningAsync().ConfigureAwait(false); }
+                if (resume && _settings.Current.GenerativeAi.ContinuousListening && !_settings.Current.MicrophoneMuted) { await StartListeningAsync(cancellationToken: operation.Token).ConfigureAwait(false); }
             }
             PublishCompletedVoiceTurn(input, output);
         }
         catch (Exception error) when (error is OperationCanceledException or IOException or InvalidOperationException)
         { ReportStatus("Task continuation cancelled or unavailable; retained knowledge remains partial."); }
+        finally { if (acquired) { _voiceCompletion.Release(); } }
     }
 
     /// <summary>Publishes only the final conversation result while preserving the original real user input for learning.</summary>
@@ -625,7 +632,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
             if (string.IsNullOrWhiteSpace(text)) { continue; }
             var message = new ConversationMessage(source, text.Trim(), DateTimeOffset.Now);
             if (_settings.Current.RememberConversations)
-            { try { _memory.Append(message); } catch (Exception exception) when (exception is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException) { ReportStatus("Local memory is unavailable; this turn was not saved."); } }
+            { try { _memory.AppendHistory(message); } catch (Exception exception) when (exception is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException) { ReportStatus("Local memory is unavailable; this turn was not saved."); } }
             MessageReceived?.Invoke(this, message);
         }
     }
@@ -686,6 +693,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     {
         private readonly ClientWebSocket _socket = new();
         private readonly SemaphoreSlim _sends = new(1, 1);
+        private readonly SemaphoreSlim _toolSlots = new(4, 4);
         private readonly CancellationTokenSource _lifetime = new();
         private readonly TaskCompletionSource _setup = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly StringBuilder _input = new();
@@ -768,7 +776,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
             if (_receiver is not null) { await _receiver.ConfigureAwait(false); }
             await Task.WhenAll(_toolTasks).ConfigureAwait(false);
             Player.Dispose(); _socket.Dispose();
-            _lifetime.Dispose(); _sends.Dispose();
+            _lifetime.Dispose(); _sends.Dispose(); _toolSlots.Dispose();
         }
 
         /// <summary>Reassembles fragmented frames, bounding each message to eight MiB.</summary>
@@ -885,11 +893,13 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
         /// <summary>Runs cancellable tools outside the receive loop so interruptions remain responsive.</summary>
         private async Task ExecuteToolAsync(JsonElement call)
         {
+            await Task.Yield();
             string id = call.GetProperty("id").GetString() ?? "";
             string name = call.GetProperty("name").GetString() ?? "";
-            if (_toolTokens.Count >= 4) { await ToolResponseAsync(id, name, "Too many concurrent actions. Wait for prior tools and retry.", _lifetime.Token).ConfigureAwait(false); return; }
+            if (!await _toolSlots.WaitAsync(0, _lifetime.Token).ConfigureAwait(false))
+            { await ToolResponseAsync(id, name, "Too many concurrent actions. Wait for prior tools and retry.", _lifetime.Token).ConfigureAwait(false); return; }
             using var token = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-            if (!_toolTokens.TryAdd(id, token)) { return; }
+            if (!_toolTokens.TryAdd(id, token)) { _toolSlots.Release(); return; }
             try
             {
                 AssistantToolResult response = _tool is null ? new("Tools are unavailable.") : await _tool(name, call.GetProperty("args"), token.Token).ConfigureAwait(false);
@@ -914,7 +924,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
                 try { await ToolResponseAsync(id, name, "Action failed. Do not report success.", _lifetime.Token).ConfigureAwait(false); }
                 catch (Exception error) when (error is WebSocketException or OperationCanceledException or InvalidOperationException) { }
             }
-            finally { _toolTokens.TryRemove(id, out _); }
+            finally { _toolTokens.TryRemove(id, out _); _toolSlots.Release(); }
         }
         /// <summary>Returns a tool outcome even when execution fails, preventing a stalled live turn.</summary>
         private Task ToolResponseAsync(string id, string name, string text, CancellationToken token) => SendAsync(GeminiLiveProtocol.ToolResult(id, name, text), token);
