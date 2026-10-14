@@ -36,6 +36,13 @@ if (args.Contains("--gemini", StringComparer.Ordinal))
     await using var live = new GeminiLiveClient(settings, keys, memory, Array.Empty<ISkill>(), new SmokeShell());
     live.StatusChanged += (_, status) => Console.WriteLine("Live state: " + status);
     IReadOnlyList<string> selectedVoices = args.Contains("--quick", StringComparer.Ordinal) ? ["Charon"] : GeminiLiveOptions.Voices;
+    int selectedVoice = Array.IndexOf(args, "--voice");
+    if (selectedVoice >= 0)
+    {
+        if (selectedVoice + 1 >= args.Length || !GeminiLiveOptions.Voices.Contains(args[selectedVoice + 1], StringComparer.Ordinal))
+        { throw new InvalidOperationException("Select one of the configured native Gemini voices."); }
+        selectedVoices = [args[selectedVoice + 1]];
+    }
     foreach (string voice in selectedVoices)
     {
         await settings.UpdateAsync(settings.Current with { GreetOnStartup = false, AnnounceHourly = false, RememberConversations = false, Voice = settings.Current.Voice with { Volume = 0 }, GenerativeAi = settings.Current.GenerativeAi with { Enabled = true, Provider = "gemini", Model = GeminiLiveOptions.Model, LiveVoice = voice } }, timeout.Token);
@@ -101,7 +108,14 @@ if (args.Contains("--gemini", StringComparer.Ordinal))
         live.ConversationAudioReceived += capture.Receive; live.ConversationAudioPlayed += capture.Play;
         try
         {
-            string? answer = await live.AskAsync(new("Leia um texto original de cerca de cento e vinte palavras, em português brasileiro, explicando como um jardim muda ao longo das estações. Fale com seu timbre natural constante, sem imitar personagens, sem cantar, sem ferramentas e sem mencionar este teste.", CultureInfo.GetCultureInfo("pt-BR"), "Synthetic Tester"), timeout.Token);
+            string prompt = "Leia um texto original de cerca de cento e vinte palavras, em português brasileiro, explicando como um jardim muda ao longo das estações. Fale com seu timbre natural constante, sem imitar personagens, sem cantar, sem ferramentas e sem mencionar este teste.";
+            int promptFile = Array.IndexOf(args, "--prompt-file");
+            if (promptFile >= 0)
+            {
+                if (promptFile + 1 >= args.Length || new FileInfo(args[promptFile + 1]).Length > 65536) { throw new InvalidOperationException("Provide an explicit local diagnostic prompt file of at most 64 KiB."); }
+                prompt = await File.ReadAllTextAsync(args[promptFile + 1], timeout.Token);
+            }
+            string? answer = await live.AskAsync(new(prompt, CultureInfo.GetCultureInfo("pt-BR"), "Synthetic Tester"), timeout.Token);
             var comparison = capture.Compare();
             await capture.ExportAsync(directory, timeout.Token);
             await File.WriteAllTextAsync(Path.Combine(directory, "long-audio.json"), JsonSerializer.Serialize(new { comparison, Playback = live.PlaybackMetrics,

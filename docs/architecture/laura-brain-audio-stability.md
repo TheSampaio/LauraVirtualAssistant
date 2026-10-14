@@ -77,15 +77,18 @@ Gravação relê apenas o documento e a revisão realmente escritos, publica sna
 |---|---:|---:|
 | Total (32 revisões) | 15.469,33 ms | 13.396,55 ms |
 | CPU | 8.234,38 ms | 6.812,50 ms |
+| Escrita média / máxima (32 operações) | 459,53 / 572,41 ms | 395,01 / 605,56 ms |
 | Bytes alocados | 127.091.824 | 68.415.576 |
 | Scans completos | 45 | 13 |
 | Layouts visuais | 20 | 0 |
+| Layouts, tempo total | 14,03 ms | 0 ms |
+| Refresh do grafo, total / máximo | 252,37 / 31,96 ms | 2,23 / 0,27 ms |
 | Atualizações do índice | 45 | 45 |
 | Total medido de indexação | 2.659,38 ms | 2.881,85 ms |
 | Timer UI p95 / máximo | 31,29 / 68,24 ms | 31,95 / 63,15 ms |
 | Working set ao fim | 271.978.496 B | 275.771.392 B |
 
-Artefatos: `_Output/BrainStability/After/brain-performance.json`. São dois ensaios nesta máquina, não garantia estatística. Alocação caiu 46,2% e CPU 17,3%; frequência de indexação e p95 não melhoraram. Pausas do último GC passaram de 2,81 para 12,13 ms, sem atribuição causal; não foi somado o histórico completo de GC. A instrumentação permite investigar carga maior sem esconder essas limitações.
+Artefatos: `_Output/BrainStability/After/brain-performance.json`. São dois ensaios nesta máquina, não garantia estatística. Alocação caiu 46,2% e CPU 17,3%; frequência de indexação e p95 não melhoraram. Escrita média caiu, mas a pior escrita aumentou. A média é o total medido dividido pelas 32 operações; tempos sobrepostos não são somáveis como duração exclusiva. Refresh teve 20 chamadas antes e 23 depois, com topologia reutilizada. Pausas do último GC passaram de 2,81 para 12,13 ms, sem atribuição causal; não foi somado o histórico completo de GC. Não foi executado benchmark comparável de latência de recuperação: existem traces de busca/recall e contratos de cache/invalidação, sem afirmar ganho numérico nessa latência. A instrumentação permite investigar carga maior sem esconder essas limitações.
 
 ### Etapa 8 — formato, alinhamento e áudio A/B
 
@@ -102,3 +105,69 @@ Resultados executados:
 - Gemini real, texto sintético e voz Charon, volume zero, sem microfone: **36,960 s**, 1.774.082 bytes A/B com SHA-256 idêntico, zero desalinhamentos. **Dois underruns** observados; maiores intervalos de chegada 1.406 / 1.328 / 953 ms. Isso mostra irregularidade de entrega, mas ainda não distingue atraso do provedor, rede ou agendamento do receiver em cada episódio. WAVs e `long-audio.json` em `_Output/BrainStability/LiveAudio` permitem escuta e correlação reproduzível.
 
 A degradação subjetiva do relato original não foi reproduzida com o documento/conversa exatos. Não se atribui timbre ao modelo por exclusão. O defeito de alinhamento demonstrado foi corrigido; gaps de transporte e diagnóstico de voz metálica continuam limites explícitos. Nenhuma equalização/estiramento/resampling foi usada para mascarar som.
+
+### Etapa 9 — validação integrada e relatório final
+
+Build Release da solução, harness e GUI fixture: zero avisos/erros. **424 testes passaram**, zero falhas/ignorados, `_Output/BrainStability/Validated/validated-all.trx` (28 s). A base desta solicitação era 391; foram acrescentados 33 casos. Os testes finais incluem busca/escrita/áudio/ferramentas simuladas simultâneos, cancelamento sem escrita, inicialização lenta sem bloquear o lock do contexto transitório, prompt longo com consulta limitada e identidade conflitante sem fallback. A inicialização legada tem gate próprio; IDs do áudio são consultados sem criar snapshots de texto. Trace de recuperação inclui IDs/scores/modo lexical ou híbrido; underruns agora têm timestamp/ID para correlacionar com chegada dos fragmentos. Continuação de voz supersedida não executa trabalho pendente de outro turno.
+
+Validação nativa final:
+
+- `_Output/BrainStability/NativeApps/result.txt`: declaração literal registrada, referência resolvida por nome, hash revalidado e processo **real** iniciado no fixture GUI descartável. Negação nativa impediu execução mesmo com conhecimento; nova aprovação exata foi necessária. A nota foi promovida somente com PID observado. O harness invocou os controles reais de aprovação, não um clique físico do proprietário. Não houve uso de aplicativo pessoal ou confirmação de janela pronta.
+- `_Output/BrainStability/FinalUi/result.txt`: inicialização oculta/toggle, navegação, grafo/reader/editor, árvore de arquivos, EN/PT, fullscreen, layout mínimo, acessibilidade das ações, animação Pensando e reinícios silenciosos do output passaram. Screenshots nativos foram produzidos; nada capturou desktop/conteúdo de outras aplicações.
+- `_Output/BrainStability/LiveVoices`: Charon, Puck, Kore, Fenrir e Aoede produziram transcript/PCM; sessão persistente e reconexão passaram. Segundo ensaio prolongado, **Aoede**, 28,750 s / 1.380.002 bytes: A/B idênticos, **zero underruns e desalinhamentos**. O primeiro ensaio Charon com dois underruns é conservado acima, sem selecionar apenas o resultado melhor.
+- `_Output/BrainStability/FinalVoice/long-audio.json`: repetição final com **Aoede**, depois dos guards de encerramento, 38,780 s / 1.861.442 bytes, A/B idênticos, zero desalinhamentos e **seis underruns**. Buffer máximo de 333.120 bytes; os 132 registros de chegada cobrem 44,119 s entre primeiro e último fragmento, mais que a duração do áudio. Nos seis esvaziamentos, o próximo fragmento chegou respectivamente 4.513 / 3.368 / 1.214 / 117 / 31 / 2.932 ms depois. O maior intervalo entre chegadas foi 5.297 ms. Isso confirma ausência de dados durante as pausas; não isola provedor/rede de agendamento/processamento local do receiver. O resultado sem underruns da execução anterior não se generaliza.
+- `_Output/BrainStability/VoiceCancellation/result.txt`: oito reconfigurações e quatro descartes do cliente drenaram/cancelaram callbacks de voz concluída, sem notificação tardia, disponibilidade retida após descarte ou captura de microfone. O fechamento marca o cliente antes do cancelamento e bloqueia callbacks que tentariam se vincular a uma nova fonte de operações.
+- Auditoria `Build/Verify-BrainPrivacy.ps1` passou nos vaults isolados: nenhum conteúdo/cache/credencial entrou no índice ou histórico Git. `git diff --check` passou. Os artefatos PCM e dados sintéticos estão somente em `_Output`, ignorado.
+
+#### Matriz A–L
+
+| Requisito | Evidência executada | Limite |
+|---|---|---|
+| A — local ensinado → abrir | `DeclaredInstallationResolves...` + native GUI por nome | Processo observado; prontidão de janela não presumida |
+| B — texto ↔ voz | `BothUserModalitiesShareDurableLearning...`, transcrições parciais/recibos de produção | Transcripts sintéticos; microfone físico não usado |
+| C — correção | `InstallationDeclarationDeduplicatesCorrects...` | Parser explícito/proposta literal, sem interpretação universal |
+| D — deduplicação | mesmo teste e consolidação preexistente | Repetição não eleva confiança |
+| E — persistência | restart com cache novo e testes de recibos/revisões | Crash físico/queda de energia não injetados |
+| F — UI durante escrita | dois benchmarks nativos comparáveis | Jitter de timer, não deadline de frame; p95 não melhorou |
+| G — grafo incremental | 20 layouts → 0 em revisões de corpo; testes de relações existentes | Mudanças de topologia continuam exigindo layout |
+| H — áudio prolongado | 90 s nativo + 36,96 s Charon + 28,75 e 38,78 s Aoede + 90 s determinístico | Timbre subjetivo/driver requerem escuta; ensaios reais tiveram 2, 0 e 6 underruns |
+| I — concorrência | native 90 s/UI/escrita + `AudioReadsWritesRetrievalAndSimulatedTools...` | Ferramentas concorrentes são simuladas nesse caso; lançamento real separado |
+| J — sucesso técnico incompleto | `TechnicalAcceptanceDoesNotInventVerifiedExecution` | Não pretende verificar objetivos arbitrários do usuário |
+| K — cancelamento | fila/worker/propostas, escrita previamente cancelada, áudio truncado/interrompido e 12 casos nativos de reconfiguração/descarte | I/O nativo em andamento não é desfeito |
+| L — recuperação | recibos/replay idempotente, índices corrompidos/removidos e guard de reconciliação | Markdown confirmado permanece fonte; sem falha elétrica física |
+
+#### Código e commits
+
+Componentes criados: `BrainContextBuilder`, parser parcial `BrainLearning.Applications`, `LauraDiagnostics`, `PcmAudioFormat`/`PcmAudioDiagnosticCapture`, `BrainPerformanceSmokeRunner` e os testes de contexto/operacional/modalidade/incremental/concorrência/verificação/áudio. Nenhum componente do produto foi removido. **Nenhuma dependência adicionada.** Nenhuma migração destrutiva de memórias, configuração pessoal, permissões ou identidade visual.
+
+Arquivos do produto modificados/criados:
+
+- `Laura.Core/Brain/BrainService.cs`, `BrainIndex.cs`, `BrainContextBuilder.cs`, `BrainSkillDiscovery.cs`, `BrainApplications.cs`, `BrainConversationMemory.cs`, `BrainLearning.cs`, `BrainLearning.Applications.cs`, `BrainLearning.Proposals.cs`, `BrainMarkdown.cs`.
+- `Laura.Core/Abstractions/IConversationMemory.cs`, `IAssistantTools.cs`; `Laura.Core/Diagnostics/LauraDiagnostics.cs`; `Laura.Core/Conversation/ConversationMessageSource.cs`, `GeminiLiveProtocol.cs`, `PcmPlaybackBuffer.cs`, `PcmAudioDiagnostics.cs`.
+- `Laura.Platform.Windows/Conversation/GeminiLiveClient.cs`, `LiveAudioPlayer.cs`.
+- `Laura.App/Composition/ServiceConfiguration.cs`, `Controls/BrainGraphView.cs`, `Views/MemoryPage.cs`, `Infrastructure/MauiAssistantTools.cs`, `ApplicationLaunchSmokeRunner.cs`, `BrainPerformanceSmokeRunner.cs`, `MauiSmokeRunner.cs`.
+- `Build/Smoke/Program.cs`; `README.md`; este relatório e `laura-cognitive-evolution.md`.
+- `Laura.Core.Tests/Brain/BrainAdaptiveContextTests.cs`, `BrainOperationalLearningTests.cs`, `BrainModalityTests.cs`, `BrainIncrementalTests.cs`, `BrainConcurrencyAcceptanceTests.cs`; `Conversation/ToolVerificationTests.cs`, `AudioStabilityTests.cs`.
+
+Commits atômicos desta evolução: `f21ec76` auditoria/medição; `4f900e1` recuperação; `806b347` aprendizado; `2f68b3a` execução; `fcc06ea` modalidades; `16b112f` concorrência/UI; `853fba7` Brain incremental; `3697e5f` áudio; `4e399fb` identidades conflitantes/lançamento aprendido nativo; `c1b4064` encerramento de voz, correlação e concorrência final. O commit que contém este relatório registra o harness de replay e os resultados de aceitação. `4080246` é o commit anterior solicitado, de clima e Pensando. O log completo é reproduzível com `git log --oneline 4080246^..HEAD`.
+
+#### Pendências e reprodução
+
+O episódio original de timbre metálico com a exportação exata não foi reproduzido. Igualdade A/B localiza transformações/perdas, mas não comprova timbre estável no áudio do provedor, gaps inaudíveis ou comportamento do mixer/dispositivo. Permanecem os dois underruns do primeiro teste real e seis da repetição final. Distinguir espera de recepção de processamento local e repetir a sessão original são os próximos passos de diagnóstico; aumentar arbitrariamente a latência do buffer não foi tratado como correção causal. Corpus pessoal amplo, recuperação ONNX real, sessão de muitas horas e teste físico de fala continuam sem medição nesta entrega. Não foi prometido latência universal nem precisão semântica a partir de fixtures.
+
+Para investigar o episódio, use um prompt local conscientemente selecionado (até 64 KiB) e a mesma voz. `--prompt-file` envia esse conteúdo ao Gemini; sem a flag, usa apenas o texto sintético do jardim. Gravação A/B só ocorre quando `--long-audio-smoke` é explicitamente passado. Os WAVs contêm saída do provedor, sem gravar o microfone. Comparar A/B por escuta e correlacionar timestamps `audio.chunk.arrival` / `audio.underrun` diferencia conteúdo do provedor de gaps/client. A repetição curta abaixo não restaura por si só todo o histórico/estado da sessão original.
+
+```powershell
+dotnet build Laura.sln -c Release --no-restore
+dotnet test Laura.Core.Tests/Laura.Core.Tests.csproj -c Release --no-build --no-restore
+# Referência visual/escrita: escolher uma raiz nova para cada execução.
+Laura.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/Laura.exe --show --storage _Output/BrainPerf/Storage --ui-smoke _Output/BrainPerf --brain-performance-smoke
+# 90 s de áudio nativo junto à UI/Brain: acrescentar --brain-audio-concurrency-smoke ao comando anterior.
+# Callbacks no encerramento: usar --voice-cancellation-smoke com --ui-smoke e armazenamento isolado.
+# A/B com texto sintético e a voz indicada; sem --voice percorre as cinco vozes.
+dotnet run --project Build/Smoke/Laura.Smoke.csproj -c Release --no-build --no-restore -- _Output/AudioReplay --gemini --key-file ../Mark-LV/config/api_keys.json --voice Aoede --long-audio-smoke
+# Replay deliberado: acrescentar --prompt-file <arquivo-consentido.txt>.
+# Usar provider-a.wav, playback-b.wav e long-audio.json somente depois de o processo terminar.
+```
+
+Para B físico: em armazenamento de diagnóstico, ensinar o local por texto, pedir por voz; inverter as modalidades, reiniciar e repetir. Confirmar a nota/correção, hash atual, pedido de autorização e PID antes de declarar sucesso. Para timbre: ouvir primeiro A e depois B em condições iguais; igualdade de bytes não detecta silêncio inserido pelo tempo de chegada, que fica nos contadores/timestamps. Não ativar aprendizado/execução a partir do conteúdo do prompt de diagnóstico.

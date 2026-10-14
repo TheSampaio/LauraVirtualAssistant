@@ -1,5 +1,7 @@
 # Evolução cognitiva da LAURA
 
+Continuação de 2026-10-14: [auditoria de estabilidade, recuperação adaptativa, aprendizado operacional, texto/voz, concorrência e áudio A/B](laura-brain-audio-stability.md). O relatório distingue correções confirmadas, medidas nativas e limites ainda abertos; a história abaixo conserva as evidências de cada fase anterior.
+
 Aquisição direta do GitHub e continuação cognitiva implementadas em 2026-10-14: ver [auditoria, arquitetura e evidências](laura-cognitive-orchestration.md). A referência de 330 testes foi confirmada antes das mudanças; a suíte integrada evoluiu para 377. Os diagnósticos antigos de REA com arquivos preparados continuam documentados como aquisição local, separadamente dos novos testes remotos.
 
 ## Fase 0 — auditoria de 2026-10-13

@@ -54,6 +54,8 @@ Other tools provide real window selection, keyboard/mouse input, browser navigat
 
 **Brain → Manage Brain** selects, creates or migrates a vault, verifies files, rebuilds indices, configures local embeddings and exports/restores private backups. A desktop synchronized folder can be selected; mobile document-provider adapters are not implemented. Markdown skills import disabled and require review. Gemini discovers their real names/descriptions through `list_brain_skills` and loads guidance through `read_brain_skill`, matching task meaning across languages. A disabled or changed skill offers native review of its exact contents in the conversation; it is not reported as a missing ability. Approved text guidance is separate from factual memories and never installs dependencies or executes scripts. Plain notes/caches/backups are private readable data, not encrypted by this feature. Vault writes inside repositories receive exact Git protection. See [Brain architecture, formats, recovery and limits](docs/architecture/laura-brain.md). Run `Build/Verify-BrainPrivacy.ps1` before sharing source; include custom repository vaults with `-BrainDirectories`.
 
+Retrieval adapts to the interaction: a closed set of greetings/time/date messages skips Brain work, while other requests use coherent snapshots and bounded context. Literal installation declarations (including explicit corrections) become inert application knowledge. Opening a learned application resolves a unique executable, revalidates its identity and requires the original native launch authorization; missing, conflicting or changed knowledge does not trigger speculative fallback. Typed input and completed voice transcripts share durable learning, and partial speech preserves the current turn identity. Brain writes publish changed documents and reuse unaffected index/graph state; visual refreshes are coalesced, and body edits keep graph positions. Playback preserves full 16-bit PCM samples across fragment boundaries, validates the native output format and reports observed gaps. See [audit, measured improvements, A/B audio diagnostics and remaining limits](docs/architecture/laura-brain-audio-stability.md).
+
 Reminders persist locally and speak through Gemini while Laura runs; overdue reminders resume on a subsequent launch. They are not OS tasks that wake a closed app. See `docs/architecture/maui-gemini-delivery.md` for the reference capability comparison and limits. The Python plugin loader, mobile dashboard, proactive news monitoring and embedded video player from Mark-LV are not yet implemented. No reference source or assets are bundled.
 
 ## Build and verification
@@ -86,6 +88,12 @@ dotnet run --project Build/Smoke/Laura.Smoke.csproj -- _Output/GeminiSmoke --gem
 
 # Verify the Portuguese thinking acknowledgment, one-shot delivery and cancellation with silent playback.
 dotnet run --project Build/Smoke/Laura.Smoke.csproj -- _Output/ThinkingVoiceSmoke --gemini --key-file ../Mark-LV/config/api_keys.json --quick --thinking-feedback
+
+# Compare native provider/playback PCM using synthetic speech, volume zero and no microphone.
+dotnet run --project Build/Smoke/Laura.Smoke.csproj -- _Output/AudioSmoke --gemini --key-file ../Mark-LV/config/api_keys.json --quick --long-audio-smoke
+
+# Measure 90 seconds of native PCM while Brain writes and the visible UI remain active.
+Laura.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/Laura.exe --show --storage _Output/ConcurrentSmoke/Storage --ui-smoke _Output/ConcurrentSmoke --brain-performance-smoke --brain-audio-concurrency-smoke
 ```
 
 Adding `--live-tools-smoke --import-mark-lv ../Mark-LV/config/api_keys.json` to the isolated UI test explicitly exercises a real Gemini request opening Steam and PCSX2. Do not commit test credentials or private data. Normal launch preserves your protected key and does not import it again.
