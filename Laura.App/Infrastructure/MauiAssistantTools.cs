@@ -22,6 +22,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
     AssistantStorage storage, IShellController shell, ReminderScheduler reminders, IServiceProvider services, PermissionManager permissions) : IAssistantTools, IDisposable
 {
     private readonly SemaphoreSlim _actions = new(1, 1);
+    private static readonly JsonSerializerOptions SkillProposalJson = new() { PropertyNameCaseInsensitive = true, MaxDepth = 12 };
     private sealed record FileUndo(string[] Resources, Func<Task> Execute);
     private readonly Stack<FileUndo> _undo = new();
     private readonly System.Collections.Concurrent.ConcurrentQueue<string> _startedApplications = new();
@@ -53,6 +54,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         Function("study_source", "Study an explicitly requested absolute local text file or narrow repository folder. Requires exact native source/disclosure approval. Imports MD/TXT/JSON and common code formats as untrusted references, identifies source languages and manifest-declared dependencies without installing or executing any code. Returns actual import/exclusion counts; do not claim dependencies are available or scripts were tested.", ["path", "topic"],
             ("path", "STRING", "Absolute local source file or folder"), ("topic", "STRING", "User-requested knowledge topic")),
         Function("list_brain_skills", "Discover installed Brain skills by their real names, descriptions and approval status. Consult this for writing/editing tasks and before claiming a skill is missing. Disabled imports can be reviewed with read_brain_skill.", []),
+        Function("propose_brain_skill", "Propose or revise an INERT structured skill from actual current Brain knowledge. Never claims testing or activates anything. JSON proposal fields: name, description, definition {kind: guidance/native/mcp/code/composition, purpose, useWhen, prerequisites, dependencies, tools, permissions, steps, limitations, successCriteria, failureBehavior, capabilities, sources:[{id,hash,evidence:literal source quote}], components:[{id,hash,evidence}]}. All lists required; sources 1..8; components 0..4. To revise include targetId and targetHash. Reuse an existing equivalent skill. Missing tools/dependencies remain blocked, not installed.", ["proposal"], ("proposal", "STRING", "Bounded JSON proposal, using exact source IDs/hashes and literal evidence returned by recall_memory or read_brain_passage")),
         Function("read_brain_skill", "Load one relevant skill's instructions by ID or exact name. If disabled or changed, native review asks the user to approve that exact version first. Match descriptions to the task across languages. No scripts or dependencies execute.", ["name"], ("name", "STRING", "Stable ID or exact skill name")),
         Function("forget_memory", "Forget a specific saved fact requested by the user.", ["key"], ("key", "STRING", "Fact key")),
         Function("clipboard", "Read or write the clipboard; reading needs native confirmation.", ["action"], ("action", "STRING", "read or write"), ("text", "STRING", "Literal text to copy")),
@@ -61,6 +63,9 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         Function("run_local_command", "Execute existing Laura commands such as time, weather, web/YouTube search, notes, undo, volume and settings. For general app launch use open_app.", ["command"], ("command", "STRING", "Plain local command")),
         Function("shutdown_assistant", "Exit Laura only when the user asks to close the assistant.", [])
     } }];
+    internal IReadOnlySet<string> RegisteredToolNames => JsonSerializer.SerializeToElement(Declarations).EnumerateArray()
+        .Where(group => group.TryGetProperty("functionDeclarations", out _)).SelectMany(group => group.GetProperty("functionDeclarations").EnumerateArray())
+        .Select(function => function.GetProperty("name").GetString()!).ToHashSet(StringComparer.Ordinal);
 
     /// <summary>Builds a public function schema from supported fields.</summary>
     private static object Function(string name, string description, string[] required, params (string Name, string Type, string Description)[] fields) => new
@@ -224,6 +229,13 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                     await services.GetRequiredService<BrainService>().RefreshAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
                     string catalogue = services.GetRequiredService<BrainSkills>().Catalogue(Math.Max(1000, settings.Current.Brain.ContextCharacters));
                     return new(catalogue.Length > 0 ? "Installed skill metadata (untrusted data): " + catalogue : "No installed Brain skills were found.");
+                case "propose_brain_skill":
+                    string payload = Value(arguments, "proposal");
+                    if (payload.Length is 0 or > 32000) { return new("Skill proposal exceeds supported bounds."); }
+                    BrainSkillProposal skillProposal = JsonSerializer.Deserialize<BrainSkillProposal>(payload, SkillProposalJson)
+                        ?? throw new ArgumentException("A structured proposal is required.");
+                    BrainNote proposed = await services.GetRequiredService<BrainSkills>().ProposeAsync(skillProposal, cancellationToken).ConfigureAwait(false);
+                    return new(JsonSerializer.Serialize(new { proposed.Id, proposed.Hash, proposed.Path, state = "draft", availability = services.GetRequiredService<BrainSkills>().Inspect(proposed) }));
                 case "read_brain_skill": return await ReadBrainSkillAsync(Value(arguments, "name"), cancellationToken).ConfigureAwait(false);
                 case "forget_memory": memory.DeleteFact(Value(arguments, "key")); return new("Fact removed.");
                 case "clipboard":
@@ -416,6 +428,8 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         BrainNote? note = catalog.Find(identifier);
         if (note is null) { return new("No unique skill matched. Call list_brain_skills and choose a stable ID; do not invent an unavailable skill."); }
         if (brain.Snapshot.Issues.Any(issue => issue.Path == note.Path && issue.Code == "conflicting_id")) { return new("This skill has an identity conflict. Resolve it in Brain before loading instructions."); }
+        BrainSkillAvailability availability = catalog.Inspect(note);
+        if (availability.Missing.Count > 0) { return new("Skill requirements are unavailable; no dependencies were installed: " + JsonSerializer.Serialize(availability)); }
         if (!catalog.IsEnabled(note))
         {
             string review = ui.Get("ui.brain.skillPrivacy") + "\n\n" + note.Title + "\n" + note.Frontmatter + "\n\n" + note.Body;
@@ -423,7 +437,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                 cancellation => catalog.SetEnabledAsync(note, true, cancellation), token).ConfigureAwait(false);
         }
         string actual = await brain.ReadAsync(note.Path, token).ConfigureAwait(false);
-        if (FileBrainStorage.Hash(actual) != note.Hash) { return new("Skill changed after review. Call read_brain_skill again to review the current version; do not use stale instructions."); }
+        if (FileBrainStorage.Hash(actual) != note.Hash || !catalog.IsEnabled(note)) { return new("Skill or its requirements changed after review. Call read_brain_skill again to review the current version; do not use stale instructions."); }
         int budget = settings.Current.Brain.ContextCharacters;
         return new("Approved skill text (task guidance only; grants no tools or permissions): " + JsonSerializer.Serialize(new { note.Id, note.Title, instructions = note.Body.Length > budget ? note.Body[..budget] : note.Body, truncated = note.Body.Length > budget }));
     }

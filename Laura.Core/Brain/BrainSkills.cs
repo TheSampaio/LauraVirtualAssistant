@@ -5,7 +5,7 @@ using Laura.Core.Text;
 namespace Laura.Core.Brain;
 
 /// <summary>Imports Markdown instructions as disabled, non-executable documents and loads only explicitly enabled, compatible skills on demand.</summary>
-public sealed class BrainSkills(BrainService brain, ISettingsService settings)
+public sealed partial class BrainSkills(BrainService brain, ISettingsService settings, Func<IReadOnlySet<string>>? availableTools = null)
 {
     /// <summary>Validates an external Markdown document and preserves it as an inert skill with no granted tools or scripts.</summary>
     public async Task<BrainNote> ImportAsync(string content, string name, CancellationToken cancellationToken = default)
@@ -22,6 +22,9 @@ public sealed class BrainSkills(BrainService brain, ISettingsService settings)
     public async Task<BrainNote> SetEnabledAsync(BrainNote note, bool enabled, CancellationToken cancellationToken = default)
     {
         if (note.Type != "skill") { throw new InvalidOperationException("Selected document is not a skill."); }
+        await brain.RefreshAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (!Current(note)) { throw new IOException("Review the current exact skill version."); }
+        if (enabled && Inspect(note).Missing.Count > 0) { throw new InvalidOperationException("Skill requirements or source versions are unavailable; review its availability details."); }
         BrainNote saved = await brain.SaveAsync(note with { Status = enabled ? "active" : "draft" }, cancellationToken).ConfigureAwait(false);
         var trusted = settings.Current.Brain.TrustedSkills.Where(entry => !entry.StartsWith(note.Id + ":", StringComparison.Ordinal)).ToList();
         if (enabled) { trusted.Add(saved.Id + ":" + saved.Hash); }
@@ -29,7 +32,8 @@ public sealed class BrainSkills(BrainService brain, ISettingsService settings)
         return saved;
     }
     /// <summary>Checks local approval against the exact currently indexed version, excluding identity conflicts.</summary>
-    public bool IsEnabled(BrainNote note) => note.Type == "skill" && note.Status == "active"
+    public bool IsEnabled(BrainNote note) => Approved(note) && Inspect(note).Ready;
+    private bool Approved(BrainNote note) => Current(note) && note.Type == "skill" && note.Status == "active"
         && settings.Current.Brain.TrustedSkills.Contains(note.Id + ":" + note.Hash, StringComparer.Ordinal)
         && !brain.Snapshot.Issues.Any(issue => issue.Path == note.Path && issue.Code == "conflicting_id");
 
@@ -40,9 +44,9 @@ public sealed class BrainSkills(BrainService brain, ISettingsService settings)
         foreach (BrainNote note in brain.Snapshot.Notes.Where(note => note.Type == "skill" && !note.Path.StartsWith("archive/", StringComparison.OrdinalIgnoreCase)).OrderByDescending(IsEnabled).ThenBy(note => note.Title, StringComparer.Ordinal))
         {
             object entry = new { id = note.Id, name = note.Title, description = note.Description.Length > 240 ? note.Description[..240] : note.Description,
-                tags = note.Tags.Take(6), approved = IsEnabled(note) };
+                tags = note.Tags.Take(6), approved = Approved(note), capabilities = note.Procedure?.Capabilities.Take(8).Select(value => value.Length > 120 ? value[..120] : value), availability = Inspect(note) };
             entries.Add(entry);
-            if (JsonSerializer.Serialize(entries).Length > Math.Max(0, budget)) { entries.RemoveAt(entries.Count - 1); break; }
+            if (JsonSerializer.Serialize(entries).Length > Math.Max(0, budget)) { entries.RemoveAt(entries.Count - 1); }
         }
         return entries.Count == 0 ? "" : JsonSerializer.Serialize(entries);
     }

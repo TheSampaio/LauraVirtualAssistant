@@ -89,7 +89,8 @@ public static class ServiceConfiguration
         services.AddSingleton<BrainExperiences>();
         services.AddSingleton<BrainApplications>();
         services.AddSingleton<BrainSources>();
-        services.AddSingleton<BrainSkills>();
+        services.AddSingleton(provider => new BrainSkills(provider.GetRequiredService<BrainService>(), provider.GetRequiredService<ISettingsService>(),
+            () => provider.GetRequiredService<IAssistantTools>() is MauiAssistantTools native ? native.RegisteredToolNames : new HashSet<string>(StringComparer.Ordinal)));
         services.AddSingleton<BrainConversationMemory>();
         services.AddSingleton<IConversationMemory>(provider => provider.GetRequiredService<BrainConversationMemory>());
         // Explicit live diagnostics read the already protected credential in-process; it is neither printed nor copied into fixtures.

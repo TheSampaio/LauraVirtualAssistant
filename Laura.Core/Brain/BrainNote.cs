@@ -35,6 +35,8 @@ public sealed record BrainNote
     public string Verification { get; init; } = "unspecified";
     /// <summary>Gets an inert local executable hint. It never authorizes execution and is excluded from automatic prompt content.</summary>
     public BrainApplicationReference? Application { get; init; }
+    /// <summary>Gets inert structured procedure requirements and evidence, independent of local approval.</summary>
+    public BrainSkillDefinition? Procedure { get; init; }
     /// <summary>Gets a structured consolidation key, if applicable.</summary>
     public string Key { get; init; } = "";
     /// <summary>Gets the authored revision identity.</summary>

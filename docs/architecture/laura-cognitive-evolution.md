@@ -128,6 +128,22 @@ Validação: **283 testes passaram**, `_Output/CognitivePhase5/phase5-all.trx`; 
 
 Limites: esta unidade cobre arquivos locais; URLs/HTTP, PDF e documentos binários não são readers implementados. Repositórios grandes exigem seleção de subpastas e aquisições incrementais. O detector conservador de credenciais não é um DLP universal e pode excluir exemplos legítimos. Dependências são apenas declaradas, não instaladas/testadas. As próximas fases incluem proposta/evolução de skills, MCP, consolidação, observabilidade/UI e validação integrada final; não são consideradas concluídas por esta entrega incremental.
 
+## Fase 6, unidade inicial — propostas de habilidades e revisão
+
+`BrainSkills.ProposeAsync` e `propose_brain_skill` criam um `Skills/.../SKILL.md` inerte, com `name`, `description` e metadados declarativos `laura_skill`. A definição contém objetivo, situações de uso, pré-requisitos, dependências, ferramentas, permissões descritivas, passos, limitações, critérios de sucesso/falha, capacidades, fontes e componentes. O Core exige fontes atuais com ID/hash e citação literal, campos limitados e um tipo conhecido (`guidance`, `native`, `mcp`, `code`, `composition`). Isso comprova a referência textual, não a correção semântica de toda síntese; a proposta permanece `draft/unverified`.
+
+Revisões exigem ID/hash da habilidade atual, preservam identidade e histórico e voltam a draft. Uma habilidade de mesmo nome normalizado deve ser reutilizada ou revisada explicitamente; ainda não há deduplicação semântica geral. O modelo não recebe uma ferramenta para ativar habilidades. `read_brain_skill` continua exigindo aprovação nativa da versão exata. Aprovar instruções não cria concessões no `PermissionManager`; os passos continuam passando pelos respectivos adaptadores protegidos.
+
+`Inspect` separa aprovação e disponibilidade das instruções. Fontes alteradas, conflitos, ferramentas não registradas, dependências/pré-requisitos não verificados e runtimes MCP/código adicional indisponíveis bloqueiam carregamento/ativação. A lista nativa vem das declarações reais do adaptador, não da memória. Composições referenciam versões exatas de até quatro habilidades; componentes precisam de aprovação válida e são reavaliados com limite de profundidade/ciclos. Desativar/alterar um componente invalida a disponibilidade da composição. Metadados ficam no catálogo, sem carregar todos os corpos no prompt.
+
+Componentes modificados: `BrainNote`, `BrainMarkdown`, `BrainSkills`, novos `BrainSkillDefinition`/`BrainSkillProposals`, registro DI, registro fechado de efeitos, adaptador de ferramentas e diagnóstico cognitivo. Nenhum pacote foi adicionado.
+
+Validação automatizada: **289 testes passaram**, zero falhas/skips, `_Output/CognitivePhase6/phase6-proposals-verified.trx`. Seis novos testes cobrem geração inerte/reabertura, fontes falsas/desatualizadas e limites, revisão/histórico/reaprovação, dependências/ferramentas indisponíveis, composição/desativação e IDs conflitantes em componentes. Os testes legados de importação e revisão de skills também passaram. O build Release não apresentou avisos/erros.
+
+Integração nativa: `_Output/CognitiveNativeSkillProposalsFinal/result.txt` passou por aquisição real REA, proposta fundamentada no episódio real de processo, revisão por `SkillActivation` e leitura das instruções, sem concessões de execução. Uma segunda proposta citou a importação `serveStdio` da fonte TypeScript real do REA e declarou dependência/ferramenta MCP indisponível: ficou bloqueada sem instalação, execução ou solicitação de aprovação enganosa. Não houve teste de uma sessão MCP real nem execução automática do procedimento proposto.
+
+Esta unidade não conclui a Fase 6 inteira: ainda faltam descoberta semântica ranqueada por tarefa, testes operacionais das habilidades propostas e monitoramento estruturado de uso/resultado. `available_instructions` significa instruções aprovadas com requisitos declarados resolvidos pelo mecanismo atual, não tarefa executada com sucesso. Dependências/pré-requisitos externos são conservadoramente bloqueados até haver verificação implementada; não são instalados automaticamente. A composição preserva referências de leitura progressiva, não executa uma sequência autônoma de ferramentas. Skills antigas sem definição estruturada mantêm compatibilidade como `instructions_only`, sem afirmar disponibilidade de dependências que só apareçam no texto.
+
 ## Registro de commits e reprodução
 
 ### Fonte real indicada: REA
@@ -159,6 +175,7 @@ A preparação HTTP é uma ferramenta explícita de validação, não um leitor 
 | `813a9f2` | Experiências observadas e reflexões draft |
 | `6d603d3` | Aplicativos aprendidos e hash no momento da execução |
 | `c5bab8f` | Aquisição local autorizada, sem executar código |
+| `5e493ae` | Aquisição e recuperação de fontes públicas REA fixadas por hash |
 
 O diagnóstico público REA é registrado no commit subsequente desta documentação. Artefatos `_Output` são ignorados pelo Git e não contêm a credencial protegida.
 

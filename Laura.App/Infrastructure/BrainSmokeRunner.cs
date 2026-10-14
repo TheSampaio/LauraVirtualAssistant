@@ -122,6 +122,34 @@ public static class BrainSmokeRunner
                 stage = "public_rea_source_adapter";
                 results.AddRange(await BrainSourceSmokeRunner.RunAsync(services, directory).ConfigureAwait(true));
             }
+            stage = "grounded_skill_proposal_adapter";
+            var skillDefinition = new BrainSkillDefinition("native", "Review observed process termination separately from task success.", ["Inspecting process observations"], [], [], ["system_status"],
+                ["Every protected effect still requires native authorization."], ["Inspect the recorded exit code; state what remains unverified."], ["A process exit does not establish full goal success."],
+                ["Report the actual observed outcome and uncertainty."], ["Keep missing evidence explicit; stop rather than invent a result."], ["process observation review"],
+                [new(episode.Id, episode.Hash, "Observed exit code: 0")], []);
+            using var skillRequest = JsonDocument.Parse(JsonSerializer.Serialize(new { proposal = JsonSerializer.Serialize(new BrainSkillProposal("Synthetic observed process review", "Review actual process evidence without claiming unobserved task success.", skillDefinition)) }));
+            AssistantToolResult skillResult = await tools.ExecuteAsync("propose_brain_skill", skillRequest.RootElement, CancellationToken.None).ConfigureAwait(true);
+            using var skillMetadata = JsonDocument.Parse(skillResult.Text);
+            BrainNote skillDraft = brain.Snapshot.Notes.Single(note => note.Id == skillMetadata.RootElement.GetProperty("Id").GetString());
+            if (skillDraft.Status != "draft" || permissions.PendingRequests.Count != 0 || services.GetRequiredService<BrainSkills>().IsEnabled(skillDraft))
+            { throw new InvalidOperationException("A proposed procedure was activated without review."); }
+            using var skillRead = JsonDocument.Parse(JsonSerializer.Serialize(new { name = skillDraft.Id }));
+            Task<AssistantToolResult> reviewedSkill = tools.ExecuteAsync("read_brain_skill", skillRead.RootElement, CancellationToken.None);
+            await AwaitApprovalAsync(permissions, PermissionRisk.High).ConfigureAwait(true); center.Show(); await Task.Delay(150).ConfigureAwait(true); center.InvokeForSmoke("once");
+            if (!(await reviewedSkill.ConfigureAwait(true)).Text.Contains("Approved skill text", StringComparison.Ordinal) || permissions.Grants.Count != 0)
+            { throw new InvalidOperationException("Skill text review bypassed its exact boundary or granted execution permissions."); }
+            BrainNote? reaSource = brain.Snapshot.Notes.SingleOrDefault(note => note.Source == "external_source" && note.Title == "REA public source study — src/main.ts");
+            BrainSkillDefinition blockedDefinition = skillDefinition with { Kind = "mcp", Dependencies = ["REA"], Tools = ["mcp.rea.inspect"],
+                Purpose = "Verify an approved REA MCP connection before attempting a dependent procedure.",
+                Steps = ["Check the actual approved server/tool inventory.", "Stop and report missing dependencies without installing or starting them."],
+                Sources = reaSource is null ? skillDefinition.Sources : [new(reaSource.Id, reaSource.Hash, "import { serveStdio } from \"@modelcontextprotocol/server/stdio\";")] };
+            using var blockedSkill = JsonDocument.Parse(JsonSerializer.Serialize(new { proposal = JsonSerializer.Serialize(new BrainSkillProposal("Synthetic unavailable MCP review", "Unavailable dependency diagnostic.", blockedDefinition)) }));
+            using var blockedMetadata = JsonDocument.Parse((await tools.ExecuteAsync("propose_brain_skill", blockedSkill.RootElement, CancellationToken.None).ConfigureAwait(true)).Text);
+            using var blockedRead = JsonDocument.Parse(JsonSerializer.Serialize(new { name = blockedMetadata.RootElement.GetProperty("Id").GetString() }));
+            AssistantToolResult unavailable = await tools.ExecuteAsync("read_brain_skill", blockedRead.RootElement, CancellationToken.None).ConfigureAwait(true);
+            if (!unavailable.Text.Contains("unavailable_tool:mcp.rea.inspect", StringComparison.Ordinal) || permissions.PendingRequests.Count != 0)
+            { throw new InvalidOperationException("Unavailable MCP procedure was offered as operational."); }
+            results.Add("Actual propose_brain_skill created an inert procedure grounded in the observed process episode. Native exact-version review loaded instructions without execution grants. An MCP/REA-dependent proposal stayed blocked without installation or an approval prompt.");
             if (args.Contains("--brain-live-smoke", StringComparer.Ordinal))
             {
                 var live = services.GetRequiredService<GeminiLiveClient>(); if (!live.IsAvailable) { throw new InvalidOperationException("A configured model credential is required for live diagnostics."); }
