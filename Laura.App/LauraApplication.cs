@@ -82,6 +82,7 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
             services.GetRequiredService<ILocalizer>().SetCulture(settings.Current.ResolveCulture());
             services.GetRequiredService<IUiLocalizer>().SetCulture(settings.Current.ResolveUiCulture());
             _brainStartup = WarmBrainAsync();
+            services.GetRequiredService<IAssistantEngine>().StateChanged += OnEngineStateChanged;
             using (PerformanceTrace.Measure("startup.engine-and-history")) { await services.GetRequiredService<IAssistantEngine>().StartAsync().ConfigureAwait(true); }
             if (_stopping) { interactive.Dispose(); return; }
             await services.GetRequiredService<ReminderScheduler>().StartAsync().ConfigureAwait(true);
@@ -132,6 +133,14 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
             { await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync("Laura", "Startup failed. Check settings and the local data directory.", "OK").ConfigureAwait(true); }
         }
     }
+    /// <summary>Includes startup source collection in the same delayed voice feedback as model processing.</summary>
+    private void OnEngineStateChanged(object? sender, AssistantState state)
+    {
+        var live = services.GetRequiredService<GeminiLiveClient>();
+        if (state == AssistantState.Thinking) { live.SetThinking(); }
+        else if ((state is AssistantState.Ready or AssistantState.Speaking or AssistantState.Stopped) && live.IsThinking)
+        { live.ReturnToReady(); }
+    }
     /// <summary>Prepares Markdown and legacy facts away from the critical interactive startup path.</summary>
     private async Task WarmBrainAsync()
     {
@@ -155,6 +164,7 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Stop();
         services.GetRequiredService<WindowsApprovalCenter>().Dispose();
         WindowsDialogs.CloseAll();
+        services.GetRequiredService<IAssistantEngine>().StateChanged -= OnEngineStateChanged;
         _shortcuts?.Dispose(); _shortcuts = null;
         _screenshotShortcuts?.Dispose(); _screenshotShortcuts = null;
         await services.GetRequiredService<ScreenshotCoordinator>().StopAsync().ConfigureAwait(true);

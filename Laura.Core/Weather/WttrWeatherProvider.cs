@@ -18,6 +18,7 @@ public sealed class WttrWeatherProvider : IWeatherProvider
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<WttrWeatherProvider> _logger;
+    private readonly IClock _clock;
 
     /// <summary>
     /// Initializes the provider.
@@ -26,13 +27,15 @@ public sealed class WttrWeatherProvider : IWeatherProvider
     ///     httpClient: Client used for the request; its timeout bounds the wait.
     ///     logger: Destination for diagnostic logs.
     /// </summary>
-    public WttrWeatherProvider(HttpClient httpClient, ILogger<WttrWeatherProvider> logger)
+    public WttrWeatherProvider(HttpClient httpClient, ILogger<WttrWeatherProvider> logger, IClock clock)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(clock);
 
         _httpClient = httpClient;
         _logger = logger;
+        _clock = clock;
     }
 
     /// <inheritdoc />
@@ -52,8 +55,9 @@ public sealed class WttrWeatherProvider : IWeatherProvider
                 .ParseAsync(stream, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
-            return Parse(document.RootElement, UsesImperialUnits(culture));
+            return Parse(document.RootElement, UsesImperialUnits(culture), DateOnly.FromDateTime(_clock.Now.DateTime));
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception exception) when (exception is HttpRequestException or JsonException or OperationCanceledException)
         {
             _logger.LogWarning(exception, "Could not fetch the weather from wttr.in.");
@@ -68,14 +72,17 @@ public sealed class WttrWeatherProvider : IWeatherProvider
     ///     root: Root element of the wttr.in response.
     ///     imperial: <see langword="true"/> to report in Fahrenheit and the imperial
     ///     wording, otherwise Celsius.
+    ///     today: Local calendar day required for the daily forecast.
     ///
     /// Returns:
     ///     The parsed report, or <see langword="null"/> when the payload is missing
     ///     the expected fields.
     /// </summary>
-    private static WeatherReport? Parse(JsonElement root, bool imperial)
+    private static WeatherReport? Parse(JsonElement root, bool imperial, DateOnly today)
     {
-        if (!root.TryGetProperty("current_condition", out JsonElement conditions)
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty("current_condition", out JsonElement conditions)
+            || conditions.ValueKind != JsonValueKind.Array
             || conditions.GetArrayLength() == 0)
         {
             return null;
@@ -83,15 +90,30 @@ public sealed class WttrWeatherProvider : IWeatherProvider
 
         JsonElement current = conditions[0];
 
-        string description = current.TryGetProperty("weatherDesc", out JsonElement desc) && desc.GetArrayLength() > 0
-            ? desc[0].GetProperty("value").GetString() ?? string.Empty
-            : string.Empty;
+        if (current.ValueKind != JsonValueKind.Object) { return null; }
+        string description = ReadFirstValue(current, "weatherDesc");
 
         string temperature = FormatTemperature(current, imperial ? "temp_F" : "temp_C", imperial);
         string feelsLike = FormatTemperature(current, imperial ? "FeelsLikeF" : "FeelsLikeC", imperial);
         string location = ReadLocation(root);
 
-        return new WeatherReport(location, description, temperature, feelsLike);
+        var report = new WeatherReport(location, description, temperature, feelsLike);
+        if (root.TryGetProperty("weather", out JsonElement days) && days.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement day in days.EnumerateArray())
+            {
+                if (day.ValueKind != JsonValueKind.Object || !day.TryGetProperty("date", out JsonElement date)
+                    || date.ValueKind != JsonValueKind.String
+                    || !DateOnly.TryParseExact(date.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly forecastDate)
+                    || forecastDate != today) { continue; }
+                string minimum = FormatTemperature(day, imperial ? "mintempF" : "mintempC", imperial);
+                string maximum = FormatTemperature(day, imperial ? "maxtempF" : "maxtempC", imperial);
+                if (minimum.Length > 0 && maximum.Length > 0)
+                { report = report with { ForecastDate = forecastDate, MinimumTemperature = minimum, MaximumTemperature = maximum }; }
+                break;
+            }
+        }
+        return report;
     }
 
     /// <summary>
@@ -113,8 +135,10 @@ public sealed class WttrWeatherProvider : IWeatherProvider
             return string.Empty;
         }
 
+        if (value.ValueKind != JsonValueKind.String
+            || !decimal.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out decimal temperature)) { return string.Empty; }
         string unit = imperial ? "°F" : "°C";
-        return $"{value.GetString()}{unit}";
+        return $"{temperature.ToString(CultureInfo.InvariantCulture)}{unit}";
     }
 
     /// <summary>
@@ -128,16 +152,21 @@ public sealed class WttrWeatherProvider : IWeatherProvider
     /// </summary>
     private static string ReadLocation(JsonElement root)
     {
-        if (!root.TryGetProperty("nearest_area", out JsonElement areas) || areas.GetArrayLength() == 0)
+        if (!root.TryGetProperty("nearest_area", out JsonElement areas) || areas.ValueKind != JsonValueKind.Array || areas.GetArrayLength() == 0)
         {
             return string.Empty;
         }
 
         JsonElement area = areas[0];
-        return area.TryGetProperty("areaName", out JsonElement names) && names.GetArrayLength() > 0
-            ? names[0].GetProperty("value").GetString() ?? string.Empty
-            : string.Empty;
+        return ReadFirstValue(area, "areaName");
     }
+
+    /// <summary>Reads optional provider text without assuming malformed values have the expected shape.</summary>
+    private static string ReadFirstValue(JsonElement parent, string field) =>
+        parent.ValueKind == JsonValueKind.Object && parent.TryGetProperty(field, out JsonElement values)
+        && values.ValueKind == JsonValueKind.Array && values.GetArrayLength() > 0
+        && values[0].ValueKind == JsonValueKind.Object && values[0].TryGetProperty("value", out JsonElement value)
+        && value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : "";
 
     /// <summary>
     /// Decides whether a culture prefers imperial units.

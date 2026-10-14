@@ -99,6 +99,20 @@ public static class MauiSmokeRunner
             await CaptureAsync(window, Path.Combine(directory, "hud-conversation-en-US.png")).ConfigureAwait(true);
             foreach (var mode in new[] { Controls.ReactorMode.Listening, Controls.ReactorMode.Thinking, Controls.ReactorMode.Working, Controls.ReactorMode.Speaking })
             { main.PreviewReactorForSmoke(mode); await Task.Delay(180).ConfigureAwait(true); await CaptureAsync(window, Path.Combine(directory, "reactor-" + mode + ".png")).ConfigureAwait(true); }
+            main.PreviewReactorForSmoke(Controls.ReactorMode.Thinking);
+            main.PreviewReactorAngleForSmoke(0); await Task.Delay(100).ConfigureAwait(true);
+            byte[] thinkingStart = await VisualPixelsAsync(main.ReactorVisualForSmoke()).ConfigureAwait(true);
+            await CaptureAsync(window, Path.Combine(directory, "thinking-frame-0.png")).ConfigureAwait(true);
+            main.PreviewReactorAngleForSmoke(22.5f); await Task.Delay(100).ConfigureAwait(true);
+            byte[] thinkingNext = await VisualPixelsAsync(main.ReactorVisualForSmoke()).ConfigureAwait(true);
+            await CaptureAsync(window, Path.Combine(directory, "thinking-frame-1.png")).ConfigureAwait(true);
+            if (thinkingStart.Length == 0 || thinkingStart.Length != thinkingNext.Length || thinkingStart.SequenceEqual(thinkingNext))
+            { throw new InvalidOperationException("Thinking animation did not render distinct non-empty frames."); }
+            main.PreviewReactorAngleForSmoke(Controls.AssistantCoreDrawable.CycleDegrees - .001f); await Task.Delay(100).ConfigureAwait(true);
+            byte[] thinkingEnd = await VisualPixelsAsync(main.ReactorVisualForSmoke()).ConfigureAwait(true);
+            double thinkingDifference = thinkingStart.Zip(thinkingEnd, (first, last) => Math.Abs(first - last)).Average();
+            if (thinkingDifference > .25) { throw new InvalidOperationException("Thinking animation jumps at its cycle boundary."); }
+            await File.WriteAllTextAsync(Path.Combine(directory, "thinking-animation.txt"), "Distinct native thinking frames and continuous cycle boundary verified.").ConfigureAwait(true);
             main.PreviewReactorForSmoke(null);
             main.PreviewReactorAngleForSmoke(0); await Task.Delay(100).ConfigureAwait(true);
             byte[] firstFrame = await VisualPixelsAsync(main.ReactorVisualForSmoke()).ConfigureAwait(true);

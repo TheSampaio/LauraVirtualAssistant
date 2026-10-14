@@ -123,6 +123,7 @@ public static class ServiceConfiguration
         services.AddSingleton<WakeBriefing>();
         services.AddSingleton<IBriefingContributor, NewsBriefingContributor>();
         services.AddSingleton<IBriefingContributor, CurrencyBriefingContributor>();
+        services.AddSingleton<IBriefingContributor, WeatherBriefingContributor>();
         services.AddSingleton<IBriefingContributor, ReminderBriefingContributor>();
         services.AddSingleton<ClapWakeCoordinator>();
         services.AddSingleton<MarkLvConfigurationImporter>();

@@ -58,7 +58,7 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <param name="clock">Source of date and time.</param>
     /// <param name="logger">Destination for diagnostic logs.</param>
     /// <param name="memory">Optional unified persistent history.</param>
-    /// <param name="startupBriefing">Optional verified news, currency and reminder sources for the first opening in this process.</param>
+    /// <param name="startupBriefing">Optional verified weather, news, currency and reminder sources for the first opening in this process.</param>
     public AssistantEngine(
         ISpeechSynthesizer synthesizer,
         ISkillDispatcher dispatcher,

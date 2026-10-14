@@ -54,6 +54,44 @@ if (args.Contains("--gemini", StringComparer.Ordinal))
             Console.WriteLine("Persistent conversation and reconnect passed.");
         }
     }
+    if (args.Contains("--thinking-feedback", StringComparer.Ordinal))
+    {
+        await settings.UpdateAsync(settings.Current with { Culture = "pt-BR", Voice = settings.Current.Voice with { Volume = 0 } }, timeout.Token);
+        await live.ReconfigureAsync();
+        long feedbackBytes = 0; int feedbackMessages = 0;
+        void CountFeedback(object? sender, byte[] pcm) => Interlocked.Add(ref feedbackBytes, pcm.Length);
+        void CountMessage(object? sender, ConversationMessage message) => Interlocked.Increment(ref feedbackMessages);
+        live.AudioOutputReceived += CountFeedback; live.MessageReceived += CountMessage;
+        try
+        {
+            live.SetThinking(); await Task.Delay(300, timeout.Token); live.ReturnToReady();
+            await Task.Delay(2500, timeout.Token);
+            if (Interlocked.Read(ref feedbackBytes) != 0) { throw new InvalidOperationException("A quick response played stale thinking feedback."); }
+            live.SetThinking();
+            using var feedbackTimeout = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
+            feedbackTimeout.CancelAfter(TimeSpan.FromSeconds(30));
+            while (live.LastReadAloudTranscript != "Só um minuto." || live.IsSpeaking)
+            { await Task.Delay(100, feedbackTimeout.Token); }
+            long completed = Interlocked.Read(ref feedbackBytes);
+            if (completed == 0 || !live.IsThinking || feedbackMessages != 0 || live.IsListening)
+            { throw new InvalidOperationException("Thinking feedback failed audio, state, history or microphone verification."); }
+            live.SetThinking(); await Task.Delay(2500, timeout.Token);
+            if (Interlocked.Read(ref feedbackBytes) != completed) { throw new InvalidOperationException("Thinking feedback repeated in the same state."); }
+            live.ReturnToReady();
+            live.SetThinking();
+            while (Interlocked.Read(ref feedbackBytes) == completed) { await Task.Delay(10, feedbackTimeout.Token); }
+            live.ReturnToReady(); await Task.Delay(500, timeout.Token);
+            long canceled = Interlocked.Read(ref feedbackBytes);
+            if (live.IsSpeaking) { throw new InvalidOperationException("Thinking audio remained buffered after the response started."); }
+            await Task.Delay(1500, timeout.Token);
+            if (Interlocked.Read(ref feedbackBytes) != canceled) { throw new InvalidOperationException("Canceled thinking feedback kept producing audio."); }
+            live.SetThinking(); await Task.Delay(300, timeout.Token); live.Interrupt(); live.ReturnToReady();
+            await Task.Delay(2500, timeout.Token);
+            if (Interlocked.Read(ref feedbackBytes) != canceled) { throw new InvalidOperationException("Interrupted thinking feedback still played."); }
+            Console.WriteLine("Native Portuguese thinking voice, fast-response cancellation, one-shot delivery, unchanged thinking state, empty history and closed microphone verified.");
+        }
+        finally { live.ReturnToReady(); live.AudioOutputReceived -= CountFeedback; live.MessageReceived -= CountMessage; }
+    }
     if (args.Contains("--vad", StringComparer.Ordinal))
     {
         await settings.UpdateAsync(settings.Current with { Culture = "pt-BR" }, timeout.Token);

@@ -58,6 +58,22 @@ public sealed class AssistantCoreDrawable : IDrawable
         canvas.DrawString("L A U R A", cx - radius / 2, cy - 12, radius, 28, HorizontalAlignment.Center, VerticalAlignment.Center);
         canvas.FontColor = accent; canvas.FontSize = 9;
         canvas.DrawString("PERSONAL AI", cx - radius / 2, cy + 14, radius, 20, HorizontalAlignment.Center, VerticalAlignment.Center);
+        if (Mode == ReactorMode.Thinking)
+        {
+            // Three phased dots and an orbit make processing distinct from idle/listening.
+            for (int dot = 0; dot < 3; dot++)
+            {
+                float wave = (1 + MathF.Sin((Angle * 4 - dot * 120) * MathF.PI / 180)) / 2;
+                canvas.FillColor = accent.WithAlpha(.3f + wave * .7f);
+                canvas.FillCircle(cx + (dot - 1) * radius * .11f, cy + radius * .29f, radius * (.018f + wave * .009f));
+            }
+            for (int trail = 5; trail >= 0; trail--)
+            {
+                float theta = (Angle * 2 - trail * 10) * MathF.PI / 180;
+                canvas.FillColor = accent.WithAlpha(1 - trail * .14f);
+                canvas.FillCircle(cx + MathF.Cos(theta) * radius * .49f, cy + MathF.Sin(theta) * radius * .49f, radius * .018f);
+            }
+        }
         canvas.StrokeColor = accent; canvas.StrokeSize = 1;
         for (int i = 0; i < 4; i++)
         { float theta = i * MathF.PI / 2; canvas.DrawLine(cx + MathF.Cos(theta) * radius * 1.02f, cy + MathF.Sin(theta) * radius * 1.02f, cx + MathF.Cos(theta) * radius * 1.08f, cy + MathF.Sin(theta) * radius * 1.08f); }

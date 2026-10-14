@@ -7,4 +7,12 @@ namespace Laura.Core.Weather;
 /// <param name="Description">Short condition text, such as "Partly cloudy".</param>
 /// <param name="Temperature">Current temperature, already formatted with its unit.</param>
 /// <param name="FeelsLike">Apparent temperature, already formatted with its unit.</param>
-public sealed record WeatherReport(string Location, string Description, string Temperature, string FeelsLike);
+public sealed record WeatherReport(string Location, string Description, string Temperature, string FeelsLike)
+{
+    /// <summary>Gets the local calendar date of the daily forecast, when available.</summary>
+    public DateOnly? ForecastDate { get; init; }
+    /// <summary>Gets today's predicted minimum, including its unit.</summary>
+    public string MinimumTemperature { get; init; } = "";
+    /// <summary>Gets today's predicted maximum, including its unit.</summary>
+    public string MaximumTemperature { get; init; } = "";
+}
