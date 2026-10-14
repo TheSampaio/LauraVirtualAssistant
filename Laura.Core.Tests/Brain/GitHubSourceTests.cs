@@ -155,6 +155,20 @@ public sealed partial class BrainTests
         Assert.Equal(3, reused.Reused); Assert.Equal(3, reused.HttpRequests); Assert.Equal(document.Hash, restarted.Snapshot.Notes.Single(note => note.Id == document.Id).Hash);
     }
 
+    [Fact]
+    public async Task CancellationAfterFirstDurableRemoteFileRetainsThatNewKnowledgeAcrossReload()
+    {
+        using var handler = new RepositoryFixture(false); using var http = new HttpClient(handler);
+        BrainService brain = Create(); using var permissions = SourcePermissions(); using var cancellation = new CancellationTokenSource();
+        brain.Changed += (_, _) => { if (brain.Snapshot.Notes.Any(note => note.Source == "external_github")) { cancellation.Cancel(); } };
+        var acquisition = new BrainSources(brain, permissions, new GitHubBrainSource(http)).AcquireGitHubAsync("https://github.com/example/cancel", "Synthetic interrupted source", "example.invalid", cancellationToken: cancellation.Token);
+        await ApproveRemoteAsync(permissions, acquisition); await Assert.ThrowsAnyAsync<OperationCanceledException>(() => acquisition);
+        BrainNote retained = Assert.Single(brain.Snapshot.Notes, note => note.Source == "external_github");
+        await brain.DisposeAsync(); _services.Remove(brain); BrainService restarted = Create(cache: "interrupted-source-restart"); await restarted.InitializeAsync();
+        Assert.Contains(restarted.Snapshot.Notes, note => note.Id == retained.Id && note.Hash == retained.Hash);
+        Assert.Empty(permissions.PendingRequests); Assert.Empty(permissions.Grants);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(1)]

@@ -52,3 +52,61 @@ Arquivos remotos são referências, não declarações do proprietário. Wikilin
 Evidências de código: [aquisição e gates](../../Laura.Core/Brain/BrainSources.Remote.cs), [estado e seleção limitada](../../Laura.Core/Engine/CognitiveTaskRun.cs), [catálogo/despacho/esquema](../../Laura.App/Infrastructure/MauiAssistantTools.cs), [continuação textual e de voz](../../Laura.Platform.Windows/Conversation/GeminiLiveClient.cs), [propostas e requisitos](../../Laura.Core/Brain/BrainSkillProposals.cs).
 
 Suíte integrada: **376 testes passaram**, zero falhas/ignorados (`_Output/AutonomyFinalRegression/final-regression.trx`). Builds Debug e Release passaram sem warnings/erros. Auditoria de privacidade confirmou que os vaults de diagnóstico são ignorados e não aparecem no índice/histórico Git. Resultados públicos e do modelo real abaixo são independentes dessa suíte.
+
+## Demonstração final: solicitação original e processo reiniciado
+
+Entrada real enviada ao Gemini Live: **“Laura, estude e aprenda essa habilidade: https://github.com/morluto/rea”**. Sem microfone, áudio em volume zero, armazenamento isolado e credencial protegida existente usada somente em processo. O harness invocou os controles nativos de aprovação para os escopos públicos concretos; isso verifica a UI de aprovação, não um clique físico feito pelo proprietário.
+
+Evidências: [resultado](../../_Output/AutonomyLiveFinal/result.txt), [estado/observações](../../_Output/AutonomyLiveFinal/live-task.json), [métricas](../../_Output/AutonomyLiveFinal/live-metrics.json), [conversa](../../_Output/AutonomyLiveFinal/live-answer.txt), [recuperação em outro processo](../../_Output/AutonomyLiveFinal/github-restart-result.txt).
+
+| Observação | Resultado confirmado |
+| --- | --- |
+| Revisão/atribuição | `morluto/rea` em `f75b1a416ba67b8421e7dbd248160afedb79581f`, licença declarada MIT, bytes Git e SHA-256 verificados |
+| Cobertura | 3.774 arquivos ordinários inventariados; 11 referências adquiridas, cobertura parcial |
+| Rede/latência | 15 requisições; 1.187.051 bytes recebidos; aquisição 15.201 ms; tarefa observada 75.420 ms |
+| Escolhas reais do modelo | `study_github_repository`, `read_brain_passage`, duas tentativas de `propose_brain_skill` |
+| Coordenação nativa | `recall_memory`, `list_brain_skills`; uma continuação de geração; seis chamadas totais de ferramentas |
+| Leitura comprovada | Uma fonte expandida explicitamente: README, até 4.000 caracteres; a recuperação forneceu passagens relacionadas. Não se afirma que os 11 arquivos foram integralmente interpretados pelo modelo |
+| Validação de proposta | Primeira tentativa recusada por declarar ferramentas/dependências como guidance; o modelo corrigiu o tipo para MCP dentro do mesmo objetivo |
+| Draft real | `Skills/003088BDA83DD4C7/SKILL.md`, ID `c467efd1-60a7-44d8-ac6f-5b89f988b478`, duas fontes atuais com citações literais: README e package.json |
+| Disponibilidade | `Approved=false`, `Ready=false`, estado blocked: dependências/pré-requisitos e runtime externo não verificados. Não equivale a comprovar ausência de Node.js no computador |
+| Persistência | Processo Release 11932 encerrou; processo Debug 18068 reconstruiu índice e recuperou 13 IDs/caminhos/hashes exatos, incluindo draft. Não repetiu aquisição ou autorização |
+
+Arquivos efetivamente **adquiridos e persistidos** nessa conversa:
+
+- `LICENSE`, `README.md`, `package.json`, `THIRD_PARTY_NOTICES.md`
+- `website/public/examples/notes-electron/package.json`
+- `docs/adb-device-analysis.md`, `docs/android-analysis.md`, `docs/apktool-resource-analysis.md`
+- `src/main.ts`, `src/adb/AdbConfiguration.test.ts`, `src/adb/AdbConfiguration.ts`
+
+São referências recuperáveis sobre o framework, integração MCP, dependências declaradas e documentação Android/ADB; permanecem fontes externas não verificadas. A coleção contém 11 relações `derived_from` de aquisição; a proposta contém duas relações de proveniência para fontes. Nenhuma associação factual com conhecimento do proprietário foi inventada. O texto do draft é gerado pelo modelo e requer revisão de conteúdo/escopo, além da resolução dos requisitos. Nenhum código, script, instalação ou servidor REA foi executado, e não se declara habilidade operacional de engenharia reversa.
+
+O GitHub limitou a última leitura desse lote. A falha parcial contém reset `2026-10-14T12:09:42Z` (**09:09:42 de 2026-10-14, America/Sao_Paulo**); os 11 documentos anteriores foram conservados. A repetição `_Output/AutonomyPublicFinal` foi bloqueada nesse mesmo limite, sem contornar autenticação ou procurar tokens. Esse horário registra o evento observado, não um bloqueio permanente.
+
+Generalização pública anterior: [resultado de dois repositórios](../../_Output/AutonomyPublic/result.txt) confirmou REA e **dotnet/ClangSharp**, de estrutura C# diferente. ClangSharp em `0c1c4098a7aab7cb392a2367b75d447bbac05d58`, licença MIT: 12 documentos, 3.078 arquivos inventariados, 15 requisições, 1.159.882 bytes e 16.024 ms. O primeiro reinício público recuperou 27 versões exatas. A proposta produzida por esse harness é integração direta de adaptadores e está separada da proposta efetivamente criada pelo Gemini na demonstração final.
+
+Regressão final: **377 testes passaram**, zero falhas/ignorados (`_Output/AutonomyAcceptance/acceptance-all.trx`), incluindo cancelamento imediatamente após o primeiro arquivo remoto realmente persistido e recuperação desse arquivo em um serviço com índice novo. Base anterior: 330 testes. Não se estima taxa universal de seleção/conclusão a partir desses poucos ensaios; houve recusas de schema/evidência e uma conversa sem resposta final nos builds intermediários, preservados nos diretórios de diagnóstico. O ensaio final confirmou a sequência acima.
+
+## Limites restantes e reprodução
+
+- Somente repositórios públicos github.com; autenticação privada e GitHub Enterprise não implementados.
+- Inventário acima de 1 MiB/5.000 entradas é limitado ou recusado antes de importar. Travessia remota paginada de subárvores e análise integral de repositórios maiores não implementadas.
+- Não há extração conceitual independente do Gemini nem criação automática de relações semânticas factuais. Recuperação pode ser lexical quando ONNX não está configurado.
+- Dependências gerais permanecem **não verificadas**; somente conexões MCP configuradas têm verificador operacional existente. Instalação, ativação e execução são ações separadas.
+- O estado de tarefa é transitório; restart conserva fontes, versões e drafts, mas não reexecuta nem restaura aprovação pendente. A evidência atual de voz é código/contrato compartilhado, não conversa física com microfone.
+- Não foram medidos consumo de RAM/contexto em escala, precisão semântica em corpus pessoal nem taxa de conclusão generalizada. Contadores de rede, arquivos, leituras, ferramentas, continuações e latência estão nos artefatos.
+
+Os processos normais LAURA estavam ausentes na inspeção CIM autorizada; as instâncias verificadas foram explicitamente identificadas por caminho/PID/argumentos e usaram armazenamento isolado. Debug e Release atuais foram compilados, e o reinício final foi feito com Debug. Não se presume que uma instância aberta no futuro seja automaticamente atualizada sem reiniciar.
+
+```powershell
+dotnet build Laura.sln -c Debug
+dotnet test Laura.Core.Tests/Laura.Core.Tests.csproj -c Release
+# Usar uma raiz nova; todos os arquivos de diagnóstico permanecem locais/ignorados.
+Laura.App/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Laura.exe --storage <root> --brain-smoke <root> --brain-github-smoke
+# Opt-in: somente texto sintético/fontes públicas, usando a credencial protegida já configurada.
+Laura.App/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Laura.exe --storage <root> --brain-smoke <root> --brain-github-smoke --brain-live-smoke
+# Depois do processo anterior encerrar; não realiza nova aquisição.
+Laura.App/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Laura.exe --storage <root> --brain-smoke <root> --brain-github-smoke --github-restart
+```
+
+Commits funcionais: `1134661` (aquisição remota) e `641e7ad` (catálogo, estado, continuação, recuperação e proposta integrada). O commit subsequente registra o harness público/Gemini e as evidências finais. Nenhum push/PR, instalação ou alteração no Brain pessoal foi realizado.

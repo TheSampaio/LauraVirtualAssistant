@@ -1,6 +1,6 @@
 # Evolução cognitiva da LAURA
 
-Aquisição direta do GitHub e continuação cognitiva implementadas em 2026-10-14: ver [auditoria, arquitetura e evidências](laura-cognitive-orchestration.md). A referência de 330 testes foi confirmada antes das mudanças; a suíte integrada evoluiu para 376. Os diagnósticos antigos de REA com arquivos preparados continuam documentados como aquisição local, separadamente dos novos testes remotos.
+Aquisição direta do GitHub e continuação cognitiva implementadas em 2026-10-14: ver [auditoria, arquitetura e evidências](laura-cognitive-orchestration.md). A referência de 330 testes foi confirmada antes das mudanças; a suíte integrada evoluiu para 377. Os diagnósticos antigos de REA com arquivos preparados continuam documentados como aquisição local, separadamente dos novos testes remotos.
 
 ## Fase 0 — auditoria de 2026-10-13
 

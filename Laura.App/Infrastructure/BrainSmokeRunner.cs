@@ -31,6 +31,12 @@ public static class BrainSmokeRunner
                 Permissions = settings.Current.Permissions with { Voice = ApprovalVoiceMode.Never }, Screenshots = settings.Current.Screenshots with { ShortcutsEnabled = false } }).ConfigureAwait(true);
             var memory = services.GetRequiredService<IConversationMemory>(); var tools = services.GetRequiredService<IAssistantTools>(); var permissions = services.GetRequiredService<PermissionManager>();
             int guiFixture = Array.IndexOf(args, "--gui-launch-smoke");
+            if (args.Contains("--brain-github-smoke", StringComparer.Ordinal))
+            {
+                stage = "public_github_acquisition_and_orchestration";
+                results.AddRange(await BrainGitHubSmokeRunner.RunAsync(services, directory).ConfigureAwait(true));
+                await File.WriteAllLinesAsync(Path.Combine(directory, args.Contains("--github-restart", StringComparer.Ordinal) ? "github-restart-result.txt" : "result.txt"), PassedHeader.Concat(results)).ConfigureAwait(true); return;
+            }
             if (args.Contains("--brain-restart-smoke", StringComparer.Ordinal))
             {
                 stage = "actual_process_restart_recovery"; results.AddRange(await BrainRestartSmokeRunner.VerifyAsync(services, directory).ConfigureAwait(true));
@@ -215,7 +221,8 @@ public static class BrainSmokeRunner
             await File.WriteAllLinesAsync(Path.Combine(directory, "result.txt"), PassedHeader.Concat(results)).ConfigureAwait(true);
         }
         catch (Exception error)
-        { await File.WriteAllLinesAsync(Path.Combine(directory, Environment.GetCommandLineArgs().Contains("--brain-restart-smoke", StringComparer.Ordinal) ? "restart-result.txt" : "result.txt"), new[] { "FAIL: " + stage + " (" + error.GetType().Name + "). No raw provider error or credential was logged." }.Concat(results)).ConfigureAwait(true); }
+        { await File.WriteAllLinesAsync(Path.Combine(directory, Environment.GetCommandLineArgs().Contains("--brain-restart-smoke", StringComparer.Ordinal) ? "restart-result.txt"
+            : Environment.GetCommandLineArgs().Contains("--github-restart", StringComparer.Ordinal) ? "github-restart-result.txt" : "result.txt"), new[] { "FAIL: " + stage + " (" + error.GetType().Name + "). No raw provider error or credential was logged." }.Concat(results)).ConfigureAwait(true); }
         finally { services.GetRequiredService<Laura.Core.Abstractions.IShellController>().Shutdown(); }
     }
     private static async Task AwaitApprovalAsync(PermissionManager permissions, PermissionRisk risk = PermissionRisk.Critical)
