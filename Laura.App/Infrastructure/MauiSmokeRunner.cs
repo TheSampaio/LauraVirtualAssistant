@@ -295,7 +295,7 @@ public static class MauiSmokeRunner
         { foreach (string row in Describe(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(element, index), root)) { yield return row; } }
     }
     /// <summary>Captures the application's native WinUI content rather than the user's desktop.</summary>
-    private static async Task CaptureAsync(Window window, string path)
+    internal static async Task CaptureAsync(Window window, string path)
     {
         var native = (Microsoft.UI.Xaml.Window)window.Handler!.PlatformView!;
         var bitmap = new RenderTargetBitmap();

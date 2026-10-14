@@ -15,6 +15,10 @@ public sealed class BrainIndex(string directory, IBrainEmbedding embedding)
     private readonly Dictionary<string, (string Hash, IReadOnlyList<BrainPassage> Items)> _layouts = new(StringComparer.Ordinal);
     /// <summary>Gets a privacy-safe indication of optional neural availability.</summary>
     public bool SemanticAvailable { get; private set; }
+    /// <summary>Gets observed corrupt-cache recoveries; normal rebuilds and missing optional embeddings are not corruption.</summary>
+    public int RecoveryCount { get; private set; }
+    /// <summary>Gets the hashed vault identity of the last observed recovery, without persisting a personal directory.</summary>
+    public string LastRecoveryVaultIdentity { get; private set; } = "";
     /// <summary>Refreshes derived rows and embeds only changed content or model fingerprints.</summary>
     public void Update(string vault, IReadOnlyList<BrainNote> notes, bool rebuild)
     {
@@ -25,6 +29,8 @@ public sealed class BrainIndex(string directory, IBrainEmbedding embedding)
             try { UpdateInternal(notes); }
             catch (SqliteException)
             {
+                RecoveryCount++;
+                LastRecoveryVaultIdentity = FileBrainStorage.Hash(vault);
                 if (File.Exists(_path)) { File.Move(_path, _path + ".corrupt-" + Guid.NewGuid().ToString("N"), false); }
                 UpdateInternal(notes);
             }
@@ -49,6 +55,8 @@ public sealed class BrainIndex(string directory, IBrainEmbedding embedding)
         var passages = new Dictionary<string, BrainPassage>(StringComparer.Ordinal);
         using var transaction = connection.BeginTransaction();
         var valid = notes.Where(note => note.IsKnowledge).ToArray();
+        var validIds = valid.Select(note => note.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (string removed in _layouts.Keys.Where(id => !validIds.Contains(id)).ToArray()) { _layouts.Remove(removed); }
         foreach (BrainNote note in valid)
         {
             IReadOnlyList<BrainPassage> spans = _layouts.TryGetValue(note.Id, out var layout) && layout.Hash == note.Hash ? layout.Items : BrainPassages.Split(note);

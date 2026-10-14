@@ -32,6 +32,11 @@ public static class BrainSmokeRunner
             var memory = services.GetRequiredService<IConversationMemory>(); var tools = services.GetRequiredService<IAssistantTools>(); var permissions = services.GetRequiredService<PermissionManager>();
             int guiFixture = Array.IndexOf(args, "--gui-launch-smoke");
             int mcpFixture = Array.IndexOf(args, "--brain-mcp-smoke");
+            if (args.Contains("--brain-maintenance-smoke", StringComparer.Ordinal))
+            {
+                stage = "native_brain_maintenance_review"; results.AddRange(await BrainMaintenanceSmokeRunner.RunAsync(services, directory).ConfigureAwait(true));
+                await File.WriteAllLinesAsync(Path.Combine(directory, "result.txt"), PassedHeader.Concat(results)).ConfigureAwait(true); return;
+            }
             if (mcpFixture >= 0 && mcpFixture + 1 < args.Length)
             {
                 stage = "native_mcp_protocol_and_permissions";

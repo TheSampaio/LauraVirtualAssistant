@@ -142,6 +142,7 @@ public sealed class IniSettingsStore : ISettingsStore
             {
                 Directory = document.GetString("Brain", "Directory", ""),
                 AutoLearn = document.GetBoolean("Brain", "AutoLearn", true),
+                MaintenanceEnabled = document.GetBoolean("Brain", "MaintenanceEnabled", false),
                 ContextCharacters = document.GetInt32("Brain", "ContextCharacters", 5000),
                 EmbeddingModel = document.GetString("Brain", "EmbeddingModel", ""),
                 EmbeddingVocabulary = document.GetString("Brain", "EmbeddingVocabulary", ""),
@@ -214,6 +215,7 @@ public sealed class IniSettingsStore : ISettingsStore
         document.Set("Screenshot", "FullScreenShortcut", settings.Screenshots.FullScreenShortcut);
         document.Set("Brain", "Directory", settings.Brain.Directory);
         document.SetBoolean("Brain", "AutoLearn", settings.Brain.AutoLearn);
+        document.SetBoolean("Brain", "MaintenanceEnabled", settings.Brain.MaintenanceEnabled);
         document.SetNumber("Brain", "ContextCharacters", settings.Brain.ContextCharacters);
         document.Set("Brain", "EmbeddingModel", settings.Brain.EmbeddingModel);
         document.Set("Brain", "EmbeddingVocabulary", settings.Brain.EmbeddingVocabulary);

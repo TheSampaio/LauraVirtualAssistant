@@ -13,6 +13,7 @@ public sealed class MemoryPage : ContentPage
 {
     private readonly BrainService _brain;
     private readonly BrainSkills _skills;
+    private readonly BrainMaintenance _maintenance;
     private readonly ISettingsService _settings;
     private readonly IUiLocalizer _ui;
     private readonly IConversationMemory _memory;
@@ -77,10 +78,10 @@ public sealed class MemoryPage : ContentPage
     /// <summary>Gets whether cached controls still match the current interface language.</summary>
     public bool CanReuse => _createdCulture == _ui.Culture.Name;
     /// <summary>Builds the existing Memory destination using native MAUI controls.</summary>
-    public MemoryPage(BrainService brain, BrainSkills skills, ISettingsService settings, IUiLocalizer ui, IConversationMemory memory)
+    public MemoryPage(BrainService brain, BrainSkills skills, ISettingsService settings, IUiLocalizer ui, IConversationMemory memory, BrainMaintenance maintenance)
     {
         using var performance = PerformanceTrace.Measure("brain.construct");
-        _brain = brain; _skills = skills; _settings = settings; _ui = ui; _memory = memory;
+        _brain = brain; _skills = skills; _settings = settings; _ui = ui; _memory = memory; _maintenance = maintenance;
         _createdCulture = ui.Culture.Name;
         _brand = Theme.WorkspaceBrand(ui.Get("ui.hud.subtitle"));
         _findShortcut.Invoked += (_, args) => { _query.Focus(); args.Handled = true; };
@@ -565,7 +566,9 @@ public sealed class MemoryPage : ContentPage
     /// <summary>Offers location, integrity, retrieval and private backup controls as concrete native actions.</summary>
     private async Task ManageAsync()
     {
-        string? action = await Laura.App.Platforms.Windows.WindowsDialogs.ChooseAsync(T("manage"), _ui.Get("ui.maui.cancel"), null, T("newBrain"), T("existingBrain"), T("migrate"), T("integrity"), T("rebuild"), T("embedding"), T("learning"), T("budget"), T("backup"), T("restore"), T("clearHistory")).ConfigureAwait(true);
+        string? action = await Laura.App.Platforms.Windows.WindowsDialogs.ChooseAsync(T("manage"), _ui.Get("ui.maui.cancel"), null, T("newBrain"), T("existingBrain"), T("migrate"), _ui.Get("ui.maintenance.title"), T("integrity"), T("rebuild"), T("embedding"), T("learning"), T("budget"), T("backup"), T("restore"), T("clearHistory")).ConfigureAwait(true);
+        if (action == _ui.Get("ui.maintenance.title"))
+        { if (await CanLeaveAsync().ConfigureAwait(true)) { await NavigationMotion.PushAsync(Navigation, new BrainMaintenancePage(_brain, _maintenance, _settings, _ui, path => OpenAsync(path, true))).ConfigureAwait(true); } return; }
         if (action == T("newBrain") || action == T("existingBrain") || action == T("migrate"))
         { if (!await CanLeaveAsync().ConfigureAwait(true)) { return; } string? path = await PickFolderAsync().ConfigureAwait(true); if (path is null) { return; } await _brain.ChangeLocationAsync(path, action == T("migrate"), action == T("existingBrain")).ConfigureAwait(true); _selected = null; _selectedPath = ""; _editor.Text = _loadedText = ""; _reader.Clear(); ShowEmptyDetails(); await RefreshAsync().ConfigureAwait(true); }
         else if (action == T("rebuild") || action == T("integrity"))

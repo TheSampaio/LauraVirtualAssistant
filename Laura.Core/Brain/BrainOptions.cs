@@ -7,6 +7,8 @@ public sealed record BrainOptions
     public string Directory { get; init; } = "";
     /// <summary>Gets whether durable user declarations may be consolidated automatically.</summary>
     public bool AutoLearn { get; init; } = true;
+    /// <summary>Gets whether bounded read-only maintenance analysis may run in the background. Findings never authorize edits or discard knowledge.</summary>
+    public bool MaintenanceEnabled { get; init; }
     /// <summary>Gets the maximum characters of recalled data per model turn.</summary>
     public int ContextCharacters { get; init; } = 5000;
     /// <summary>Gets the optional local BERT/WordPiece ONNX model.</summary>

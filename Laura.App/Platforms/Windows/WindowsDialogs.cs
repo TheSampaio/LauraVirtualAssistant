@@ -21,7 +21,7 @@ public static class WindowsDialogs
     {
         get
         {
-            if (!Environment.GetCommandLineArgs().Contains("--screenshot-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Isolated screenshot diagnostics only."); }
+            if (!Environment.GetCommandLineArgs().Any(argument => argument is "--screenshot-smoke" or "--brain-smoke" or "--ui-smoke")) { throw new InvalidOperationException("Isolated native diagnostics only."); }
             return OpenDialogs.SingleOrDefault();
         }
     }
@@ -48,11 +48,13 @@ public static class WindowsDialogs
         });
 
     /// <summary>Shows finite choices without using model text as a policy.</summary>
-    public static Task<string?> ChooseAsync(string title, string cancel, string? destructive, params string[] choices) => MainThread.InvokeOnMainThreadAsync(async () =>
+    public static Task<string?> ChooseAsync(string title, string cancel, string? destructive, params string[] choices) => ChooseAsync(title, cancel, destructive, CancellationToken.None, choices);
+    /// <summary>Shows finite native choices whose lifetime follows the requesting operation or page.</summary>
+    public static Task<string?> ChooseAsync(string title, string cancel, string? destructive, CancellationToken token, params string[] choices) => MainThread.InvokeOnMainThreadAsync(async () =>
     {
         var input = new Microsoft.UI.Xaml.Controls.ComboBox { ItemsSource = choices, SelectedIndex = 0, HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch };
         AutomationProperties.SetName(input, title);
-        return await ShowAsync(title, "", "OK", cancel, input, CancellationToken.None).ConfigureAwait(true) ? input.SelectedItem as string : null;
+        return await ShowAsync(title, "", "OK", cancel, input, token).ConfigureAwait(true) ? input.SelectedItem as string : null;
     });
 
     internal static async Task<bool> ShowAsync(string title, string message, string accept, string? cancel, FrameworkElement? input, CancellationToken token, Func<bool>? validate = null, int height = 480)

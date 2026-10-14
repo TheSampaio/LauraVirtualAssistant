@@ -32,6 +32,10 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     public BrainSnapshot Snapshot => Volatile.Read(ref _snapshot);
     /// <summary>Gets whether neural retrieval has a usable installed model.</summary>
     public bool SemanticAvailable => index.SemanticAvailable;
+    /// <summary>Gets observed recoveries of the rebuildable local index, separately from authored knowledge integrity.</summary>
+    public int IndexRecoveries => index.RecoveryCount;
+    /// <summary>Gets the hashed vault scope of the most recent observed index recovery.</summary>
+    public string LastIndexRecoveryVaultIdentity => index.LastRecoveryVaultIdentity;
     /// <summary>Initializes lazily and starts debounced watching plus a periodic full rescan for missed sync events.</summary>
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -188,9 +192,14 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     public Task<BrainNote> SaveAsync(BrainNote note, CancellationToken cancellationToken = default) => SaveAsync(note, false, cancellationToken);
     /// <summary>Pins background learning to its original vault under the actual write gate.</summary>
     internal Task<BrainNote> SaveAtLocationAsync(BrainNote note, string expectedLocation, CancellationToken cancellationToken) => SaveAsync(note, false, expectedLocation, cancellationToken);
+    /// <summary>Rechecks all reviewed source versions under the actual write gate before a reversible maintenance edit.</summary>
+    internal Task<BrainNote> SaveReviewedAsync(BrainNote note, string expectedLocation, IReadOnlyList<(string Path, string Hash)> sources, CancellationToken cancellationToken)
+        => SaveAsync(note, false, expectedLocation, sources, cancellationToken);
     /// <summary>Imports authored metadata with its original timestamp when explicitly requested by migration.</summary>
     public Task<BrainNote> SaveAsync(BrainNote note, bool preserveTimestamp, CancellationToken cancellationToken = default) => SaveAsync(note, preserveTimestamp, null, cancellationToken);
-    private async Task<BrainNote> SaveAsync(BrainNote note, bool preserveTimestamp, string? expectedLocation, CancellationToken cancellationToken)
+    private Task<BrainNote> SaveAsync(BrainNote note, bool preserveTimestamp, string? expectedLocation, CancellationToken cancellationToken)
+        => SaveAsync(note, preserveTimestamp, expectedLocation, [], cancellationToken);
+    private async Task<BrainNote> SaveAsync(BrainNote note, bool preserveTimestamp, string? expectedLocation, IReadOnlyList<(string Path, string Hash)> sources, CancellationToken cancellationToken)
     {
         await InitializeAsync(cancellationToken).ConfigureAwait(false); await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -198,6 +207,8 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
             return await Task.Run(() =>
             {
                 if (expectedLocation is not null) { EnsureLocation(expectedLocation); }
+                foreach (var source in sources)
+                { if (FileBrainStorage.Hash(_storage!.Read(source.Path)) != source.Hash) { throw new IOException("A reviewed maintenance source changed before writing."); } }
                 _storage!.ValidatePath(note.Path);
                 if (note.Hash.Length == 0) { note = note with { Path = DestinationPath(note.Path) }; }
                 if (!note.Path.EndsWith(".md", StringComparison.OrdinalIgnoreCase)) { throw new IOException("Notes require a Markdown extension."); }
@@ -246,7 +257,8 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     /// <summary>Validates a new destination before applying the directory naming policy.</summary>
     private string DestinationPath(string path, bool directory = false)
     { _storage!.ValidatePath(path); return BrainNaming.DestinationPath(path, _storage.EnumerateDirectories(), directory); }
-    private static IEnumerable<string> ImageReferences(string body, string owner)
+    /// <summary>Enumerates supported vault-local inline image references without fetching external URLs or reading image data.</summary>
+    public static IEnumerable<string> ImageReferences(string body, string owner)
     {
         foreach (Match match in Regex.Matches(body, @"!\[[^\]]*\]\(([^)]+)\)", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)))
         {
