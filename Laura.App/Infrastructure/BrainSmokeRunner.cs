@@ -159,6 +159,14 @@ public static class BrainSmokeRunner
             if (!unavailable.Text.Contains("unavailable_tool:mcp.rea.inspect", StringComparison.Ordinal) || permissions.PendingRequests.Count != 0)
             { throw new InvalidOperationException("Unavailable MCP procedure was offered as operational."); }
             results.Add("Actual propose_brain_skill created an inert procedure grounded in the observed process episode. Native exact-version review loaded instructions without execution grants. An MCP/REA-dependent proposal stayed blocked without installation or an approval prompt.");
+            stage = "task_skill_discovery_adapter";
+            using var discoveryQuery = JsonDocument.Parse("{\"query\":\"process observation review\"}");
+            string discovered = (await tools.ExecuteAsync("list_brain_skills", discoveryQuery.RootElement, CancellationToken.None).ConfigureAwait(true)).Text;
+            if (!discovered.Contains(skillDraft.Id, StringComparison.Ordinal) || !discovered.Contains("available_instructions", StringComparison.Ordinal)
+                || !discovered.Contains("unavailable_tool:mcp.rea.inspect", StringComparison.Ordinal) || discovered.Contains(skillDefinition.Steps[0], StringComparison.Ordinal)
+                || permissions.PendingRequests.Count != 0)
+            { throw new InvalidOperationException("Task discovery did not preserve bounded metadata, current availability and progressive instruction loading."); }
+            results.Add("Actual list_brain_skills ranked task metadata through the local index, distinguished reviewed instructions from blocked MCP dependencies and excluded full procedure steps without asking for execution permissions.");
             if (args.Contains("--brain-live-smoke", StringComparer.Ordinal))
             {
                 var live = services.GetRequiredService<GeminiLiveClient>(); if (!live.IsAvailable) { throw new InvalidOperationException("A configured model credential is required for live diagnostics."); }

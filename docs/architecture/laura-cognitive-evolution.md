@@ -144,6 +144,14 @@ Integração nativa: `_Output/CognitiveNativeSkillProposalsFinal/result.txt` pas
 
 Esta unidade não conclui a Fase 6 inteira: ainda faltam descoberta semântica ranqueada por tarefa, testes operacionais das habilidades propostas e monitoramento estruturado de uso/resultado. `available_instructions` significa instruções aprovadas com requisitos declarados resolvidos pelo mecanismo atual, não tarefa executada com sucesso. Dependências/pré-requisitos externos são conservadoramente bloqueados até haver verificação implementada; não são instalados automaticamente. A composição preserva referências de leitura progressiva, não executa uma sequência autônoma de ferramentas. Skills antigas sem definição estruturada mantêm compatibilidade como `instructions_only`, sem afirmar disponibilidade de dependências que só apareçam no texto.
 
+### Descoberta ranqueada e carregamento progressivo — 14/10/2026
+
+`BrainSkills.DiscoverAsync` e a consulta opcional de `list_brain_skills` reutilizam `BrainIndex` em um cache derivado separado, com descrições, capacidades e situações de uso limitadas. O corpo e os passos do procedimento não entram nesse índice. O resultado distingue busca lexical, híbrida local e catálogo sem consulta, inclui a versão e os bloqueios de disponibilidade. Alterar apenas instruções invalida a aprovação, sem recalcular embeddings de metadados inalterados. O chat recebe candidatos por tarefa; instruções completas continuam dependendo de `read_brain_skill` e revisão exata. A persona orienta reformular/traduzir consultas quando só houver busca lexical, sem interpretar ausência de resultado como prova de inexistência.
+
+Validação: **306 testes passaram**, zero falhas/skips (`_Output/CognitiveSkillDiscovery/discovery-all.trx`); build Release sem avisos/erros. Corpus sintético de 20 habilidades e cinco consultas: catálogo alfabético limitado omitia os cinco alvos; busca lexical por descrição/capacidade recuperou o alvo em primeiro lugar nas cinco consultas. Em 25 consultas aquecidas, p50=52,98 ms e p95=55,92 ms nesta máquina. Isso não mede qualidade geral em produção. Outro teste usa embeddings falsos determinísticos para verificar o contrato multilíngue, a ausência de corpos privados no índice e o reaproveitamento do cache; não comprova qualidade de um modelo neural real.
+
+Integração nativa sem nuvem: `_Output/CognitiveNativeDiscovery/result.txt` passou. O adaptador real encontrou instruções revisadas e a proposta MCP bloqueada, apresentou dependências reais e não expôs os passos nem criou aprovações. Monitoramento de resultados e MCP conectado continuam unidades seguintes.
+
 ## Registro de commits e reprodução
 
 ### Fonte real indicada: REA
@@ -176,6 +184,8 @@ A preparação HTTP é uma ferramenta explícita de validação, não um leitor 
 | `6d603d3` | Aplicativos aprendidos e hash no momento da execução |
 | `c5bab8f` | Aquisição local autorizada, sem executar código |
 | `5e493ae` | Aquisição e recuperação de fontes públicas REA fixadas por hash |
+| `c1cde8e` | Propostas procedurais fundamentadas e revisão por versão |
+| `11d36f5` | Abertura interativa de aplicativos e permissões por executável exato |
 
 O diagnóstico público REA é registrado no commit subsequente desta documentação. Artefatos `_Output` são ignorados pelo Git e não contêm a credencial protegida.
 
