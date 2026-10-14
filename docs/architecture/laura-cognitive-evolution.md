@@ -115,3 +115,39 @@ Executáveis aprendidos têm hash vinculado aos parâmetros de aprovação e rec
 Validação: **280 testes passaram**, `_Output/CognitivePhase4/phase4-final.trx`; build Release zero warnings/erros. Quatro testes verificam referências/reinício/deduplicação, bytes alterados, aceitação sem PID, aliases/escopos/rede/configuração; dois verificam fallback negado versus programa ausente. Integração real passou em `_Output/CognitiveNativeApplications/result.txt`: um host do SDK foi copiado somente para Workspace de diagnóstico, houve criação real de processo, `open_app` reutilizou o alvo sem atualizar inventário e exigiu nova aprovação. Bytes foram alterados mantendo tamanho/data durante uma aprovação pendente; o callback recusou o hash e não criou processo. Não foi alterado o runtime instalado.
 
 Limites: referência observa criação, não janela pronta nem tarefa concluída. Shortcuts/protocolos, aceitação sem PID e executáveis maiores que 64 MiB não são promovidos a referência verificada; descoberta permanece disponível. Não há autoaprovação de programas conhecidos ou armazenamento de argumentos. O cérebro continua fornecendo uma pista revalidada, não uma autoridade de segurança.
+
+## Fase 5 — aquisição local de fontes
+
+`BrainSources` e `study_source` adquirem um arquivo local ou escopo estreito de repositório após aprovação do inventário real. A leitura ocorre dentro do callback autorizado, com recursos congelados e revalidação. MD/TXT/JSON, projetos C# e formatos comuns de código são armazenados como referências externas/unverified; frontmatter de origem não vira política, skill ativa ou metadado de autoridade. Reimportação usa chaves por origem e mantém IDs/revisões; o projeto de estudo se relaciona às referências efetivamente importadas.
+
+O inventário exclui diretórios de credenciais, Git/cache/build, arquivos ocultos, nomes de credenciais e redirects. Limites: 64 arquivos, profundidade oito, 5.000 entradas examinadas, 64 KiB por arquivo, 256 KiB de texto por aquisição e 128 nomes de dependências. Leitura usa UTF-8 estrito e stream limitado, rejeita bytes nulos e linhas com valores de credenciais. Parsing JSON é limitado; XML proíbe DTD e resolver externo. `package.json` e `PackageReference` fornecem nomes de dependências declaradas, jamais confirmação de instalação/disponibilidade.
+
+O retorno informa quantidade importada/excluída, linguagens de origem e dependências declaradas. Código, `postinstall`, programas e instalações não são executados para estudar fontes. A referência é recuperável pelo mesmo índice granular, sem um segundo cérebro paralelo.
+
+Validação: **283 testes passaram**, `_Output/CognitivePhase5/phase5-all.trx`; build Release zero warnings/erros. Três novos testes verificam estudo TypeScript sem execução/instalação, fontes C#/XML/JSON, fontes sensíveis/malformadas, deduplicação, recuperação, negação/cancelamento e aprovação tardia. Integração real em `_Output/CognitiveNativeSources/result.txt` passou pelo adaptador `study_source` e checkbox nativo, com TypeScript recuperado e `postinstall` não executado. A validação usou fontes sintéticas, sem estudar nem transmitir repositórios pessoais.
+
+Limites: esta unidade cobre arquivos locais; URLs/HTTP, PDF e documentos binários não são readers implementados. Repositórios grandes exigem seleção de subpastas e aquisições incrementais. O detector conservador de credenciais não é um DLP universal e pode excluir exemplos legítimos. Dependências são apenas declaradas, não instaladas/testadas. As próximas fases incluem proposta/evolução de skills, MCP, consolidação, observabilidade/UI e validação integrada final; não são consideradas concluídas por esta entrega incremental.
+
+## Registro de commits e reprodução
+
+| Commit | Unidade testada |
+|---|---|
+| `efa7f32` | Base de permissões e captura integrada |
+| `474e94b` | Auditoria cognitiva e referência |
+| `92528d1` | Aprendizado contextual e fila observável |
+| `c1958ea` | Recibos duráveis e retomada |
+| `cb9fa0d` | Passagens e expansão de versão exata |
+| `bf39162` | Grafo limitado e proveniência |
+| `813a9f2` | Experiências observadas e reflexões draft |
+| `6d603d3` | Aplicativos aprendidos e hash no momento da execução |
+
+Aquisição local é registrada no commit subsequente desta documentação. Artefatos `_Output` são ignorados pelo Git e não contêm a credencial protegida.
+
+```powershell
+dotnet test Laura.Core.Tests/Laura.Core.Tests.csproj -c Release --no-restore
+dotnet build Laura.sln -c Release --no-restore
+# Raiz nova e isolada; o diagnóstico cria somente dados/fontes sintéticos.
+Laura.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/Laura.exe --storage D:/Temp/LauraBrainCheck --brain-smoke D:/Temp/LauraBrainCheck
+```
+
+`--brain-live-smoke` é opt-in para verificar o modelo real com mensagens sintéticas; usa a credencial existente somente em processo. O diagnóstico altera apenas seus fixtures e copia um host do SDK para testar alteração de bytes. Mouse/voz completa, múltiplos monitores e servidor MCP conectado continuam verificações separadas. Ausência de servidor não é apresentada como integração MCP verificada.

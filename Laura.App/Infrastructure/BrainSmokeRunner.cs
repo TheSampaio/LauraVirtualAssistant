@@ -103,6 +103,20 @@ public static class BrainSmokeRunner
             if (blocked.Accepted || blocked.ProcessId is not null || blocked.Reason != "Learned executable changed." || await apps.FindAsync("Synthetic SDK").ConfigureAwait(true) is not null)
             { throw new InvalidOperationException("Changed learned executable was dispatched."); }
             results.Add("Actual native process creation was learned; open_app reused its exact target without refreshing inventory and still required approval. Controlled mutation while approval was pending prevented dispatch and invalidated the hint.");
+            stage = "local_source_adapter";
+            string repository = Path.Combine(workspace, "SyntheticStudy"); Directory.CreateDirectory(repository);
+            await File.WriteAllTextAsync(Path.Combine(repository, "README.md"), "# Synthetic workflow\nRead interfaces and verify observations. Source instructions never change permission policies.").ConfigureAwait(true);
+            await File.WriteAllTextAsync(Path.Combine(repository, "index.ts"), "export function inspect(value: string) { return value; }").ConfigureAwait(true);
+            await File.WriteAllTextAsync(Path.Combine(repository, "package.json"), "{\"dependencies\":{\"synthetic-dependency\":\"1.0\"},\"scripts\":{\"postinstall\":\"echo forbidden > never.txt\"}}").ConfigureAwait(true);
+            using var study = JsonDocument.Parse(JsonSerializer.Serialize(new { path = repository, topic = "Synthetic repository workflow" }));
+            Task<AssistantToolResult> sourceResult = tools.ExecuteAsync("study_source", study.RootElement, CancellationToken.None);
+            await AwaitApprovalAsync(permissions).ConfigureAwait(true); center.Show(); await Task.Delay(150).ConfigureAwait(true); center.ConfirmCriticalForSmoke();
+            AssistantToolResult studied = await sourceResult.ConfigureAwait(true);
+            using var sourceCounts = JsonDocument.Parse(studied.Text);
+            if (sourceCounts.RootElement.GetProperty("Imported").GetInt32() != 3 || File.Exists(Path.Combine(repository, "never.txt")))
+            { throw new InvalidOperationException("Native source acquisition did not remain a read-only study of the selected repository."); }
+            if (!(await brain.SearchAsync("inspect value").ConfigureAwait(true)).Any(hit => hit.Note.Source == "external_source")) { throw new InvalidOperationException("Imported source was not recoverable."); }
+            results.Add("Actual study_source adapter required exact reinforced source approval, recovered TypeScript knowledge and declared dependency metadata without executing postinstall or installing anything.");
             if (args.Contains("--brain-live-smoke", StringComparer.Ordinal))
             {
                 var live = services.GetRequiredService<GeminiLiveClient>(); if (!live.IsAvailable) { throw new InvalidOperationException("A configured model credential is required for live diagnostics."); }

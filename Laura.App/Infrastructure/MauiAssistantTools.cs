@@ -50,6 +50,8 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             ("id", "STRING", "Real node ID"), ("hash", "STRING", "Full source hash from recall_memory"), ("start", "INTEGER", "Source character offset"), ("length", "INTEGER", "Up to 4000 characters")),
         Function("reflect_experience", "Propose one useful lesson from a real recorded operational episode. Requires its current note ID/hash and an exact quote of its observed evidence. The lesson remains an unverified draft for review; it cannot enable skills, install dependencies or grant permissions. Process exit zero alone does not prove the user's goal was achieved.", ["id", "hash", "lesson", "evidence"],
             ("id", "STRING", "Actual experience ID"), ("hash", "STRING", "Current source hash"), ("lesson", "STRING", "Proposed bounded lesson"), ("evidence", "STRING", "Verbatim observed basis")),
+        Function("study_source", "Study an explicitly requested absolute local text file or narrow repository folder. Requires exact native source/disclosure approval. Imports MD/TXT/JSON and common code formats as untrusted references, identifies source languages and manifest-declared dependencies without installing or executing any code. Returns actual import/exclusion counts; do not claim dependencies are available or scripts were tested.", ["path", "topic"],
+            ("path", "STRING", "Absolute local source file or folder"), ("topic", "STRING", "User-requested knowledge topic")),
         Function("list_brain_skills", "Discover installed Brain skills by their real names, descriptions and approval status. Consult this for writing/editing tasks and before claiming a skill is missing. Disabled imports can be reviewed with read_brain_skill.", []),
         Function("read_brain_skill", "Load one relevant skill's instructions by ID or exact name. If disabled or changed, native review asks the user to approve that exact version first. Match descriptions to the task across languages. No scripts or dependencies execute.", ["name"], ("name", "STRING", "Stable ID or exact skill name")),
         Function("forget_memory", "Forget a specific saved fact requested by the user.", ["key"], ("key", "STRING", "Fact key")),
@@ -215,6 +217,9 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                 case "reflect_experience":
                     return new(JsonSerializer.Serialize(await services.GetRequiredService<BrainExperiences>().ProposeReflectionAsync(Value(arguments, "id"), Value(arguments, "hash"),
                         Value(arguments, "lesson"), Value(arguments, "evidence"), cancellationToken).ConfigureAwait(false)));
+                case "study_source":
+                    return new(JsonSerializer.Serialize(await services.GetRequiredService<BrainSources>().AcquireAsync(Value(arguments, "path"), Value(arguments, "topic"),
+                        MauiToolPermissions.CloudDestination, cancellationToken).ConfigureAwait(false)));
                 case "list_brain_skills":
                     await services.GetRequiredService<BrainService>().RefreshAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
                     string catalogue = services.GetRequiredService<BrainSkills>().Catalogue(Math.Max(1000, settings.Current.Brain.ContextCharacters));
