@@ -65,3 +65,21 @@ O esquema SQLite do histórico evolui de 1 para 2 em transação, preservando fa
 O alimentador coloca recibos pendentes na fila existente, com backpressure e deduplicação por recibo. Falhas permanecem pendentes para reinício, sem ciclo infinito de retry. Só o vault correspondente recupera seus eventos. A consolidação é idempotente se o processo interromper entre Markdown e acknowledgment; gravações revalidam o vault sob o gate real. Limpar histórico remove recibos, e a retenção de 2.000 mensagens remove eventos expirados. Não há retenção secreta ilimitada nem replay de todo o transcript.
 
 Validação: **260 testes passaram**, `_Output/CognitivePhase1/phase1-recovery.trx`; build Release zero warnings/erros. Os seis novos casos verificam recuperação, isolamento de vault/histórico, interrupção antes do acknowledgment, falha preservada, remoção/privacidade, migração v1 e retenção. A interrupção é simulada na fronteira entre escrita e acknowledgment; não foi injetada falha elétrica física. Retenção de histórico continua sendo limite explícito de recuperação. A fila direta sem recibo não oferece recuperação após crash.
+
+## Fase 2 — recuperação por passagens
+
+`BrainPassages` usa o Markdig já instalado para identificar seções reais (cabeçalhos dentro de código não viram seções). Produz até 512 spans por documento, com sobreposição pequena, fronteiras UTF-16 válidas, contexto de cabeçalhos e cobertura do final. Spans são derivados; não criam nós nem relações e não alteram Markdown. Se um documento excede o orçamento, a passagem final cobre o restante e a seleção de excerpt continua limitada a 800 caracteres.
+
+O mesmo `BrainIndex` passa ao esquema derivado 2: FTS5 e vetores por passagem, hash/modelo para cache e invalidação de dados removidos. Índices anteriores são reconstruídos a partir do vault. A consulta limita 4.096 passagens lexicais, deduplica até 80 candidatos de notas e combina até 60 candidatos semânticos locais. A segunda etapa preserva os pesos configurados de conteúdo/grafo/tempo/confiança e seleciona excerpt no span correspondente. A busca usa o gate do serviço para ler snapshot e índice coerentes. Nenhum vetor sozinho cria relação factual.
+
+`BrainHit` expõe localização; `recall_memory` apresenta seção, offset e hash. `read_brain_passage` expande até 4.000 caracteres de uma versão atual e recusa hash antigo, skill, nota arquivada, ID conflitante ou bounds inválidos. Consultas têm limite de 4.000 caracteres; contexto mantém seu orçamento configurado. Recuperação vazia, fallback lexical e memórias antigas permanecem suportados.
+
+### Evidência e decisões de ranking
+
+- **265 testes passaram**, `_Output/CognitivePhase2/phase2-all.trx`; build Release zero warnings/erros.
+- Benchmark reproduzível: cinco documentos Markdown sintéticos, cinco perguntas EN/PT, cinquenta consultas lexicais aquecidas. A seleção antiga de excerpt por frase inteira recuperou 0/5 respostas tardias; a seleção por passagem recuperou 5/5, com documento esperado em primeiro lugar em 5/5. p50/p95: **1,22/1,45 ms** nesta máquina, `_Output/CognitivePhase2/passage-benchmark.trx`.
+- Essa comparação isola seleção de excerpt: não afirma melhora universal do ranking nem precisão semântica em corpus de produção. Um double de embedding com janela curta verifica contrato/caching/cobertura tardia, não qualidade linguística de ONNX. Nesta execução não foi fornecido modelo ONNX real.
+- Integração MAUI real passou em `_Output/CognitiveNativePhase2/result.txt`: aprendizado com recibo durável e expansão de trecho tardio através dos adaptadores de produção, sem nuvem.
+- RRF foi considerado, mas a melhora demonstrada aqui depende da granularidade. Sem corpus semântico representativo não existe evidência para substituir os pesos já configuráveis; esse benchmark não é apresentado como comparação entre RRF e fusão ponderada.
+
+APIs consultadas: [SQLite FTS5](https://www.sqlite.org/fts5.html) para MATCH/BM25/colunas não indexadas e [Markdig](https://github.com/xoofx/markdig) para parsing Markdown. Não foi introduzido pacote. Limites: até 512 spans por nota; passagem final grande tem janela semântica parcial conforme o modelo; SQLite/ONNX em andamento não são interrompidos no meio de uma chamada nativa. A UI aguarda de forma assíncrona. Testes de corpus real, escalas grandes e modelo ONNX instalado continuam pendentes.

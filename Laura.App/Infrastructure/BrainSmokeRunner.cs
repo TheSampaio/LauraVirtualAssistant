@@ -40,6 +40,21 @@ public static class BrainSmokeRunner
             AssistantToolResult rejected = await tools.ExecuteAsync("learn_memory", request.RootElement, CancellationToken.None).ConfigureAwait(true);
             if (!rejected.Text.Contains("\"rejected\"", StringComparison.Ordinal)) { throw new InvalidOperationException("Tool accepted evidence from another user context."); }
             results.Add("Actual learn_memory adapter persisted only a grounded synthetic project and rejected stale evidence without granting permissions.");
+            stage = "durable_transcript_adapter";
+            memory.Append(new(ConversationMessageSource.UserTyped, "My goal is a durable synthetic integration check.", DateTimeOffset.UtcNow));
+            await services.GetRequiredService<BrainLearning>().FlushAsync().ConfigureAwait(true);
+            if (!brain.Snapshot.Notes.Any(note => note.Type == "goal" && note.Body.Contains("durable synthetic integration check", StringComparison.Ordinal))
+                || services.GetRequiredService<Laura.Core.Memory.SqliteConversationMemory>().ReadPendingLearning(FileBrainStorage.Hash(brain.Location)).Count != 0)
+            { throw new InvalidOperationException("Native transcript receipt did not consolidate and acknowledge."); }
+            results.Add("Actual conversation adapter atomically retained a selected learning receipt, consolidated Markdown through the bounded worker and acknowledged it.");
+            stage = "progressive_passage_adapter";
+            BrainNote manual = await brain.SaveAsync(new() { Path = "Knowledge/Manuals/Synthetic.md", Title = "Synthetic guide",
+                Body = "# Synthetic Guide\n\n" + string.Concat(Enumerable.Repeat("Ordinary fictional garden introduction.\n\n", 70)) + "## Buffer Ownership\n\nAtlas validates buffer ownership using sentinel_atlas_417." }).ConfigureAwait(true);
+            BrainHit hit = (await brain.SearchAsync("How does atlas validate buffer ownership?").ConfigureAwait(true)).Single(item => item.Note.Id == manual.Id);
+            using var expansion = JsonDocument.Parse(JsonSerializer.Serialize(new { id = manual.Id, hash = manual.Hash, start = hit.ExcerptStart, length = 1000 }));
+            AssistantToolResult expanded = await tools.ExecuteAsync("read_brain_passage", expansion.RootElement, CancellationToken.None).ConfigureAwait(true);
+            if (!expanded.Text.Contains("sentinel_atlas_417", StringComparison.Ordinal) || hit.ExcerptStart < 1000) { throw new InvalidOperationException("Native progressive expansion did not recover actual late source."); }
+            results.Add("Actual read_brain_passage adapter recovered late source with real node/hash/offset, without loading the full document into a prompt.");
             if (args.Contains("--brain-live-smoke", StringComparer.Ordinal))
             {
                 var live = services.GetRequiredService<GeminiLiveClient>(); if (!live.IsAvailable) { throw new InvalidOperationException("A configured model credential is required for live diagnostics."); }

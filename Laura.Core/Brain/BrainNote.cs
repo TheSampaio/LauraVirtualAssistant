@@ -64,7 +64,13 @@ public sealed record BrainSnapshot(IReadOnlyList<BrainNote> Notes, IReadOnlyList
     public static BrainSnapshot Empty { get; } = new([], [], []);
 }
 /// <summary>A ranked memory with a bounded excerpt and independently inspectable retrieval scores.</summary>
-public sealed record BrainHit(BrainNote Note, double Score, double Lexical, double Semantic, double Graph, string Excerpt);
+public sealed record BrainHit(BrainNote Note, double Score, double Lexical, double Semantic, double Graph, string Excerpt)
+{
+    /// <summary>Gets the derived matching passage; graph-only hits may have no direct passage.</summary>
+    public BrainPassage? Passage { get; init; }
+    /// <summary>Gets the actual source offset of the excerpt for progressive expansion.</summary>
+    public int ExcerptStart { get; init; }
+}
 /// <summary>An optimistic-write conflict whose draft was preserved without overwriting current knowledge.</summary>
 public sealed class BrainConflictException : IOException
 {

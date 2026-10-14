@@ -364,26 +364,36 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     /// <summary>Combines bounded lexical, neural, explicit graph, confidence, importance and temporal evidence.</summary>
     public async Task<IReadOnlyList<BrainHit>> SearchAsync(string query, int limit = 20, DateTimeOffset? since = null, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(query);
+        if (query.Length > 4000) { throw new ArgumentException("Knowledge query exceeds its supported size.", nameof(query)); }
         await InitializeAsync(cancellationToken).ConfigureAwait(false);
-        return await Task.Run(() =>
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            var lexical = index.Lexical(query); var semantic = index.Semantic(query); BrainSnapshot snapshot = Snapshot;
-            var seeds = lexical.Keys.Concat(semantic.Where(pair => pair.Value > .5).Select(pair => pair.Key)).ToHashSet(StringComparer.Ordinal);
-            var graph = new Dictionary<string, double>(StringComparer.Ordinal);
-            foreach (BrainEdge edge in snapshot.Edges.Where(edge => edge.Type != "contradicts"))
-            { if (seeds.Contains(edge.Source)) { graph[edge.Target] = Math.Max(graph.GetValueOrDefault(edge.Target), edge.Weight * edge.Confidence); } if (seeds.Contains(edge.Target)) { graph[edge.Source] = Math.Max(graph.GetValueOrDefault(edge.Source), edge.Weight * edge.Confidence); } }
-            BrainOptions options = settings.Current.Brain;
-            return (IReadOnlyList<BrainHit>)snapshot.Notes.Where(note => note.IsKnowledge && note.Confidence >= .35 && (since is null || note.UpdatedAt >= since)
-                    && !snapshot.Issues.Any(issue => issue.Path == note.Path && issue.Code == "conflicting_id"))
-                .Select(note =>
-                {
-                    double lex = lexical.GetValueOrDefault(note.Id), sem = semantic.GetValueOrDefault(note.Id), neighbor = graph.GetValueOrDefault(note.Id);
-                    double score = options.LexicalWeight * lex + options.SemanticWeight * sem + options.GraphWeight * neighbor;
-                    if (query.Length == 0) { score = note.Importance * .5; }
-                    if (score > 0) { score += options.TemporalWeight / (1 + Math.Max(0, (DateTimeOffset.UtcNow - note.UpdatedAt).TotalDays) / 90); score *= .5 + .3 * note.Confidence + .2 * note.Importance; }
-                    return new BrainHit(note, score, lex, sem, neighbor, Excerpt(note.Body, query, 800));
-                }).Where(hit => hit.Score > 0).OrderByDescending(hit => hit.Score).Take(Math.Clamp(limit, 1, 100)).ToArray();
-        }, cancellationToken).ConfigureAwait(false);
+            return await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                BrainCandidates candidates = index.Query(query); var lexical = candidates.Lexical; var semantic = candidates.Semantic; BrainSnapshot snapshot = Snapshot;
+                var seeds = lexical.Keys.Concat(semantic.Where(pair => pair.Value > .5).Select(pair => pair.Key)).ToHashSet(StringComparer.Ordinal);
+                var graph = new Dictionary<string, double>(StringComparer.Ordinal);
+                foreach (BrainEdge edge in snapshot.Edges.Where(edge => edge.Type != "contradicts"))
+                { if (seeds.Contains(edge.Source)) { graph[edge.Target] = Math.Max(graph.GetValueOrDefault(edge.Target), edge.Weight * edge.Confidence); } if (seeds.Contains(edge.Target)) { graph[edge.Source] = Math.Max(graph.GetValueOrDefault(edge.Source), edge.Weight * edge.Confidence); } }
+                BrainOptions options = settings.Current.Brain;
+                return (IReadOnlyList<BrainHit>)snapshot.Notes.Where(note => note.IsKnowledge && note.Confidence >= .35 && (since is null || note.UpdatedAt >= since)
+                        && !snapshot.Issues.Any(issue => issue.Path == note.Path && issue.Code == "conflicting_id"))
+                    .Select(note =>
+                    {
+                        double lex = lexical.GetValueOrDefault(note.Id), sem = semantic.GetValueOrDefault(note.Id), neighbor = graph.GetValueOrDefault(note.Id);
+                        double score = options.LexicalWeight * lex + options.SemanticWeight * sem + options.GraphWeight * neighbor;
+                        if (query.Length == 0) { score = note.Importance * .5; }
+                        if (score > 0) { score += options.TemporalWeight / (1 + Math.Max(0, (DateTimeOffset.UtcNow - note.UpdatedAt).TotalDays) / 90); score *= .5 + .3 * note.Confidence + .2 * note.Importance; }
+                        BrainPassage? passage = candidates.Passages.GetValueOrDefault(note.Id);
+                        var excerpt = BrainPassages.Excerpt(note, passage, candidates.Terms, 800);
+                        return new BrainHit(note, score, lex, sem, neighbor, excerpt.Text) { Passage = passage, ExcerptStart = excerpt.Start };
+                    }).Where(hit => hit.Score > 0).OrderByDescending(hit => hit.Score).Take(Math.Clamp(limit, 1, 100)).ToArray();
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
     }
     /// <summary>Produces selective untrusted context under a configured character budget, with dated attribution and unresolved contradictions visible.</summary>
     public async Task<string> RecallAsync(string query, CancellationToken cancellationToken = default)
@@ -396,16 +406,26 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         {
             string[] conflicts = Snapshot.Edges.Where(edge => edge.Type == "contradicts" && (edge.Source == hit.Note.Id || edge.Target == hit.Note.Id)).Select(edge => edge.Source == hit.Note.Id ? edge.Target : edge.Source).Distinct(StringComparer.Ordinal).Take(4).ToArray();
             string warning = conflicts.Length > 0 ? "Conflicting evidence exists: " + string.Join(", ", conflicts) + ". Do not silently choose a version.\n" : "";
-            string piece = $"[{hit.Note.Id}] {hit.Note.Title} ({hit.Note.UpdatedAt:yyyy-MM-dd}, {hit.Note.MemoryType}, confidence {hit.Note.Confidence.ToString("F2", CultureInfo.InvariantCulture)}, evidence {hit.Note.Verification}, source {hit.Note.Source})\n{warning}{hit.Excerpt}\n";
-            if (builder.Length + piece.Length > budget) { builder.Append(piece.AsSpan(0, budget - builder.Length)); break; } builder.Append(piece);
+            string location = hit.Passage is null ? "" : $"Section: {hit.Passage.Heading}; source offset {hit.ExcerptStart}; hash {hit.Note.Hash}\n";
+            string piece = $"[{hit.Note.Id}] {hit.Note.Title} ({hit.Note.UpdatedAt:yyyy-MM-dd}, {hit.Note.MemoryType}, confidence {hit.Note.Confidence.ToString("F2", CultureInfo.InvariantCulture)}, evidence {hit.Note.Verification}, source {hit.Note.Source})\n{warning}{location}{hit.Excerpt}\n";
+            if (builder.Length + piece.Length > budget) { builder.Append(piece.AsSpan(0, budget - builder.Length)); break; }
+            builder.Append(piece);
         }
         return builder.ToString();
     }
-    /// <summary>Selects an excerpt near actual query text without loading the entire vault into model context.</summary>
-    private static string Excerpt(string body, string query, int limit)
+    /// <summary>Expands one current knowledge passage with optimistic identity and strict size bounds; no full-vault prompt loading.</summary>
+    public async Task<string> ReadPassageAsync(string noteId, string expectedHash, int start, int length = 2000, CancellationToken cancellationToken = default)
     {
-        int position = query.Length > 1 ? body.IndexOf(query, StringComparison.OrdinalIgnoreCase) : -1;
-        int start = Math.Max(0, position - 100); return body.Substring(start, Math.Min(limit, body.Length - start));
+        if (!settings.Current.RememberConversations) { return ""; }
+        if (start < 0 || length is < 1 or > 4000 || expectedHash.Length != 64) { throw new ArgumentException("Invalid passage bounds or expected hash."); }
+        string vault = Location; await RefreshAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(vault, Location, StringComparison.Ordinal)) { throw new IOException("Knowledge vault changed."); }
+        BrainSnapshot snapshot = Snapshot;
+        BrainNote? note = snapshot.Notes.SingleOrDefault(item => item.Id == noteId && item.IsKnowledge && item.Hash == expectedHash
+            && !snapshot.Issues.Any(issue => issue.Path == item.Path && issue.Code == "conflicting_id"));
+        if (note is null) { throw new IOException("Knowledge version changed or is unavailable. Retrieve candidates again."); }
+        if (start > note.Body.Length) { throw new ArgumentException("Passage offset exceeds source length."); }
+        return note.Body.Substring(start, Math.Min(length, note.Body.Length - start));
     }
     /// <summary>Switches or copies a vault only after conflict checks and byte verification, retaining all source files.</summary>
     public async Task ChangeLocationAsync(string destination, bool migrate, bool requireExisting, CancellationToken cancellationToken = default)
