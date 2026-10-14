@@ -33,6 +33,8 @@ public sealed record BrainNote
     public string Source { get; init; } = "manual";
     /// <summary>Gets evidence status separately from confidence: unspecified, user_reported, unverified, observed_execution or verified. Authored labels never grant capabilities.</summary>
     public string Verification { get; init; } = "unspecified";
+    /// <summary>Gets an inert local executable hint. It never authorizes execution and is excluded from automatic prompt content.</summary>
+    public BrainApplicationReference? Application { get; init; }
     /// <summary>Gets a structured consolidation key, if applicable.</summary>
     public string Key { get; init; } = "";
     /// <summary>Gets the authored revision identity.</summary>

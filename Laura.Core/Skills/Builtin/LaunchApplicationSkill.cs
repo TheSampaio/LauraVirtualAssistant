@@ -1,5 +1,6 @@
 using Laura.Core.Abstractions;
 using Laura.Core.Localization;
+using Laura.Core.Brain;
 
 namespace Laura.Core.Skills.Builtin;
 
@@ -25,6 +26,7 @@ public sealed class LaunchApplicationSkill : PhraseSkillBase
     ];
 
     private readonly IProcessLauncher _launcher;
+    private readonly BrainApplications? _applications;
 
     /// <summary>
     /// Initializes the skill.
@@ -33,11 +35,12 @@ public sealed class LaunchApplicationSkill : PhraseSkillBase
     ///     localizer: Source of the prefixes, aliases and responses.
     ///     launcher: Service that starts processes and opens addresses.
     /// </summary>
-    public LaunchApplicationSkill(ILocalizer localizer, IProcessLauncher launcher)
+    public LaunchApplicationSkill(ILocalizer localizer, IProcessLauncher launcher, BrainApplications? applications = null)
         : base(localizer)
     {
         ArgumentNullException.ThrowIfNull(launcher);
         _launcher = launcher;
+        _applications = applications;
     }
 
     /// <inheritdoc />
@@ -69,13 +72,13 @@ public sealed class LaunchApplicationSkill : PhraseSkillBase
 
         if (target is null)
         {
+            ProcessLaunchResult result = await LaunchNamedAsync(applicationName, null, cancellationToken).ConfigureAwait(false);
             return SkillResponse.Speak(Localizer.Get(
-                await _launcher.TryStartAsync(applicationName, cancellationToken: cancellationToken).ConfigureAwait(false) ? LocalizationKeys.Skills.LaunchResponse : LocalizationKeys.Skills.LaunchNotFound, applicationName));
+                result.Accepted ? LocalizationKeys.Skills.LaunchResponse : result.StopFallback ? LocalizationKeys.Skills.LaunchStopped : LocalizationKeys.Skills.LaunchNotFound, applicationName));
         }
 
-        return await LaunchAsync(target, cancellationToken).ConfigureAwait(false)
-            ? SkillResponse.Speak(Localizer.Get(LocalizationKeys.Skills.LaunchResponse, applicationName))
-            : SkillResponse.Speak(Localizer.Get(LocalizationKeys.Skills.LaunchNotFound, applicationName));
+        ProcessLaunchResult launched = await LaunchAsync(target, applicationName, cancellationToken).ConfigureAwait(false);
+        return SkillResponse.Speak(Localizer.Get(launched.Accepted ? LocalizationKeys.Skills.LaunchResponse : launched.StopFallback ? LocalizationKeys.Skills.LaunchStopped : LocalizationKeys.Skills.LaunchNotFound, applicationName));
     }
 
     /// <summary>
@@ -100,14 +103,26 @@ public sealed class LaunchApplicationSkill : PhraseSkillBase
     /// Returns:
     ///     <see langword="true"/> when the system agreed to open the application.
     /// </summary>
-    private async Task<bool> LaunchAsync(ApplicationTarget target, CancellationToken token)
+    private async Task<ProcessLaunchResult> LaunchAsync(ApplicationTarget target, string requestedName, CancellationToken token)
     {
         if (target.IsUri)
         {
-            return await _launcher.TryOpenAsync(new Uri(target.Target), token).ConfigureAwait(false);
+            return new(await _launcher.TryOpenAsync(new Uri(target.Target), token).ConfigureAwait(false), target.Target);
         }
 
-        return await _launcher.TryStartAsync(target.Target, cancellationToken: token).ConfigureAwait(false)
-            || (target.Fallback is not null && await _launcher.TryStartAsync(target.Fallback, cancellationToken: token).ConfigureAwait(false));
+        ProcessLaunchResult result = await LaunchNamedAsync(target.Target, requestedName, token).ConfigureAwait(false);
+        if (result.Accepted || result.StopFallback || target.Fallback is null) { return result; }
+        return await LaunchNamedAsync(target.Fallback, requestedName, token).ConfigureAwait(false);
+    }
+    private async Task<ProcessLaunchResult> LaunchNamedAsync(string name, string? requestedName, CancellationToken token)
+    {
+        BrainApplicationReference? reference = _applications is null ? null : await _applications.FindAsync(name, token).ConfigureAwait(false);
+        string? vault = _applications?.Location;
+        ProcessLaunchResult result = await _launcher.TryStartObservedAsync(reference?.Target ?? name, expectedHash: reference?.Hash, cancellationToken: token).ConfigureAwait(false);
+        if (result.Accepted && _applications is not null && vault is not null)
+        {
+            await _applications.TryRememberAsync(reference?.Name ?? requestedName ?? name, requestedName ?? name, result, vault, token).ConfigureAwait(false);
+        }
+        return result;
     }
 }

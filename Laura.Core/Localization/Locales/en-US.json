@@ -126,6 +126,7 @@
   ],
   "skill.launch.response": "Opening {0}.",
   "skill.launch.notFound": "I don't know how to open {0}.",
+  "skill.launch.stopped": "Opening {0} was stopped by authorization or validation.",
   "phrases.lock": [
     "lock the computer",
     "lock my computer",

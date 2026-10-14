@@ -79,6 +79,7 @@
   ],
   "skill.launch.response": "Abrindo {0}.",
   "skill.launch.notFound": "Não sei como abrir {0}.",
+  "skill.launch.stopped": "A abertura de {0} foi interrompida pela autorização ou verificação.",
   "phrases.lock": [
     "bloqueie o computador",
     "bloquear o computador",

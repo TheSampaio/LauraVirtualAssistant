@@ -44,6 +44,8 @@ public static partial class BrainMarkdown
             CreatedAt = Date(map, "created_at"), UpdatedAt = Date(map, "updated_at"), Confidence = Number(map, "confidence", .8), Importance = Number(map, "importance", .5),
             Tags = Strings(map, "tags"), Aliases = Strings(map, "aliases"), Source = Scalar(map, "source", "manual"), Verification = Scalar(map, "verification", "unspecified"), Key = Scalar(map, "key", ""),
             Revision = Scalar(map, "revision", ""), PreviousRevision = Scalar(map, "previous_revision", ""), Relations = relations,
+            Application = Node(map, "application") is YamlMappingNode application && Scalar(application, "target", "").Length <= 4096
+                && Scalar(application, "sha256", "").Length == 64 ? new(Scalar(map, "title", ""), Scalar(application, "target", ""), Scalar(application, "sha256", "")) : null,
             Body = body, Frontmatter = yaml, Hash = FileBrainStorage.Hash(content)
         };
     }
@@ -63,6 +65,7 @@ public static partial class BrainMarkdown
             { "target", relation.Target }, { "type", relation.Type }, { "weight", relation.Weight.ToString(CultureInfo.InvariantCulture) },
             { "confidence", relation.Confidence.ToString(CultureInfo.InvariantCulture) }, { "evidence", relation.Evidence }, { "source", relation.Source }
         }));
+        if (note.Application is { } application) { map.Children[new YamlScalarNode("application")] = new YamlMappingNode { { "target", application.Target }, { "sha256", application.Hash } }; }
         using var writer = new StringWriter(CultureInfo.InvariantCulture); new YamlStream(new YamlDocument(map)).Save(writer, false);
         string yaml = writer.ToString().Trim().TrimEnd('.').TrimEnd();
         return "---\n" + yaml + "\n---\n\n" + note.Body.TrimEnd() + "\n";

@@ -128,8 +128,17 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             switch (name)
             {
                 case "open_app":
-                    if (applications.Applications.Count == 0) { await applications.RefreshAsync(cancellationToken).ConfigureAwait(false); }
                     string requested = Value(arguments, "name");
+                    BrainApplications rememberedApps = services.GetRequiredService<BrainApplications>();
+                    BrainApplicationReference? remembered = await rememberedApps.FindAsync(requested, cancellationToken).ConfigureAwait(false);
+                    if (remembered is not null)
+                    {
+                        ProcessLaunchResult reused = await launcher.TryStartObservedAsync(remembered.Target, expectedHash: remembered.Hash, cancellationToken: cancellationToken).ConfigureAwait(false);
+                        if (reused.Accepted) { TrackLaunch(remembered.Name); }
+                        return new(reused.Accepted ? "Windows accepted the revalidated learned application: " + remembered.Name + (reused.ProcessId is not null ? ". Process creation observed; window readiness is unverified." : ". Shell acceptance only; process creation is unverified.")
+                            : "Learned application launch denied, changed or unavailable. No fallback was attempted after this decision.");
+                    }
+                    if (applications.Applications.Count == 0) { await applications.RefreshAsync(cancellationToken).ConfigureAwait(false); }
                     IReadOnlyList<InstalledApplication> matches = applications.Find(requested);
                     if (matches.Count == 0) { await applications.RefreshAsync(cancellationToken).ConfigureAwait(false); matches = applications.Find(requested); }
                     if (matches.Count == 0) { return new("No matching application was found. Ask the user for the installed program name or path. Do not claim success."); }
@@ -137,9 +146,14 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                     if (ranked.Length > 1 && ranked.Select(app => app.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
                     { return new("Choose an application: " + JsonSerializer.Serialize(ranked)); }
                     InstalledApplication target = ranked[0];
-                    bool started = await launcher.TryStartAsync(target.Target, cancellationToken: cancellationToken).ConfigureAwait(false);
-                    if (started) { _startedApplications.Enqueue(target.Name); while (_startedApplications.Count > 100) { _startedApplications.TryDequeue(out _); } }
-                    return new(started ? "Started application: " + target.Name : "Windows refused to start: " + target.Name);
+                    string observedVault = rememberedApps.Location;
+                    ProcessLaunchResult started = await launcher.TryStartObservedAsync(target.Target, cancellationToken: cancellationToken).ConfigureAwait(false);
+                    if (started.Accepted)
+                    {
+                        TrackLaunch(target.Name);
+                        await rememberedApps.TryRememberAsync(target.Name, requested, started, observedVault, cancellationToken).ConfigureAwait(false);
+                    }
+                    return new(started.Accepted ? "Windows accepted application launch: " + target.Name + (started.ProcessId is not null ? ". Process creation observed; window readiness is unverified." : ". Shell acceptance only; process creation is unverified.") : "Windows refused to start: " + target.Name);
                 case "list_apps":
                     await applications.RefreshAsync(cancellationToken).ConfigureAwait(false);
                     string query = Value(arguments, "query");
@@ -232,6 +246,8 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
         { return new("Action failed: " + error.GetType().Name + ". Do not claim that it succeeded."); }
     }
+    private void TrackLaunch(string name)
+    { _startedApplications.Enqueue(name); while (_startedApplications.Count > 100) { _startedApplications.TryDequeue(out _); } }
     /// <summary>Performs finite native input actions without parsing scripts.</summary>
     private static async Task<string> ComputerActionAsync(string action, JsonElement args, CancellationToken token)
     {

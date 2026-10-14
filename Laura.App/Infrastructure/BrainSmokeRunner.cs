@@ -76,6 +76,33 @@ public static class BrainSmokeRunner
             if (!reflectionResult.Text.Contains("\"proposed\"", StringComparison.Ordinal) || !brain.Snapshot.Notes.Any(note => note.Type == "hypothesis" && note.Status == "draft"))
             { throw new InvalidOperationException("Actual reflection adapter failed to preserve the review boundary."); }
             results.Add("Actual dotnet --version required reinforced native approval; the real exit code was recorded. A denied repeat produced no execution observation. Reflection remained an unverified review draft.");
+            stage = "learned_application_adapter";
+            var launcher = services.GetRequiredService<IProcessLauncher>(); var apps = services.GetRequiredService<BrainApplications>();
+            string actualHost = Laura.Platform.Windows.System.WindowsProcessLauncher.ResolveExecutable("dotnet");
+            string mutableHost = Path.Combine(workspace, "SyntheticHost.exe"); File.Copy(actualHost, mutableHost, overwrite: false);
+            Task<ProcessLaunchResult> initialLaunch = launcher.TryStartObservedAsync(mutableHost);
+            await AwaitApprovalAsync(permissions, PermissionRisk.High).ConfigureAwait(true); center.Show(); await Task.Delay(150).ConfigureAwait(true); center.InvokeForSmoke("once");
+            ProcessLaunchResult actualLaunch = await initialLaunch.ConfigureAwait(true);
+            if (!actualLaunch.Accepted || actualLaunch.ProcessId is not > 0 || actualLaunch.TargetHash.Length != 64) { throw new InvalidOperationException("Native executable creation was not observed."); }
+            await apps.RememberAsync("Synthetic SDK host", "Synthetic SDK", actualLaunch, brain.Location).ConfigureAwait(true);
+            int inventoryCount = services.GetRequiredService<Laura.Platform.Windows.System.WindowsApplicationCatalog>().Applications.Count;
+            using var appRequest = JsonDocument.Parse("{\"name\":\"Synthetic SDK\"}");
+            Task<AssistantToolResult> reusedApp = tools.ExecuteAsync("open_app", appRequest.RootElement, CancellationToken.None);
+            await AwaitApprovalAsync(permissions, PermissionRisk.High).ConfigureAwait(true); center.Show(); await Task.Delay(150).ConfigureAwait(true); center.InvokeForSmoke("once");
+            AssistantToolResult reuse = await reusedApp.ConfigureAwait(true);
+            if (!reuse.Text.Contains("revalidated learned", StringComparison.Ordinal) || services.GetRequiredService<Laura.Platform.Windows.System.WindowsApplicationCatalog>().Applications.Count != inventoryCount)
+            { throw new InvalidOperationException("Known target was not reused without rediscovery."); }
+            BrainApplicationReference reference = (await apps.FindAsync("Synthetic SDK").ConfigureAwait(true))!;
+            Task<ProcessLaunchResult> changedLaunch = launcher.TryStartObservedAsync(reference.Target, expectedHash: reference.Hash);
+            await AwaitApprovalAsync(permissions, PermissionRisk.High).ConfigureAwait(true);
+            DateTime writeTime = File.GetLastWriteTimeUtc(mutableHost);
+            byte[] changedBytes = await File.ReadAllBytesAsync(mutableHost).ConfigureAwait(true); changedBytes[^1] ^= 0x5a;
+            await File.WriteAllBytesAsync(mutableHost, changedBytes).ConfigureAwait(true); File.SetLastWriteTimeUtc(mutableHost, writeTime);
+            center.Show(); await Task.Delay(150).ConfigureAwait(true); center.InvokeForSmoke("once");
+            ProcessLaunchResult blocked = await changedLaunch.ConfigureAwait(true);
+            if (blocked.Accepted || blocked.ProcessId is not null || blocked.Reason != "Learned executable changed." || await apps.FindAsync("Synthetic SDK").ConfigureAwait(true) is not null)
+            { throw new InvalidOperationException("Changed learned executable was dispatched."); }
+            results.Add("Actual native process creation was learned; open_app reused its exact target without refreshing inventory and still required approval. Controlled mutation while approval was pending prevented dispatch and invalidated the hint.");
             if (args.Contains("--brain-live-smoke", StringComparer.Ordinal))
             {
                 var live = services.GetRequiredService<GeminiLiveClient>(); if (!live.IsAvailable) { throw new InvalidOperationException("A configured model credential is required for live diagnostics."); }
@@ -105,10 +132,10 @@ public static class BrainSmokeRunner
         { await File.WriteAllLinesAsync(Path.Combine(directory, "result.txt"), new[] { "FAIL: " + stage + " (" + error.GetType().Name + "). No raw provider error or credential was logged." }.Concat(results)).ConfigureAwait(true); }
         finally { services.GetRequiredService<Laura.Core.Abstractions.IShellController>().Shutdown(); }
     }
-    private static async Task AwaitApprovalAsync(PermissionManager permissions)
+    private static async Task AwaitApprovalAsync(PermissionManager permissions, PermissionRisk risk = PermissionRisk.Critical)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
         while (permissions.PendingRequests.Count == 0) { await Task.Delay(20, timeout.Token).ConfigureAwait(true); }
-        if (permissions.PendingRequests.Count != 1 || permissions.PendingRequests[0].Risk != PermissionRisk.Critical) { throw new InvalidOperationException("Expected one exact critical process approval."); }
+        if (permissions.PendingRequests.Count != 1 || permissions.PendingRequests[0].Risk != risk) { throw new InvalidOperationException("Expected one exact process approval of the specified risk."); }
     }
 }
