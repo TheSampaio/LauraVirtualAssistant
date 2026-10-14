@@ -24,6 +24,8 @@ public sealed record AssistantToolResult(string Text, byte[]? Image = null, stri
     public Laura.Core.Brain.BrainMemoryResult? Learning { get; init; }
     /// <summary>Gets a native adapter failure/refusal indicator; successful authorization alone is not execution success.</summary>
     public bool Failed { get; init; }
+    /// <summary>Gets actual native launch evidence; shell acceptance without a process ID remains unverified.</summary>
+    public ProcessLaunchResult? Launch { get; init; }
     /// <summary>Gets the adapter-confirmed outcome: success, failed, cancelled or blocked; never supplied by the model.</summary>
     public string Status { get; init; } = "success";
     /// <summary>Gets native evidence-based remaining work within the original request; it never authorizes another effect.</summary>

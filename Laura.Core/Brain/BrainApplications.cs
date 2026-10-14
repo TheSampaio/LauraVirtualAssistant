@@ -2,12 +2,16 @@ using System.Security.Cryptography;
 using Laura.Core.Abstractions;
 using Laura.Core.Permissions;
 using Laura.Core.Text;
+using Laura.Core.Skills;
 using Microsoft.Extensions.Logging;
 
 namespace Laura.Core.Brain;
 
 /// <summary>An observed executable reference stored as knowledge, never as an execution authorization.</summary>
 public sealed record BrainApplicationReference(string Name, string Target, string Hash);
+
+/// <summary>Distinguishes unknown applications from known but unsafe, obsolete or ambiguous knowledge, so discovery cannot silently override it.</summary>
+public sealed record BrainApplicationResolution(bool Known, BrainApplicationReference? Reference, string Reason = "");
 
 /// <summary>Reuses actual process-launch observations while validating local identity; every launch still requires the platform permission gate.</summary>
 public sealed class BrainApplications(BrainService brain, ISettingsService settings, AssistantStorage storage, ILogger<BrainApplications> logger) : IDisposable
@@ -27,18 +31,47 @@ public sealed class BrainApplications(BrainService brain, ISettingsService setti
     }
     /// <summary>Finds a unique exact title/alias and revalidates the learned executable before returning a hint. Invalid references fall back to discovery.</summary>
     public async Task<BrainApplicationReference?> FindAsync(string name, CancellationToken cancellationToken = default)
+        => (await ResolveAsync(name, cancellationToken).ConfigureAwait(false)).Reference;
+    /// <summary>Resolves declared or observed knowledge uniquely and validates a bounded local executable before the original launch permission gate.</summary>
+    public async Task<BrainApplicationResolution> ResolveAsync(string name, CancellationToken cancellationToken = default)
     {
-        if (!settings.Current.RememberConversations || name.Length is 0 or > 120) { return null; }
-        try { await brain.InitializeAsync(cancellationToken).ConfigureAwait(false); }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException) { return null; }
+        if (!settings.Current.RememberConversations || name.Length is 0 or > 120) { return new(false, null); }
+        try { await brain.RefreshIfDirtyAsync(cancellationToken).ConfigureAwait(false); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException) { return new(false, null); }
         string normalized = TextNormalizer.Normalize(name);
         BrainNote[] matches = brain.Snapshot.Notes.Where(note => note.IsKnowledge && note.Type == "application" && note.Application is not null
-            && (TextNormalizer.Normalize(note.Title) == normalized || note.Aliases.Any(alias => TextNormalizer.Normalize(alias) == normalized))
+            && (TextNormalizer.Normalize(note.Title) == normalized || MatchExecutableName(note.Title, name) >= 100
+                || note.Aliases.Any(alias => TextNormalizer.Normalize(alias) == normalized))
             && !brain.Snapshot.Issues.Any(issue => issue.Path == note.Path && issue.Code == "conflicting_id")).Take(2).ToArray();
-        if (matches.Length != 1) { return null; }
+        if (matches.Length == 0) { return new(false, null); }
+        if (matches.Length != 1) { return new(true, null, "Stored application aliases are ambiguous; clarify the intended application."); }
+        if (matches[0].Verification == "unverified" || brain.Snapshot.Edges.Any(edge => edge.Type == "contradicts" && (edge.Source == matches[0].Id || edge.Target == matches[0].Id)))
+        { return new(true, null, "Stored installation evidence is unverified or contradictory; request clarification."); }
         BrainApplicationReference reference = matches[0].Application!;
-        try { return (await ReadIdentityAsync(reference.Target, cancellationToken).ConfigureAwait(false)).Equals(reference.Hash, StringComparison.OrdinalIgnoreCase) ? reference with { Name = matches[0].Title } : null; }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or PermissionDeniedException or ArgumentException) { return null; }
+        try
+        {
+            string target = reference.Target;
+            if (reference.Hash.Length == 0)
+            {
+                ValidateLocalTarget(target);
+                if (!target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    string[] files = await Task.Run(() => Directory.EnumerateFiles(target, "*.exe", SearchOption.TopDirectoryOnly).Take(33).ToArray(), cancellationToken).ConfigureAwait(false);
+                    if (files.Length > 32) { return new(true, null, "Installation folder exceeds the bounded lookup; request the exact executable."); }
+                    var ranked = files.Select(file => (File: file, Score: MatchExecutableName(Path.GetFileNameWithoutExtension(file), matches[0].Title)))
+                        .Where(item => item.Score >= 85).OrderByDescending(item => item.Score).ToArray();
+                    if (ranked.Length == 0 || ranked.Length > 1 && ranked[0].Score == ranked[1].Score)
+                    { return new(true, null, "No unique matching executable exists in the declared folder; request the exact executable."); }
+                    target = ranked[0].File;
+                }
+            }
+            string identity = await ReadIdentityAsync(target, cancellationToken).ConfigureAwait(false);
+            if (identity.Length != 64 || reference.Hash.Length > 0 && !identity.Equals(reference.Hash, StringComparison.OrdinalIgnoreCase))
+            { return new(true, null, "Known executable is missing or changed; no speculative fallback was attempted."); }
+            return new(true, new(matches[0].Title, target, identity));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or PermissionDeniedException or ArgumentException)
+        { return new(true, null, "Declared installation cannot be safely validated; request a corrected local path."); }
     }
     /// <summary>Records only actual native process creation for a bounded executable identity; shell acceptance alone cannot create a verified reference.</summary>
     public async Task<BrainNote?> RememberAsync(string name, string alias, ProcessLaunchResult launch, string expectedVault, CancellationToken cancellationToken = default)
@@ -59,7 +92,8 @@ public sealed class BrainApplications(BrainService brain, ISettingsService setti
             string canonicalName = prior?.Title ?? name;
             var note = prior ?? new BrainNote { Path = "Knowledge/Applications/" + BrainNaming.FileName(name, key), Key = key, Title = name, Type = "application",
                 Source = "native_process_creation", Verification = "observed_execution", Confidence = 1, Importance = .6, Tags = ["application"] };
-            return await brain.SaveAtLocationAsync(note with { Aliases = aliases, Application = new(canonicalName, launch.Target, launch.TargetHash),
+            return await brain.SaveAtLocationAsync(note with { Source = "native_process_creation", Verification = "observed_execution", Confidence = 1,
+                Aliases = aliases, Application = new(canonicalName, launch.Target, launch.TargetHash),
                 Body = "# " + canonicalName + "\n\nWindows reported actual process creation using this local executable.\nThis reference grants no permission and does not prove window readiness.\nArguments are not retained; each new launch revalidates the target and requires authorization.\n" }, expectedVault, cancellationToken).ConfigureAwait(false);
         }
         finally { _gate.Release(); }
@@ -67,12 +101,20 @@ public sealed class BrainApplications(BrainService brain, ISettingsService setti
     private async Task<string> ReadIdentityAsync(string path, CancellationToken cancellationToken)
     {
         if (!Path.IsPathFullyQualified(path) || !path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) { return ""; }
-        var action = new PermissionAction(PermissionOperation.Process, "Observed application reference", "Validate executable identity", [path]);
-        PermissionPolicy.ValidateResources(action, [storage.Directory, brain.Location], Path.Combine(storage.Directory, "Workspace"));
+        ValidateLocalTarget(path);
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 8192, FileOptions.Asynchronous | FileOptions.SequentialScan);
         if (stream.Length > 64 * 1024 * 1024) { return ""; }
         return Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
     }
+    private void ValidateLocalTarget(string path)
+    {
+        if (!Path.IsPathFullyQualified(path)) { throw new ArgumentException("Local absolute target required."); }
+        var action = new PermissionAction(PermissionOperation.Process, "Observed application reference", "Validate executable identity", [path]);
+        PermissionPolicy.ValidateResources(action, [storage.Directory, brain.Location], Path.Combine(storage.Directory, "Workspace"));
+    }
+    private static int MatchExecutableName(string candidate, string name) =>
+        TextNormalizer.Normalize(candidate).Replace(" ", "", StringComparison.Ordinal) == TextNormalizer.Normalize(name).Replace(" ", "", StringComparison.Ordinal)
+            ? 100 : ApplicationNameMatcher.Score(candidate, name);
     /// <inheritdoc />
     public void Dispose() { _gate.Dispose(); GC.SuppressFinalize(this); }
 }

@@ -283,20 +283,23 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                             : await launcher.TryStartObservedAsync(requested, cancellationToken: cancellationToken).ConfigureAwait(false);
                         if (direct.Accepted) { TrackLaunch(Path.GetFileNameWithoutExtension(direct.Target)); await rememberedApps.TryRememberAsync(Path.GetFileNameWithoutExtension(direct.Target), requested, direct, directVault, cancellationToken).ConfigureAwait(false); }
                         return new(direct.Accepted ? "Windows accepted application launch: " + direct.Target + ". Process creation " + (direct.ProcessId is not null ? "observed" : "unverified") + "; window readiness is unverified."
-                            : "Application could not be opened: " + direct.Reason) { Failed = !direct.Accepted };
+                            : "Application could not be opened: " + direct.Reason) { Failed = !direct.Accepted, Launch = direct };
                     }
-                    BrainApplicationReference? remembered = await rememberedApps.FindAsync(requested, cancellationToken).ConfigureAwait(false);
+                    BrainApplicationResolution resolution = await rememberedApps.ResolveAsync(requested, cancellationToken).ConfigureAwait(false);
+                    if (resolution.Known && resolution.Reference is null) { return new(resolution.Reason) { Failed = true }; }
+                    BrainApplicationReference? remembered = resolution.Reference;
                     if (remembered is not null)
                     {
+                        string reusedVault = rememberedApps.Location;
                         ProcessLaunchResult reused = await launcher.TryStartObservedAsync(remembered.Target, expectedHash: remembered.Hash, cancellationToken: cancellationToken).ConfigureAwait(false);
-                        if (reused.Accepted) { TrackLaunch(remembered.Name); }
+                        if (reused.Accepted) { TrackLaunch(remembered.Name); await rememberedApps.TryRememberAsync(remembered.Name, requested, reused, reusedVault, cancellationToken).ConfigureAwait(false); }
                         return new(reused.Accepted ? "Windows accepted the revalidated learned application: " + remembered.Name + (reused.ProcessId is not null ? ". Process creation observed; window readiness is unverified." : ". Shell acceptance only; process creation is unverified.")
-                            : "Learned application launch denied, changed or unavailable. No fallback was attempted after this decision.") { Failed = !reused.Accepted };
+                            : "Learned application launch denied, changed or unavailable. No fallback was attempted after this decision.") { Failed = !reused.Accepted, Launch = reused };
                     }
                     if (applications.Applications.Count == 0) { await applications.RefreshAsync(cancellationToken).ConfigureAwait(false); }
                     IReadOnlyList<InstalledApplication> matches = applications.Find(requested);
                     if (matches.Count == 0) { await applications.RefreshAsync(cancellationToken).ConfigureAwait(false); matches = applications.Find(requested); }
-                    if (matches.Count == 0) { return new("No matching application was found. Ask the user for the installed program name or path. Do not claim success."); }
+                    if (matches.Count == 0) { return new("No matching application was found. Ask the user for the installed program name or path. Do not claim success.") { Failed = true }; }
                     var ranked = matches.GroupBy(app => ApplicationNameMatcher.Score(app.Name, requested)).OrderByDescending(group => group.Key).First().ToArray();
                     if (ranked.Length > 1 && ranked.Select(app => app.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
                     { return new("Choose an application: " + JsonSerializer.Serialize(ranked)); }
@@ -308,7 +311,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                         TrackLaunch(target.Name);
                         await rememberedApps.TryRememberAsync(target.Name, requested, started, observedVault, cancellationToken).ConfigureAwait(false);
                     }
-                    return new(started.Accepted ? "Windows accepted application launch: " + target.Name + (started.ProcessId is not null ? ". Process creation observed; window readiness is unverified." : ". Shell acceptance only; process creation is unverified.") : "Windows refused to start: " + target.Name + ". " + started.Reason) { Failed = !started.Accepted };
+                    return new(started.Accepted ? "Windows accepted application launch: " + target.Name + (started.ProcessId is not null ? ". Process creation observed; window readiness is unverified." : ". Shell acceptance only; process creation is unverified.") : "Windows refused to start: " + target.Name + ". " + started.Reason) { Failed = !started.Accepted, Launch = started };
                 case "list_apps":
                     await applications.RefreshAsync(cancellationToken).ConfigureAwait(false);
                     string query = Value(arguments, "query");

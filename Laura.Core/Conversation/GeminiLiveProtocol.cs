@@ -41,7 +41,7 @@ public static class GeminiLiveProtocol
     /// <summary>Returns an observed structured adapter outcome without treating successful authorization as task completion.</summary>
     public static string ToolResult(string id, string name, Laura.Core.Abstractions.AssistantToolResult result) => JsonSerializer.Serialize(new
     { toolResponse = new { functionResponses = new[] { new { id, name, response = new { status = result.Failed && result.Status == "success" ? "failed" : result.Status,
-        result = result.Text, pendingWork = result.PendingWork, goalVerified = false } } } } });
+        result = result.Text, pendingWork = result.PendingWork, executionVerified = !result.Failed && (result.Launch is { Accepted: true, ProcessId: > 0 } || result.Observation is { ExitCode: 0 }), goalVerified = false } } } } });
 
     /// <summary>Builds a typed user turn and optionally restores bounded history after reconnect.</summary>
     public static string Text(ConversationTurn turn, bool includeHistory, bool turnComplete = true)
