@@ -90,6 +90,8 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     public string LastAudioInputTranscript => _session?.LastInputTranscript ?? "";
     /// <summary>Gets the most recent actual read-aloud output transcript for verification.</summary>
     public string LastReadAloudTranscript { get; private set; } = "";
+    /// <summary>Gets the number of native justified model continuations in the last completed typed/task request.</summary>
+    public int LastTaskContinuationCount { get; private set; }
     /// <summary>Gets PCM bytes received in the current conversation, for health diagnostics.</summary>
     public long AudioBytesReceived => _session?.Player.BytesReceived ?? 0;
     /// <summary>Verifies leading fragments and repeated output restarts silently, without microphone or network capture.</summary>
@@ -144,7 +146,9 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
         Session? requestSession = null;
         try
         {
-            _memory.SetWorkingContext(turn.Prompt);
+            if (turn.ContinuingTaskTurnId == Guid.Empty) { _memory.SetWorkingContext(turn.Prompt); }
+            else if (_memory.WorkingContext.TurnId != turn.ContinuingTaskTurnId) { throw new OperationCanceledException("Original task was superseded by a new user turn.", cancellationToken); }
+            LastTaskContinuationCount = 0;
             ReportStatus("Thinking");
             if (_brain is not null)
             {
@@ -171,6 +175,16 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(_settings.Current.GenerativeAi.Timeout);
             string answer = await completion.Task.WaitAsync(timeout.Token).ConfigureAwait(false);
+            for (int continuations = 0; _tools is not null && continuations < 4; continuations++)
+            {
+                string? pendingWork = await _tools.PendingTaskContinuationAsync(timeout.Token).ConfigureAwait(false);
+                if (pendingWork is null) { break; }
+                completion = new(TaskCreationOptions.RunContinuationsAsynchronously); session.Pending = completion;
+                session.ResetOutputForContinuation();
+                LastTaskContinuationCount++;
+                await session.SendAsync(GeminiLiveProtocol.Text(new ConversationTurn(pendingWork, turn.Culture, turn.UserDisplayName), false), timeout.Token).ConfigureAwait(false);
+                answer = await completion.Task.WaitAsync(timeout.Token).ConfigureAwait(false);
+            }
             for (int followups = 0; session.TakeVisual() is { } visual; followups++)
             {
                 if (followups >= 3) { throw new InvalidOperationException("Too many visual continuations in one request."); }
@@ -554,7 +568,31 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     }
 
     /// <summary>Publishes completed audio turns and preserves history only when enabled.</summary>
-    private void PublishVoiceTurn(string input, string output)
+    private void PublishVoiceTurn(string input, string output) => _ = ContinueVoiceTurnAsync(input, output);
+
+    /// <summary>Continues an unfinished source-study voice objective through the same bounded task and authorization adapters.</summary>
+    private async Task ContinueVoiceTurnAsync(string input, string output)
+    {
+        bool resume = IsListening;
+        try
+        {
+            using var operation = LinkOperation(CancellationToken.None);
+            Guid original = _memory.WorkingContext.TurnId;
+            string? pending = _tools is null || string.IsNullOrWhiteSpace(input) ? null : await _tools.PendingTaskContinuationAsync(operation.Token).ConfigureAwait(false);
+            if (pending is not null && original != Guid.Empty && _memory.WorkingContext.TurnId == original)
+            {
+                string? continued = await AskAsync(new(pending, _settings.Current.ResolveCulture(), _settings.Current.UserNickname) { ContinuingTaskTurnId = original }, operation.Token).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(continued)) { output = continued; }
+                if (resume && _settings.Current.GenerativeAi.ContinuousListening && !_settings.Current.MicrophoneMuted) { await StartListeningAsync().ConfigureAwait(false); }
+            }
+            PublishCompletedVoiceTurn(input, output);
+        }
+        catch (Exception error) when (error is OperationCanceledException or IOException or InvalidOperationException)
+        { ReportStatus("Task continuation cancelled or unavailable; retained knowledge remains partial."); }
+    }
+
+    /// <summary>Publishes only the final conversation result while preserving the original real user input for learning.</summary>
+    private void PublishCompletedVoiceTurn(string input, string output)
     {
         foreach ((ConversationMessageSource source, string text) in new[] { (ConversationMessageSource.UserTyped, input), (ConversationMessageSource.Assistant, output) })
         {
@@ -603,6 +641,8 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
         public Session(int device, int volume, Action<string, string>? publish, Func<string, JsonElement, CancellationToken, Task<AssistantToolResult>>? tool, Action<string> status, bool manualActivity, Action<byte[]> audio, Func<string, bool>? inputControl = null, Action<string, AssistantToolResult>? visualFollowup = null, Action<string>? userInput = null)
         { Player = new LiveAudioPlayer(device, volume); _publish = publish; _tool = tool; _status = status; ManualActivity = manualActivity; _audio = audio; _inputControl = inputControl; _visualFollowup = visualFollowup; _userInput = userInput; }
         internal AssistantToolResult? TakeVisual() => Interlocked.Exchange(ref _queuedVisual, null);
+        /// <summary>Starts a native justified continuation without changing original user context or replaying prior tool calls.</summary>
+        internal void ResetOutputForContinuation() => _output.Clear();
         /// <summary>Gets whether this session uses explicit hold-to-talk activity boundaries.</summary>
         public bool ManualActivity { get; }
         /// <summary>Gets the session playback queue.</summary>
@@ -759,7 +799,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
                 Player.CompleteTurn(); _audioTurnStarted = false;
                 if (_inputControl?.Invoke(_input.ToString()) == true) { Player.Clear(); _input.Clear(); _output.Clear(); return; }
                 string answer = _output.ToString().Trim();
-                if (Pending is not null && (answer.Length == 0 || _toolTasks.Any(task => !task.IsCompleted))) { return; }
+                if (!_toolTokens.IsEmpty || Pending is not null && answer.Length == 0) { return; }
                 LastInputTranscript = _input.ToString().Trim();
                 if (Pending is { } pending) { Pending = null; pending.TrySetResult(answer); }
                 else if (TakeVisual() is { } visual) { _visualFollowup?.Invoke(_input.ToString(), visual); }
@@ -790,9 +830,15 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
                     if (response.Image.Length > 32 * 1024 * 1024 || Interlocked.CompareExchange(ref _queuedVisual, response, null) is not null) { throw new InvalidOperationException("Only one bounded visual continuation may be prepared."); }
                     response = response with { Text = "Image prepared locally. Do not infer its contents or report visual findings yet. A separately authorized visual user turn will supply the actual pixels.", Image = null };
                 }
-                await ToolResponseAsync(id, name, response.Text, token.Token).ConfigureAwait(false);
+                _toolTokens.TryRemove(id, out _);
+                await SendAsync(GeminiLiveProtocol.ToolResult(id, name, response), token.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException)
+            {
+                _toolTokens.TryRemove(id, out _);
+                try { await SendAsync(GeminiLiveProtocol.ToolResult(id, name, new AssistantToolResult("Action cancelled. Retained results remain partial; do not claim completion.") { Failed = true, Status = "cancelled" }), _lifetime.Token).ConfigureAwait(false); }
+                catch (Exception error) when (error is WebSocketException or OperationCanceledException or InvalidOperationException) { }
+            }
             catch (Exception)
             {
                 _status("A local command failed.");

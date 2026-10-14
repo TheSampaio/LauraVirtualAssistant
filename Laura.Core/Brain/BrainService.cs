@@ -102,7 +102,8 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
                 if (ids.Contains(relation.Target)) { edges.Add(new(note.Id, relation.Target, relation.Type, relation.Weight, relation.Confidence, relation.Evidence, relation.Source)); }
                 else { issues.Add(new(note.Path, "unresolved_relation")); }
             }
-            foreach (string link in BrainMarkdown.Links(note.Body))
+            // Imported wikilinks belong to the external document, not the owner's authored graph.
+            foreach (string link in note.Source is "external_github" or "external_source" ? [] : BrainMarkdown.Links(note.Body))
             {
                 string? target = ResolveLink(link, note.Path, valid);
                 if (target is null) { issues.Add(new(note.Path, "ambiguous_or_unresolved_link")); }
@@ -139,6 +140,25 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     /// <summary>Reads a bounded vault-local attachment through the same link-safe storage adapter.</summary>
     public async Task<byte[]> ReadAttachmentAsync(string path, CancellationToken cancellationToken = default)
     { await InitializeAsync(cancellationToken).ConfigureAwait(false); return await Task.Run(() => _storage!.ReadBytes(path), cancellationToken).ConfigureAwait(false); }
+    /// <summary>Preserves authorized source bytes in the existing content-addressed attachment store, independently of Markdown newline normalization.</summary>
+    internal async Task<string> StoreSourceBytesAsync(byte[] content, string expectedLocation, CancellationToken cancellationToken)
+    {
+        if (content.Length is 0 or > 65536) { throw new ArgumentException("Source attachment exceeds its byte bound."); }
+        string asset = "Assets/Sources/" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(content)).ToLowerInvariant() + ".source";
+        await InitializeAsync(cancellationToken).ConfigureAwait(false); await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await Task.Run(() =>
+            {
+                EnsureLocation(expectedLocation); _storage!.ValidatePath(asset);
+                if (_storage.EnumerateFiles().Contains(asset, StringComparer.Ordinal))
+                { if (!_storage.ReadBytes(asset).AsSpan().SequenceEqual(content)) { throw new IOException("Source attachment hash collision or external corruption."); } }
+                else { _storage.WriteBytes(asset, content); }
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+        return asset;
+    }
     /// <summary>Resolves a Markdown image relative to its note, refusing URI schemes and traversal beyond the virtual vault root.</summary>
     public static string ResolveAttachment(string ownerPath, string relative)
     {

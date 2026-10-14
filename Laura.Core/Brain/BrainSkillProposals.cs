@@ -92,9 +92,12 @@ public sealed partial class BrainSkills
         if (string.IsNullOrWhiteSpace(name) || name.Length > 100 || string.IsNullOrWhiteSpace(description) || description.Length > 240
             || definition.Kind is not ("guidance" or "native" or "mcp" or "code" or "composition") || string.IsNullOrWhiteSpace(definition.Purpose) || definition.Purpose.Length > 1000)
         { throw new ArgumentException("A procedure requires bounded identity, description, purpose and a supported kind."); }
-        foreach (IReadOnlyList<string>? list in new[] { definition.UseWhen, definition.Prerequisites, definition.Dependencies, definition.Tools, definition.Permissions,
-            definition.Steps, definition.Limitations, definition.SuccessCriteria, definition.FailureBehavior, definition.Capabilities })
-        { if (list is null || list.Count > 16 || list.Any(value => string.IsNullOrWhiteSpace(value) || value.Length > 1000)) { throw new ArgumentException("Procedure fields exceed their bounds."); } }
+        foreach ((string fieldName, IReadOnlyList<string>? list) in new[] { ("useWhen", definition.UseWhen), ("prerequisites", definition.Prerequisites),
+            ("dependencies", definition.Dependencies), ("tools", definition.Tools), ("permissions", definition.Permissions), ("steps", definition.Steps),
+            ("limitations", definition.Limitations), ("successCriteria", definition.SuccessCriteria), ("failureBehavior", definition.FailureBehavior), ("capabilities", definition.Capabilities) })
+        { if (list is null || list.Count > 16 || list.Any(value => string.IsNullOrWhiteSpace(value) || value.Length > 1000)) { throw new ArgumentException("Procedure field '" + fieldName + "' must be an explicit array with at most 16 bounded non-empty values. Empty arrays are allowed for optional requirements."); } }
+        if (definition.Kind == "guidance" && (definition.Tools.Count > 0 || definition.Dependencies.Count > 0 || definition.Components?.Count > 0))
+        { throw new ArgumentException("Guidance-only proposals require empty tools, dependencies and components. Use native, mcp or code for external procedures; missing dependencies block activation, not draft creation."); }
         if (definition.UseWhen.Count == 0 || definition.Steps.Count == 0 || definition.Limitations.Count == 0 || definition.SuccessCriteria.Count == 0 || definition.FailureBehavior.Count == 0
             || definition.Capabilities.Count == 0 || definition.Sources is null || definition.Sources.Count is < 1 or > 8 || definition.Components is null || definition.Components.Count > 4
             || definition.Sources.Concat(definition.Components).Any(source => source is null || string.IsNullOrEmpty(source.Id) || source.Id.Length > 100

@@ -7,6 +7,18 @@ namespace Laura.Core.Tests.Conversation;
 
 public sealed class GeminiLiveProtocolTests
 {
+    [Theory]
+    [InlineData("blocked", true)]
+    [InlineData("cancelled", true)]
+    [InlineData("success", false)]
+    public void StructuredToolResultsPreserveCallIdentityAndActualOutcome(string status, bool failed)
+    {
+        using var message = JsonDocument.Parse(GeminiLiveProtocol.ToolResult("actual-call", "study_github_repository",
+            new Laura.Core.Abstractions.AssistantToolResult("Observed adapter result.") { Failed = failed, Status = status }));
+        JsonElement response = message.RootElement.GetProperty("toolResponse").GetProperty("functionResponses")[0];
+        Assert.Equal("actual-call", response.GetProperty("id").GetString()); Assert.Equal(status, response.GetProperty("response").GetProperty("status").GetString());
+        Assert.False(response.GetProperty("response").GetProperty("goalVerified").GetBoolean());
+    }
     [Fact]
     public void Setup_UsesNativeAudioVoiceAndExplicitMicrophoneActivity()
     {

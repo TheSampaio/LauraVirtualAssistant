@@ -1,5 +1,7 @@
 # Evolução cognitiva da LAURA
 
+Aquisição direta do GitHub e continuação cognitiva implementadas em 2026-10-14: ver [auditoria, arquitetura e evidências](laura-cognitive-orchestration.md). A referência de 330 testes foi confirmada antes das mudanças; a suíte integrada evoluiu para 376. Os diagnósticos antigos de REA com arquivos preparados continuam documentados como aquisição local, separadamente dos novos testes remotos.
+
 ## Fase 0 — auditoria de 2026-10-13
 
 Este trabalho evolui o cérebro existente. Markdown permanece a fonte de verdade; SQLite/FTS5 e vetores são índices descartáveis. As políticas de execução ficam no `PermissionManager`, fora do vault e fora do modelo. A base de permissões e captura está descrita no [relatório de integração](laura-permissions-screenshot-delivery.md), incluindo verificações manuais pendentes.
