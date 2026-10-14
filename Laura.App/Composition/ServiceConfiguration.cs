@@ -86,6 +86,7 @@ public static class ServiceConfiguration
         services.AddSingleton<Func<string, IBrainStorage>>(_ => location => new FileBrainStorage(location));
         services.AddSingleton<BrainService>();
         services.AddSingleton<BrainLearning>();
+        services.AddSingleton<BrainExperiences>();
         services.AddSingleton<BrainSkills>();
         services.AddSingleton<BrainConversationMemory>();
         services.AddSingleton<IConversationMemory>(provider => provider.GetRequiredService<BrainConversationMemory>());

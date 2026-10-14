@@ -5,6 +5,7 @@ using Laura.Core.Brain;
 using Laura.Core.Conversation;
 using Laura.Core.Permissions;
 using Laura.Platform.Windows.Conversation;
+using Laura.App.Platforms.Windows;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Laura.App.Infrastructure;
@@ -55,6 +56,26 @@ public static class BrainSmokeRunner
             AssistantToolResult expanded = await tools.ExecuteAsync("read_brain_passage", expansion.RootElement, CancellationToken.None).ConfigureAwait(true);
             if (!expanded.Text.Contains("sentinel_atlas_417", StringComparison.Ordinal) || hit.ExcerptStart < 1000) { throw new InvalidOperationException("Native progressive expansion did not recover actual late source."); }
             results.Add("Actual read_brain_passage adapter recovered late source with real node/hash/offset, without loading the full document into a prompt.");
+            stage = "observed_process_adapter";
+            memory.SetWorkingContext("Verify a synthetic native process observation.");
+            string workspace = Path.Combine(directory, "Workspace"); Directory.CreateDirectory(workspace);
+            using var processRequest = JsonDocument.Parse(JsonSerializer.Serialize(new { executable = "dotnet", arguments = "[\"--version\"]", directory = workspace, timeout = 15 }));
+            var center = services.GetRequiredService<WindowsApprovalCenter>();
+            Task<AssistantToolResult> processResult = tools.ExecuteAsync("run_program", processRequest.RootElement, CancellationToken.None);
+            await AwaitApprovalAsync(permissions).ConfigureAwait(true); center.Show(); await Task.Delay(150).ConfigureAwait(true); center.ConfirmCriticalForSmoke();
+            AssistantToolResult observed = await processResult.WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(true);
+            if (observed.Observation?.ExitCode != 0 || observed.Learning?.Disposition != "recorded") { throw new InvalidOperationException("Actual approved process outcome was not independently observed and recorded."); }
+            BrainNote episode = brain.Snapshot.Notes.Single(note => note.IsKnowledge && note.Type == "experience");
+            memory.SetWorkingContext("Deny a second synthetic process attempt.");
+            Task<AssistantToolResult> deniedProcess = tools.ExecuteAsync("run_program", processRequest.RootElement, CancellationToken.None);
+            await AwaitApprovalAsync(permissions).ConfigureAwait(true); center.Show(); await Task.Delay(150).ConfigureAwait(true); center.InvokeForSmoke("deny");
+            if ((await deniedProcess.ConfigureAwait(true)).Observation is not null || brain.Snapshot.Notes.Single(note => note.Id == episode.Id).Hash != episode.Hash)
+            { throw new InvalidOperationException("Denied process produced execution evidence or changed its episode."); }
+            using var reflection = JsonDocument.Parse(JsonSerializer.Serialize(new { id = episode.Id, hash = episode.Hash, lesson = "An observed process exit confirms termination but does not establish the full task outcome.", evidence = "Observed exit code: 0" }));
+            AssistantToolResult reflectionResult = await tools.ExecuteAsync("reflect_experience", reflection.RootElement, CancellationToken.None).ConfigureAwait(true);
+            if (!reflectionResult.Text.Contains("\"proposed\"", StringComparison.Ordinal) || !brain.Snapshot.Notes.Any(note => note.Type == "hypothesis" && note.Status == "draft"))
+            { throw new InvalidOperationException("Actual reflection adapter failed to preserve the review boundary."); }
+            results.Add("Actual dotnet --version required reinforced native approval; the real exit code was recorded. A denied repeat produced no execution observation. Reflection remained an unverified review draft.");
             if (args.Contains("--brain-live-smoke", StringComparer.Ordinal))
             {
                 var live = services.GetRequiredService<GeminiLiveClient>(); if (!live.IsAvailable) { throw new InvalidOperationException("A configured model credential is required for live diagnostics."); }
@@ -83,5 +104,11 @@ public static class BrainSmokeRunner
         catch (Exception error)
         { await File.WriteAllLinesAsync(Path.Combine(directory, "result.txt"), new[] { "FAIL: " + stage + " (" + error.GetType().Name + "). No raw provider error or credential was logged." }.Concat(results)).ConfigureAwait(true); }
         finally { services.GetRequiredService<Laura.Core.Abstractions.IShellController>().Shutdown(); }
+    }
+    private static async Task AwaitApprovalAsync(PermissionManager permissions)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        while (permissions.PendingRequests.Count == 0) { await Task.Delay(20, timeout.Token).ConfigureAwait(true); }
+        if (permissions.PendingRequests.Count != 1 || permissions.PendingRequests[0].Risk != PermissionRisk.Critical) { throw new InvalidOperationException("Expected one exact critical process approval."); }
     }
 }

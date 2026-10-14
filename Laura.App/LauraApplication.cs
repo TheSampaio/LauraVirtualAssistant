@@ -138,6 +138,7 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         {
             await services.GetRequiredService<Laura.Core.Brain.BrainService>().InitializeAsync().ConfigureAwait(false);
             await Task.Run(services.GetRequiredService<Laura.Core.Brain.BrainConversationMemory>().Initialize).ConfigureAwait(false);
+            await services.GetRequiredService<Laura.Core.Brain.BrainExperiences>().RecoverAsync().ConfigureAwait(false);
         }
         catch (Exception error) { services.GetRequiredService<ILogger<LauraApplication>>().LogWarning("Brain warmup unavailable ({ErrorType}).", error.GetType().Name); }
     }

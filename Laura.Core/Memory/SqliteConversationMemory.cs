@@ -26,7 +26,7 @@ public sealed partial class SqliteConversationMemory : IConversationMemory
             using SqliteCommand version = connection.CreateCommand();
             version.CommandText = "PRAGMA user_version";
             long schemaVersion = (long)version.ExecuteScalar()!;
-            if (schemaVersion > 2) { throw new InvalidOperationException("Memory schema is newer than this Laura version."); }
+            if (schemaVersion > 3) { throw new InvalidOperationException("Memory schema is newer than this Laura version."); }
             using SqliteTransaction transaction = connection.BeginTransaction();
             using SqliteCommand migration = connection.CreateCommand();
             migration.Transaction = transaction;
@@ -34,7 +34,8 @@ public sealed partial class SqliteConversationMemory : IConversationMemory
                 CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, source INTEGER NOT NULL, text TEXT NOT NULL, stamp TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS facts (key TEXT PRIMARY KEY, text TEXT NOT NULL, stamp TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS learning_events (message_id INTEGER PRIMARY KEY,vault TEXT NOT NULL);
-                PRAGMA user_version=2;
+                CREATE TABLE IF NOT EXISTS execution_events (id TEXT PRIMARY KEY,vault TEXT NOT NULL,payload TEXT NOT NULL);
+                PRAGMA user_version=3;
                 """;
             migration.ExecuteNonQuery();
             transaction.Commit();
@@ -162,7 +163,7 @@ public sealed partial class SqliteConversationMemory : IConversationMemory
         Initialize();
         using SqliteConnection connection = Open();
         using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = "BEGIN; DELETE FROM learning_events; DELETE FROM messages; COMMIT; VACUUM;";
+        command.CommandText = "BEGIN; DELETE FROM execution_events; DELETE FROM learning_events; DELETE FROM messages; COMMIT; VACUUM;";
         command.ExecuteNonQuery();
     }
 }

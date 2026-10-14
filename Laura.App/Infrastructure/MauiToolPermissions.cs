@@ -13,7 +13,7 @@ internal static class MauiToolPermissions
         PermissionOperation operation = name switch
         {
             // These dispatch through separately guarded adapters or are internal metadata operations.
-            "open_app" or "run_local_command" or "list_apps" or "system_status" or "stop_listening" or "recall_memory" or "read_brain_passage" or "learn_memory" or "list_brain_skills" or "read_brain_skill" => PermissionOperation.Internal,
+            "open_app" or "run_local_command" or "list_apps" or "system_status" or "stop_listening" or "recall_memory" or "read_brain_passage" or "learn_memory" or "reflect_experience" or "list_brain_skills" or "read_brain_skill" => PermissionOperation.Internal,
             "save_memory" or "forget_memory" or "shutdown_assistant" => PermissionOperation.SystemSettings,
             "reminder" when action == "list" => PermissionOperation.Internal,
             "reminder" when action is "add" or "cancel" => PermissionOperation.SystemSettings,

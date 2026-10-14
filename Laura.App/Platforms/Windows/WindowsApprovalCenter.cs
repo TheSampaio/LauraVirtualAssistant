@@ -172,7 +172,7 @@ public sealed class WindowsApprovalCenter(PermissionManager permissions, ISettin
     }
     private static void RequireSmoke()
     {
-        if (!Environment.GetCommandLineArgs().Contains("--permissions-smoke", StringComparer.Ordinal) && !Environment.GetCommandLineArgs().Contains("--screenshot-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Approval diagnostics require explicit isolated smoke mode."); }
+        if (!Environment.GetCommandLineArgs().Contains("--permissions-smoke", StringComparer.Ordinal) && !Environment.GetCommandLineArgs().Contains("--screenshot-smoke", StringComparer.Ordinal) && !Environment.GetCommandLineArgs().Contains("--brain-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Approval diagnostics require explicit isolated smoke mode."); }
     }
     private static Microsoft.UI.Xaml.Controls.Border Card(params Microsoft.UI.Xaml.UIElement[] children)
     {

@@ -16,4 +16,8 @@ public sealed record AssistantToolResult(string Text, byte[]? Image = null, stri
 {
     /// <summary>Cancels future disclosure if the originating editable capture is closed.</summary>
     public CancellationToken ImageLifetime { get; init; }
+    /// <summary>Gets native completed-process evidence, independent of generated text or presumed task success.</summary>
+    public Laura.Core.Brain.BrainExecutionObservation? Observation { get; init; }
+    /// <summary>Gets the separate outcome of optional knowledge consolidation; it never changes the execution result.</summary>
+    public Laura.Core.Brain.BrainMemoryResult? Learning { get; init; }
 }
