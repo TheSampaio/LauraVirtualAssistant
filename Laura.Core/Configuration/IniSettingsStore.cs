@@ -123,16 +123,34 @@ public sealed class IniSettingsStore : ISettingsStore
             ClapWakeEnabled = document.GetBoolean(VoiceSection, "ClapWakeEnabled", defaults.ClapWakeEnabled),
             ClapWakeSensitivity = document.GetInt32(VoiceSection, "ClapWakeSensitivity", defaults.ClapWakeSensitivity),
             RememberConversations = document.GetBoolean(GeneralSection, "RememberConversations", defaults.RememberConversations),
+            Permissions = new Laura.Core.Permissions.PermissionOptions
+            {
+                Mode = (Laura.Core.Permissions.ApprovalMode)document.GetInt32("Permissions", "Mode", 0),
+                OpenInstalledApplications = document.GetBoolean("Permissions", "OpenInstalledApplications", true),
+                Voice = (Laura.Core.Permissions.ApprovalVoiceMode)document.GetInt32("Permissions", "Voice", 1),
+                Notifications = document.GetBoolean("Permissions", "Notifications", true),
+                TimeoutSeconds = document.GetInt32("Permissions", "TimeoutSeconds", 120),
+                HistoryDays = document.GetInt32("Permissions", "HistoryDays", 30)
+            },
+            Screenshots = new Laura.Core.Screenshots.ScreenshotOptions
+            {
+                ShortcutsEnabled = document.GetBoolean("Screenshot", "ShortcutsEnabled", true), AllDisplays = document.GetBoolean("Screenshot", "AllDisplays", true),
+                RegionShortcut = document.GetString("Screenshot", "RegionShortcut", "PrtSc"), WindowShortcut = document.GetString("Screenshot", "WindowShortcut", "Ctrl+PrtSc"),
+                FullScreenShortcut = document.GetString("Screenshot", "FullScreenShortcut", "Shift+PrtSc")
+            },
             Brain = new Laura.Core.Brain.BrainOptions
             {
                 Directory = document.GetString("Brain", "Directory", ""),
                 AutoLearn = document.GetBoolean("Brain", "AutoLearn", true),
+                MaintenanceEnabled = document.GetBoolean("Brain", "MaintenanceEnabled", false),
                 ContextCharacters = document.GetInt32("Brain", "ContextCharacters", 5000),
                 EmbeddingModel = document.GetString("Brain", "EmbeddingModel", ""),
                 EmbeddingVocabulary = document.GetString("Brain", "EmbeddingVocabulary", ""),
                 LexicalWeight = document.GetDouble("Brain", "LexicalWeight", .45), SemanticWeight = document.GetDouble("Brain", "SemanticWeight", .3),
                 GraphWeight = document.GetDouble("Brain", "GraphWeight", .15), TemporalWeight = document.GetDouble("Brain", "TemporalWeight", .1),
-                GraphLimit = document.GetInt32("Brain", "GraphLimit", 400)
+                GraphLimit = document.GetInt32("Brain", "GraphLimit", 400),
+                RetrievalGraphDepth = document.GetInt32("Brain", "RetrievalGraphDepth", 2), RetrievalGraphCandidates = document.GetInt32("Brain", "RetrievalGraphCandidates", 160),
+                RetrievalGraphMilliseconds = document.GetInt32("Brain", "RetrievalGraphMilliseconds", 30)
                 , TrustedSkills = document.GetString("Brain", "TrustedSkills", "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             },
             GreetOnStartup = document.GetBoolean(GeneralSection, "GreetOnStartup", defaults.GreetOnStartup),
@@ -186,8 +204,18 @@ public sealed class IniSettingsStore : ISettingsStore
         document.SetBoolean(VoiceSection, "ClapWakeEnabled", settings.ClapWakeEnabled);
         document.SetNumber(VoiceSection, "ClapWakeSensitivity", settings.ClapWakeSensitivity);
         document.SetBoolean(GeneralSection, "RememberConversations", settings.RememberConversations);
+        document.SetNumber("Permissions", "Mode", (int)settings.Permissions.Mode);
+        document.SetBoolean("Permissions", "OpenInstalledApplications", settings.Permissions.OpenInstalledApplications);
+        document.SetNumber("Permissions", "Voice", (int)settings.Permissions.Voice);
+        document.SetBoolean("Permissions", "Notifications", settings.Permissions.Notifications);
+        document.SetNumber("Permissions", "TimeoutSeconds", settings.Permissions.TimeoutSeconds);
+        document.SetNumber("Permissions", "HistoryDays", settings.Permissions.HistoryDays);
+        document.SetBoolean("Screenshot", "ShortcutsEnabled", settings.Screenshots.ShortcutsEnabled); document.SetBoolean("Screenshot", "AllDisplays", settings.Screenshots.AllDisplays);
+        document.Set("Screenshot", "RegionShortcut", settings.Screenshots.RegionShortcut); document.Set("Screenshot", "WindowShortcut", settings.Screenshots.WindowShortcut);
+        document.Set("Screenshot", "FullScreenShortcut", settings.Screenshots.FullScreenShortcut);
         document.Set("Brain", "Directory", settings.Brain.Directory);
         document.SetBoolean("Brain", "AutoLearn", settings.Brain.AutoLearn);
+        document.SetBoolean("Brain", "MaintenanceEnabled", settings.Brain.MaintenanceEnabled);
         document.SetNumber("Brain", "ContextCharacters", settings.Brain.ContextCharacters);
         document.Set("Brain", "EmbeddingModel", settings.Brain.EmbeddingModel);
         document.Set("Brain", "EmbeddingVocabulary", settings.Brain.EmbeddingVocabulary);
@@ -196,6 +224,9 @@ public sealed class IniSettingsStore : ISettingsStore
         document.SetNumber("Brain", "GraphWeight", settings.Brain.GraphWeight);
         document.SetNumber("Brain", "TemporalWeight", settings.Brain.TemporalWeight);
         document.SetNumber("Brain", "GraphLimit", settings.Brain.GraphLimit);
+        document.SetNumber("Brain", "RetrievalGraphDepth", settings.Brain.RetrievalGraphDepth);
+        document.SetNumber("Brain", "RetrievalGraphCandidates", settings.Brain.RetrievalGraphCandidates);
+        document.SetNumber("Brain", "RetrievalGraphMilliseconds", settings.Brain.RetrievalGraphMilliseconds);
         document.Set("Brain", "TrustedSkills", string.Join(';', settings.Brain.TrustedSkills));
         document.SetBoolean(GeneralSection, "GreetOnStartup", settings.GreetOnStartup);
         document.SetBoolean(GeneralSection, "AnnounceHourly", settings.AnnounceHourly);

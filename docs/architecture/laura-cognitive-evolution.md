@@ -1,0 +1,286 @@
+# Evolução cognitiva da LAURA
+
+Aquisição direta do GitHub e continuação cognitiva implementadas em 2026-10-14: ver [auditoria, arquitetura e evidências](laura-cognitive-orchestration.md). A referência de 330 testes foi confirmada antes das mudanças; a suíte integrada evoluiu para 377. Os diagnósticos antigos de REA com arquivos preparados continuam documentados como aquisição local, separadamente dos novos testes remotos.
+
+## Fase 0 — auditoria de 2026-10-13
+
+Este trabalho evolui o cérebro existente. Markdown permanece a fonte de verdade; SQLite/FTS5 e vetores são índices descartáveis. As políticas de execução ficam no `PermissionManager`, fora do vault e fora do modelo. A base de permissões e captura está descrita no [relatório de integração](laura-permissions-screenshot-delivery.md), incluindo verificações manuais pendentes.
+
+### Fluxo atual e componentes reutilizados
+
+| Caminho | Responsabilidade existente | Limitação encontrada |
+|---|---|---|
+| `AssistantEngine` / `GeminiSkillDispatcher` / `GeminiLiveClient` | fila de comandos, conversa, ferramentas, voz e contexto recuperado | provedor de conversa implementado é Gemini; não há extrator cognitivo independente |
+| `BrainConversationMemory` / `SqliteConversationMemory` | histórico limitado, migração de fatos antigos, última declaração do usuário como contexto transitório | métodos de compatibilidade síncronos; contexto de voz publicado somente ao concluir o turno |
+| `BrainLearning` | declarações conservadoras, chaves estáveis, correção explícita com revisão, contradição em Inbox | gramática restrita; `DropWrite` pode perder eventos; encerramento cancela antes de drenar; falhas não retornam ao chamador |
+| `BrainService` / `FileBrainStorage` / `BrainMarkdown` | identidade, YAML preservado, hash otimista, revisões, watcher, relações, migração e anexos | gravações precisam continuar usando essas proteções; nenhuma memória pode ativar ferramenta |
+| `BrainIndex` / `OnnxBrainEmbedding` | FTS5 e vetores locais com cache por hash/modelo | índice por nota inteira; ONNX lê até 126 tokens; excerpt procura frase inteira, perdendo passagens tardias |
+| `BrainGraphTopology` / grafo em `MemoryPage` | topologia baseada em relações reais e links resolvidos | recuperação expande um único salto sem orçamento específico; proveniência da relação não integra `BrainEdge` |
+| `BrainSkills` | importação inerte, aprovação externa por `id:hash`, catálogo e leitura progressiva | descoberta lexical; sem propostas, composição ou validação de dependências; catálogo limitado pode omitir habilidade relevante |
+| `WindowsApplicationCatalog` / `WindowsProcessLauncher` | inventário real de atalhos/registro, alvos congelados, execução autorizada | inventário só em memória; não há experiência operacional estruturada/reutilização persistente verificada |
+| `MauiAssistantTools` / `MauiToolPermissions` | ferramentas estruturadas e registro fechado de efeitos | resultados de texto não equivalem a evidência de execução; não há protocolo/client MCP existente |
+
+MAUI/WinUI, serviços singleton e padrões visuais existentes são mantidos. Markdig, SQLite e ONNX já são dependências do Core. Não é necessária uma segunda infraestrutura de armazenamento nem um novo framework para as fases iniciais.
+
+### Invariantes e regressões a evitar
+
+- Não aprender respostas geradas como fatos do usuário. Uma proposta do modelo precisa ser atribuída à declaração real e permanecer conhecimento, sem efeitos executáveis.
+- Repetição não aumenta confiança. Correções precisam preservar identidade, revisão anterior e fontes; declarações incompatíveis não devem escolher silenciosamente uma versão.
+- `RememberConversations` e `Brain.AutoLearn` continuam controlando aprendizado e contexto. Dados sensíveis não entram na captura automática.
+- Skills externas continuam inertes; alterar seus bytes invalida aprovação. Conhecimento, dependências sugeridas e Markdown não alteram permissões.
+- Reutilizar um caminho aprendido exige revalidar existência/identidade e passar novamente pela camada de execução. Não executar código de fontes adquiridas para estudá-las.
+- Pastas novas usam segmentos com inicial maiúscula. IDs, links, aliases, metadados desconhecidos e comportamento em filesystem sensível a caixa devem ser preservados.
+- Testes usam vaults e mensagens sintéticos, sem alterar o cérebro pessoal nem transmitir capturas/documentos privados.
+
+### Referência e plano incremental
+
+A referência anterior contém 243 testes Core aprovados e build Release sem warnings/erros. Evidências nativas da base: `_Output/PermissionsAcceptance`, `_Output/PermissionsLiveFinal`, `_Output/LauraUiAcceptance` e `_Output/ScreenshotStableFinal`. Uma nova execução de referência é salva em `_Output/CognitiveBaseline`.
+
+Ordem: (1) aprendizado contextual e confiabilidade; (2) recuperação granular com testes comparáveis; (3) expansão de grafo limitada; (4) experiências e reflexão verificável; (5) aquisição; (6) propostas e evolução de skills; (7) MCP; (8) consolidação; (9) observabilidade/interface; (10) validação integrada. Cada unidade coerente recebe testes e commit próprio. Fases futuras não são consideradas implementadas por este plano.
+
+O ambiente não comprova gestos reais de captura, múltiplos monitores/DPI físico, leitura por Narrator ou áudio audível. Não há servidor MCP configurado a partir do qual validar integração, nem repositório externo específico fornecido para aquisição. Essas limitações não impedem os testes locais de memória e recuperação.
+
+## Fase 1 — aprendizado contextual e fila
+
+`BrainLearning` mantém o caminho conservador de declarações simples. `learn_memory` permite ao modelo de conversa já configurado interpretar declarações naturais sem uma segunda requisição de extração. O Core valida categoria fechada, tamanho, privacidade e citações literais presentes no contexto transitório real. O adaptador congela esse contexto antes de aguardar outras ferramentas; texto tipado e transcrição de voz atualizam o mesmo `IConversationMemory`. Não recebe caminhos arbitrários, regras de segurança, scripts ou aprovação de skills.
+
+Preferências conhecidas reutilizam `owner.editor`, `owner.language` e `owner.style`; outros assuntos recebem chave derivada da categoria e tópico efetivamente citado. Propostas classificam novidade, repetição, complemento, correção, contradição, contexto temporário, obsolescência e evidência não verificada. Correção/complemento exigem o ID real do alvo no mesmo escopo. Repetição não altera revisão nem confiança. Complementos preservam texto anterior; correções usam as revisões existentes. Declarações incompatíveis e sugestões de obsolescência ficam em Inbox para revisão, sem excluir conhecimento.
+
+O novo campo YAML opcional `verification` distingue `user_reported` e `unverified`; arquivos antigos usam `unspecified`. Recuperação apresenta essa informação junto de origem, categoria e confiança. Uma interpretação de fala não é verificação independente de um fato externo.
+
+A fila possui 64 posições, retorna aceitação/exclusão/saturação/encerramento e oferece `ObserveAsync` para aguardar capacidade com cancelamento. `FlushAsync` permite aguardar a conclusão dos eventos anteriores. Contadores não registram conteúdo. Falhas recuperáveis têm até três tentativas; falhas permanentes não encerram o worker. Shutdown fecha a entrada e concede cinco segundos para drenar antes de cancelar. Gravações de conhecimento são serializadas e continuam usando hashes/revisões do vault.
+
+### Validação e limites
+
+- Referência: 243 testes. Fase 1: **254 passaram, zero falhas/ignorados**, relatório `_Output/CognitivePhase1/phase1-all.trx`.
+- Três testes exercitam fila cheia real, espera/cancelamento, falha transitória, falha permanente e shutdown. O primeiro ensaio de testes sem escalonamento abortou na conexão VSTest/testhost; a execução com ambiente Windows disponível passou.
+- Oito casos adicionais exercitam interpretação contextual, citações inventadas, dados sensíveis/políticas, correção, complementos, contradição, obsolescência, contexto temporário, configurações e reinício com índice independente.
+- Build Release: zero warnings/erros. Diagnóstico `--brain-smoke <raiz> --storage <mesma-raiz>` verifica o adaptador real sem nuvem. `--brain-live-smoke` habilita somente mensagens sintéticas ao modelo configurado e referência à credencial protegida dentro do processo, sem copiá-la ou imprimir erros remotos.
+- O diagnóstico real passou em `_Output/CognitiveLivePhase1Verified/result.txt`: adaptador recusou evidência de outro contexto; Gemini interpretou preferência natural em português, corrigiu o ID real com revisão preservada e recuperou `Reviewed Editor` em um terceiro turno. Apenas dados sintéticos foram enviados; nenhum microfone foi iniciado. Isso comprova os cenários executados, não generalização para toda linguagem natural.
+- Chamadas diretas a `Observe` usam fila volátil. Mensagens da aplicação usam os recibos duráveis descritos abaixo; propostas explícitas retornam somente depois da gravação.
+- A interpretação depende da disponibilidade/comportamento do modelo; o Core recusa propostas sem evidência, mas não comprova por conta própria o significado de toda frase. Fontes externas e falas da assistente não são usadas como declaração do usuário. Experiências operacionais estruturadas, extração de documentos e evolução de skills ainda são fases posteriores.
+
+### Recuperação durável de eventos selecionados
+
+O esquema SQLite do histórico evolui de 1 para 2 em transação, preservando fatos e mensagens. `learning_events` contém somente ID da mensagem e hash da identidade do vault. Texto não é duplicado. `BrainConversationMemory` cria o recibo na mesma transação da mensagem quando aprendizado/configuração/privacidade permitem. Histórico anterior à migração não recebe recibos retroativos, e texto da assistente não é uma fonte aceita.
+
+O alimentador coloca recibos pendentes na fila existente, com backpressure e deduplicação por recibo. Falhas permanecem pendentes para reinício, sem ciclo infinito de retry. Só o vault correspondente recupera seus eventos. A consolidação é idempotente se o processo interromper entre Markdown e acknowledgment; gravações revalidam o vault sob o gate real. Limpar histórico remove recibos, e a retenção de 2.000 mensagens remove eventos expirados. Não há retenção secreta ilimitada nem replay de todo o transcript.
+
+Validação: **260 testes passaram**, `_Output/CognitivePhase1/phase1-recovery.trx`; build Release zero warnings/erros. Os seis novos casos verificam recuperação, isolamento de vault/histórico, interrupção antes do acknowledgment, falha preservada, remoção/privacidade, migração v1 e retenção. A interrupção é simulada na fronteira entre escrita e acknowledgment; não foi injetada falha elétrica física. Retenção de histórico continua sendo limite explícito de recuperação. A fila direta sem recibo não oferece recuperação após crash.
+
+## Fase 2 — recuperação por passagens
+
+`BrainPassages` usa o Markdig já instalado para identificar seções reais (cabeçalhos dentro de código não viram seções). Produz até 512 spans por documento, com sobreposição pequena, fronteiras UTF-16 válidas, contexto de cabeçalhos e cobertura do final. Spans são derivados; não criam nós nem relações e não alteram Markdown. Se um documento excede o orçamento, a passagem final cobre o restante e a seleção de excerpt continua limitada a 800 caracteres.
+
+O mesmo `BrainIndex` passa ao esquema derivado 2: FTS5 e vetores por passagem, hash/modelo para cache e invalidação de dados removidos. Índices anteriores são reconstruídos a partir do vault. A consulta limita 4.096 passagens lexicais, deduplica até 80 candidatos de notas e combina até 60 candidatos semânticos locais. A segunda etapa preserva os pesos configurados de conteúdo/grafo/tempo/confiança e seleciona excerpt no span correspondente. A busca usa o gate do serviço para ler snapshot e índice coerentes. Nenhum vetor sozinho cria relação factual.
+
+`BrainHit` expõe localização; `recall_memory` apresenta seção, offset e hash. `read_brain_passage` expande até 4.000 caracteres de uma versão atual e recusa hash antigo, skill, nota arquivada, ID conflitante ou bounds inválidos. Consultas têm limite de 4.000 caracteres; contexto mantém seu orçamento configurado. Recuperação vazia, fallback lexical e memórias antigas permanecem suportados.
+
+### Evidência e decisões de ranking
+
+- **265 testes passaram**, `_Output/CognitivePhase2/phase2-all.trx`; build Release zero warnings/erros.
+- Benchmark reproduzível: cinco documentos Markdown sintéticos, cinco perguntas EN/PT, cinquenta consultas lexicais aquecidas. A seleção antiga de excerpt por frase inteira recuperou 0/5 respostas tardias; a seleção por passagem recuperou 5/5, com documento esperado em primeiro lugar em 5/5. p50/p95: **1,22/1,45 ms** nesta máquina, `_Output/CognitivePhase2/passage-benchmark.trx`.
+- Essa comparação isola seleção de excerpt: não afirma melhora universal do ranking nem precisão semântica em corpus de produção. Um double de embedding com janela curta verifica contrato/caching/cobertura tardia, não qualidade linguística de ONNX. Nesta execução não foi fornecido modelo ONNX real.
+- Integração MAUI real passou em `_Output/CognitiveNativePhase2/result.txt`: aprendizado com recibo durável e expansão de trecho tardio através dos adaptadores de produção, sem nuvem.
+- RRF foi considerado, mas a melhora demonstrada aqui depende da granularidade. Sem corpus semântico representativo não existe evidência para substituir os pesos já configuráveis; esse benchmark não é apresentado como comparação entre RRF e fusão ponderada.
+
+APIs consultadas: [SQLite FTS5](https://www.sqlite.org/fts5.html) para MATCH/BM25/colunas não indexadas e [Markdig](https://github.com/xoofx/markdig) para parsing Markdown. Não foi introduzido pacote. Limites: até 512 spans por nota; passagem final grande tem janela semântica parcial conforme o modelo; SQLite/ONNX em andamento não são interrompidos no meio de uma chamada nativa. A UI aguarda de forma assíncrona. Testes de corpus real, escalas grandes e modelo ONNX instalado continuam pendentes.
+
+## Fase 3 — ativação associativa limitada
+
+`BrainGraphActivation` prepara vizinhanças com até 32 relações elegíveis por nó durante a publicação do snapshot. A consulta seleciona até oito sementes reais, usa prioridade por força, atenua saltos posteriores e preserva cada aresta, sua direção e proveniência. Busca reversa é identificada e recebe peso menor. Ciclos e relações duplicadas não elevam confiança nem criam conhecimento novo.
+
+O orçamento padrão é dois saltos, 160 candidatos e 30 ms de travessia; o limite adicional é 4.096 arestas visitadas. Os valores `RetrievalGraphDepth`, `RetrievalGraphCandidates` e `RetrievalGraphMilliseconds` são persistidos no INI externo ao vault e sanitizados (profundidade 0–4, candidatos 8–500, tempo 5–250 ms). Zero saltos desativa expansão. Essas configurações não modificam permissões. O orçamento cobre travessia, não construção do índice nem chamadas nativas de ONNX/SQLite.
+
+Relações desconhecidas, `contradicts`, nós draft/arquivados/skills, identidades conflitantes e pesos inválidos são excluídos. `BrainEdge.Provenance` mantém a origem de `BrainRelation.Source` e identifica wikilinks autorados. O resultado de recuperação expõe o caminho associado, explicando que ele não estabelece um novo fato. Esta unidade não gera automaticamente relações semânticas gerais a partir de similaridade; interpretações adicionais devem ter evidência e revisão adequadas.
+
+Validação: **270 testes passaram**, `_Output/CognitivePhase3/phase3-all.trx`; build Release zero warnings/erros. Os cinco novos testes verificam dois saltos na recuperação real, preservação de hashes/arestas, direção reversa, ciclos, candidatos, cancelamento e exclusões. O teste de INI existente também verifica persistência dos três limites. Não é um benchmark de grafo de milhões de nós nem uma garantia de deadline rígido de sistema operacional.
+
+## Fase 4 — experiências e reflexão, primeira unidade
+
+`run_program` produz `BrainExecutionObservation` somente após observar o processo terminar. Código de saída, nome do executável, horário, ID da observação e fingerprint da operação vêm do adaptador real, não de texto do modelo. `BrainExperiences` agrupa tentativas por objetivo em memória episódica, conserva erros/tentativas subsequentes e revisões, sem concluir que exit code zero verifica o objetivo inteiro.
+
+Não são persistidos argumentos, stdout/stderr, tokens, imagens ou caminhos do processo nesses episódios. Objetivos sensíveis/longos e aprendizado desabilitado são excluídos. O resultado da ação continua independente de falha de aprendizado; recibos pendentes e erro de armazenamento são reportados separadamente. O histórico SQLite passa ao esquema 3 em transação; até 200 recibos selecionados (16.000 caracteres serializados cada) permanecem até a escrita Markdown. Não há descarte silencioso quando a capacidade acaba. Reinício consolida conhecimento e nunca reexecuta o comando. Limpar histórico também limpa recibos pendentes; experiências já consolidadas são conhecimento separado.
+
+`reflect_experience` exige ID/hash atuais e evidência literal de um episódio. Produz hipótese draft/unverified em `Inbox/Reflections`, com relação `learned_from`. Há no máximo uma proposta por versão da fonte; uma hipótese não pode refletir a si própria. Ela não ativa skill, instala dependência ou altera autorização. Essa unidade não implementa reflexão contínua nem geração automática de conclusões causais.
+
+Validação: **274 testes passaram**, `_Output/CognitivePhase4/phase4-experiences.trx`; build Release zero warnings/erros. Quatro novos casos verificam tentativa com erro e outra saída zero, idempotência/reinício, isolamento de vault, privacidade/configuração, corrupção isolada e reflexões. Integração real em `_Output/CognitiveNativeExperiences/result.txt` passou: `dotnet --version` aprovado com checkbox nativo, saída observada, repetição negada sem observação e reflexão mantida em revisão. O ensaio não fez instalação nem executou código recuperado do cérebro.
+
+Limites: essa primeira unidade observa processos concluídos por `run_program`, não todas as ferramentas ou sucesso visual da tarefa. Existe uma fronteira não atômica entre efeito no SO e retenção do recibo; queda antes da retenção pode perder essa observação. Markdown é editável e seus rótulos de evidência não são um log criptográfico nem autoridade de execução. Reutilização de aplicativos aprendidos é a próxima unidade.
+
+### Reutilização de aplicativos observados
+
+`ProcessLaunchResult` distingue aceitação do shell e criação real de processo. O executor Windows retorna PID e hash de executáveis de até 64 MiB. `BrainApplications` aprende apenas criação observada, conserva uma referência sem argumentos, agrega aliases para o mesmo alvo e valida arquivo/hash antes de reutilizar. O caminho fica em metadados YAML `application`, fora do corpo/indexação automática do prompt. Código de descoberta e comandos locais existentes usam a mesma referência; qualquer nova execução continua passando pelo `PermissionManager`.
+
+Executáveis aprendidos têm hash vinculado aos parâmetros de aprovação e recalculado no callback real, mantendo um handle de leitura que impede escrita/remoção durante a verificação/partida. Alteração, rede, redirecionamento, armazenamento protegido, referências ambíguas e adapters sem suporte a hash não recebem execução implícita. Uma negação explícita ou falha de pinning interrompe fallback; ausência real do programa principal preserva o fallback conhecido. Falha de escrita da referência é separada do resultado nativo e registrada sem conteúdo privado.
+
+Validação: **280 testes passaram**, `_Output/CognitivePhase4/phase4-final.trx`; build Release zero warnings/erros. Quatro testes verificam referências/reinício/deduplicação, bytes alterados, aceitação sem PID, aliases/escopos/rede/configuração; dois verificam fallback negado versus programa ausente. Integração real passou em `_Output/CognitiveNativeApplications/result.txt`: um host do SDK foi copiado somente para Workspace de diagnóstico, houve criação real de processo, `open_app` reutilizou o alvo sem atualizar inventário e exigiu nova aprovação. Bytes foram alterados mantendo tamanho/data durante uma aprovação pendente; o callback recusou o hash e não criou processo. Não foi alterado o runtime instalado.
+
+Limites: referência observa criação, não janela pronta nem tarefa concluída. Shortcuts/protocolos, aceitação sem PID e executáveis maiores que 64 MiB não são promovidos a referência verificada; descoberta permanece disponível. Não há autoaprovação de programas conhecidos ou armazenamento de argumentos. O cérebro continua fornecendo uma pista revalidada, não uma autoridade de segurança.
+
+## Fase 5 — aquisição local de fontes
+
+`BrainSources` e `study_source` adquirem um arquivo local ou escopo estreito de repositório após aprovação do inventário real. A leitura ocorre dentro do callback autorizado, com recursos congelados e revalidação. MD/TXT/JSON, projetos C# e formatos comuns de código são armazenados como referências externas/unverified; frontmatter de origem não vira política, skill ativa ou metadado de autoridade. Reimportação usa chaves por origem e mantém IDs/revisões; o projeto de estudo se relaciona às referências efetivamente importadas.
+
+O inventário exclui diretórios de credenciais, Git/cache/build, arquivos ocultos, nomes de credenciais e redirects. Limites: 64 arquivos, profundidade oito, 5.000 entradas examinadas, 64 KiB por arquivo, 256 KiB de texto por aquisição e 128 nomes de dependências. Leitura usa UTF-8 estrito e stream limitado, rejeita bytes nulos e linhas com valores de credenciais. Parsing JSON é limitado; XML proíbe DTD e resolver externo. `package.json` e `PackageReference` fornecem nomes de dependências declaradas, jamais confirmação de instalação/disponibilidade.
+
+O retorno informa quantidade importada/excluída, linguagens de origem e dependências declaradas. Código, `postinstall`, programas e instalações não são executados para estudar fontes. A referência é recuperável pelo mesmo índice granular, sem um segundo cérebro paralelo.
+
+Validação: **283 testes passaram**, `_Output/CognitivePhase5/phase5-all.trx`; build Release zero warnings/erros. Três novos testes verificam estudo TypeScript sem execução/instalação, fontes C#/XML/JSON, fontes sensíveis/malformadas, deduplicação, recuperação, negação/cancelamento e aprovação tardia. Integração real em `_Output/CognitiveNativeSources/result.txt` passou pelo adaptador `study_source` e checkbox nativo, com TypeScript recuperado e `postinstall` não executado. A validação usou fontes sintéticas, sem estudar nem transmitir repositórios pessoais.
+
+Limites: esta unidade cobre arquivos locais; URLs/HTTP, PDF e documentos binários não são readers implementados. Repositórios grandes exigem seleção de subpastas e aquisições incrementais. O detector conservador de credenciais não é um DLP universal e pode excluir exemplos legítimos. Dependências são apenas declaradas, não instaladas/testadas. As próximas fases incluem proposta/evolução de skills, MCP, consolidação, observabilidade/UI e validação integrada final; não são consideradas concluídas por esta entrega incremental.
+
+## Fase 6, unidade inicial — propostas de habilidades e revisão
+
+`BrainSkills.ProposeAsync` e `propose_brain_skill` criam um `Skills/.../SKILL.md` inerte, com `name`, `description` e metadados declarativos `laura_skill`. A definição contém objetivo, situações de uso, pré-requisitos, dependências, ferramentas, permissões descritivas, passos, limitações, critérios de sucesso/falha, capacidades, fontes e componentes. O Core exige fontes atuais com ID/hash e citação literal, campos limitados e um tipo conhecido (`guidance`, `native`, `mcp`, `code`, `composition`). Isso comprova a referência textual, não a correção semântica de toda síntese; a proposta permanece `draft/unverified`.
+
+Revisões exigem ID/hash da habilidade atual, preservam identidade e histórico e voltam a draft. Uma habilidade de mesmo nome normalizado deve ser reutilizada ou revisada explicitamente; ainda não há deduplicação semântica geral. O modelo não recebe uma ferramenta para ativar habilidades. `read_brain_skill` continua exigindo aprovação nativa da versão exata. Aprovar instruções não cria concessões no `PermissionManager`; os passos continuam passando pelos respectivos adaptadores protegidos.
+
+`Inspect` separa aprovação e disponibilidade das instruções. Fontes alteradas, conflitos, ferramentas não registradas, dependências/pré-requisitos não verificados e runtimes MCP/código adicional indisponíveis bloqueiam carregamento/ativação. A lista nativa vem das declarações reais do adaptador, não da memória. Composições referenciam versões exatas de até quatro habilidades; componentes precisam de aprovação válida e são reavaliados com limite de profundidade/ciclos. Desativar/alterar um componente invalida a disponibilidade da composição. Metadados ficam no catálogo, sem carregar todos os corpos no prompt.
+
+Componentes modificados: `BrainNote`, `BrainMarkdown`, `BrainSkills`, novos `BrainSkillDefinition`/`BrainSkillProposals`, registro DI, registro fechado de efeitos, adaptador de ferramentas e diagnóstico cognitivo. Nenhum pacote foi adicionado.
+
+Validação automatizada: **289 testes passaram**, zero falhas/skips, `_Output/CognitivePhase6/phase6-proposals-verified.trx`. Seis novos testes cobrem geração inerte/reabertura, fontes falsas/desatualizadas e limites, revisão/histórico/reaprovação, dependências/ferramentas indisponíveis, composição/desativação e IDs conflitantes em componentes. Os testes legados de importação e revisão de skills também passaram. O build Release não apresentou avisos/erros.
+
+Integração nativa: `_Output/CognitiveNativeSkillProposalsFinal/result.txt` passou por aquisição real REA, proposta fundamentada no episódio real de processo, revisão por `SkillActivation` e leitura das instruções, sem concessões de execução. Uma segunda proposta citou a importação `serveStdio` da fonte TypeScript real do REA e declarou dependência/ferramenta MCP indisponível: ficou bloqueada sem instalação, execução ou solicitação de aprovação enganosa. Não houve teste de uma sessão MCP real nem execução automática do procedimento proposto.
+
+Esta unidade não conclui a Fase 6 inteira: ainda faltam descoberta semântica ranqueada por tarefa, testes operacionais das habilidades propostas e monitoramento estruturado de uso/resultado. `available_instructions` significa instruções aprovadas com requisitos declarados resolvidos pelo mecanismo atual, não tarefa executada com sucesso. Dependências/pré-requisitos externos são conservadoramente bloqueados até haver verificação implementada; não são instalados automaticamente. A composição preserva referências de leitura progressiva, não executa uma sequência autônoma de ferramentas. Skills antigas sem definição estruturada mantêm compatibilidade como `instructions_only`, sem afirmar disponibilidade de dependências que só apareçam no texto.
+
+### Descoberta ranqueada e carregamento progressivo — 14/10/2026
+
+`BrainSkills.DiscoverAsync` e a consulta opcional de `list_brain_skills` reutilizam `BrainIndex` em um cache derivado separado, com descrições, capacidades e situações de uso limitadas. O corpo e os passos do procedimento não entram nesse índice. O resultado distingue busca lexical, híbrida local e catálogo sem consulta, inclui a versão e os bloqueios de disponibilidade. Alterar apenas instruções invalida a aprovação, sem recalcular embeddings de metadados inalterados. O chat recebe candidatos por tarefa; instruções completas continuam dependendo de `read_brain_skill` e revisão exata. A persona orienta reformular/traduzir consultas quando só houver busca lexical, sem interpretar ausência de resultado como prova de inexistência.
+
+Validação: **306 testes passaram**, zero falhas/skips (`_Output/CognitiveSkillDiscovery/discovery-all.trx`); build Release sem avisos/erros. Corpus sintético de 20 habilidades e cinco consultas: catálogo alfabético limitado omitia os cinco alvos; busca lexical por descrição/capacidade recuperou o alvo em primeiro lugar nas cinco consultas. Em 25 consultas aquecidas, p50=52,98 ms e p95=55,92 ms nesta máquina. Isso não mede qualidade geral em produção. Outro teste usa embeddings falsos determinísticos para verificar o contrato multilíngue, a ausência de corpos privados no índice e o reaproveitamento do cache; não comprova qualidade de um modelo neural real.
+
+Integração nativa sem nuvem: `_Output/CognitiveNativeDiscovery/result.txt` passou. O adaptador real encontrou instruções revisadas e a proposta MCP bloqueada, apresentou dependências reais e não expôs os passos nem criou aprovações. Monitoramento de resultados e MCP conectado continuam unidades seguintes.
+
+### Monitoramento por versão e turno — 14/10/2026
+
+`BrainSkillUsage` vincula instruções efetivamente carregadas ao ID transitório do turno, vault e hash revisado. O adaptador congela esse vínculo antes de enfileirar a ferramenta e revalida aprovação, fontes, ferramenta declarada, turno e limite de dez minutos depois da execução. Somente o `BrainExecutionObservation` nativo de um processo encerrado produz recibo. Abrir instruções, negar execução, um relato do modelo ou trocar de turno não produz resultado de habilidade. Procedimentos genéricos sem `run_program` declarado não recebem atribuição de processos. Dados sensíveis e aprendizado/histórico desabilitados continuam excluídos.
+
+O SQLite existente evolui para esquema 4 e retém até 1.000 observações globalmente, idempotentes por evento, separadas por versão; `read_brain_skill_usage` lê até 50 recentes. O recibo contém IDs, hashes, ferramenta, horário e exit code, sem argumentos, stdout, transcrição ou causa inventada. Limpar histórico remove esses recibos. Não há porcentagem de sucesso da tarefa baseada em exit code. Uma falha observada pode fundamentar uma revisão pelo mecanismo existente de propostas, com fontes atuais, histórico preservado e nova aprovação; não ocorre atualização destrutiva automática.
+
+Validação: **312 testes passaram**, zero falhas/skips (`_Output/CognitiveSkillUsage/usage-verified.trx`), mais uma execução focada da exclusão de contexto sensível após ampliar a asserção. Build Release sem avisos/erros. Casos novos cobrem idempotência, reinicialização do armazenamento, versões, revogação/fontes alteradas, troca de turno durante refresh, expiração, privacidade, isolamento de vault, retenção/migração v3 e revisão draft fundamentada em falha. O primeiro ensaio completo expôs uma preparação de teste que tentava sobrescrever uma fonte sem hash; a fixture foi corrigida para reutilizar a versão real.
+
+Integração nativa: `_Output/CognitiveNativeSkillUsageVerified/result.txt` e `skill-usage-checks.txt` passaram. Processos SDK reais produziram exit codes 0 e 1, registrados na versão correta; execução negada e turno posterior não alteraram a contagem. As duas primeiras execuções nativas usavam a palavra `diagnostic` no contexto, excluída pelo filtro conservador de dados médicos existente: não houve recibos, corretamente. O cenário final usa um pedido sintético não sensível; não se enfraqueceu o filtro para fazer o teste passar. O filtro pode excluir diagnósticos computacionais legítimos e continua uma limitação conhecida. Não foi comprovado que uma habilidade arbitrária executa todos os seus passos ou resolve todo o objetivo do usuário.
+
+## Fase 7 — cliente MCP nativo e capacidades verificadas
+
+A auditoria não encontrou cliente MCP anterior. `McpRuntime` no Core controla configuração explícita, estados, disponibilidade, cancelamento e a fronteira de autorização; `WindowsMcpSession` mantém somente o processo filho stdio e adapta o SDK oficial mínimo `ModelContextProtocol.Core` **2.2.0**. A dependência evita reimplementar negociação e mensagens do protocolo. A versão instalada prefere MCP **2026-07-28** e negocia também servidores anteriores por `initialize`, conforme [documentação oficial do SDK](https://csharp.sdk.modelcontextprotocol.io/v2/api/ModelContextProtocol.Client.McpClientOptions.html). Não se adicionou outro cliente de IA: `Microsoft.Extensions.AI.Abstractions` 10.8.3 contém tipos transitivos do SDK. Logging/DI abstractions foram alinhados à exigência 10.0.10; locks, inventário reproduzível e textos de licença foram atualizados. A licença declarada do pacote é Apache-2.0; o aviso upstream de transição, incluindo trechos MIT e atribuições, foi preservado integralmente.
+
+`Security/mcp-servers.json` aceita até 16 definições locais nativas, e até quatro conexões simultâneas. Nenhuma ferramenta do modelo grava essa configuração; Markdown não instala, configura ou conecta servidores. Configuração ausente/corrompida não inventa capacidades nem derruba a descoberta de habilidades nativas. A aba MCP reutiliza estilos/SVGs e permite salvar, conectar, desconectar, remover e atualizar ferramentas. Salvar não inicia o processo. Shutdown fecha as conexões pertencentes à LAURA.
+
+Inicialização, descoberta de metadados e cada chamada usam `PermissionOperation.ExternalTool`, risco crítico inclusive no modo automático, sem grants permanentes/sessão. A identidade congela executável, argumentos, arquivos absolutos existentes citados nos argumentos, pasta, conexão, ferramenta, esquema e destino do modelo. Há revalidação imediatamente antes de iniciar/chamar; mudança de configuração, binário/script ou metadados impede o despacho. Anotações `readOnlyHint` são dados externos, não política. Cada chamada atualiza os metadados antes de executar e recusa uma versão diferente da aprovada. Não se tenta executar novamente uma mutação que falhou.
+
+Um servidor externo roda com os direitos da conta Windows: **isso não é um sandbox** e a aprovação de inicialização explicita esse acesso. A LAURA controla o que ela inicia e chama; não garante que um programa de terceiros obedeça internamente às suas permissões. A entrada usa argumentos estruturados e processo oculto, sem shell/UAC bypass. O ambiente herda apenas a lista básica do SDK; credenciais do processo pai não são repassadas automaticamente. Entrada de ferramenta limita 32.000 caracteres/depth 16, inventário limita 128 ferramentas/quatro páginas, mensagens UTF-8 JSON-RPC limitam 512 KiB antes do parser do SDK. Texto retornado limita 16.000 caracteres; imagens, áudio e recursos externos não são abertos/transmitidos implicitamente. Stderr é drenado em blocos e descartado, sem armazenar payloads sensíveis. Não existem handlers que autorizem sampling, roots ou elicitação solicitados pelo servidor.
+
+`list_mcp_servers`, `connect_mcp_server`, `list_mcp_tools`, `call_mcp_tool` e `disconnect_mcp_server` integram o adaptador existente. Metadados/resultados ficam explicitamente rotulados como conteúdo não confiável. `BrainSkills` resolve `mcp:<id>` e `mcp.<id>.<ferramenta>` somente contra conexões reais; desconectar bloqueia a habilidade sem adulterar sua aprovação por hash. Reabrir uma conexão não autoriza nenhuma chamada. Monitoramento de habilidades da unidade anterior continua contando apenas processos nativos observados, não interpreta um resultado MCP como exit code de processo.
+
+Validação: **322 testes passaram**, zero falhas/skips (`_Output/CognitiveMcp/mcp-verified.trx`), build Release sem avisos/erros; auditoria NuGet não indicou vulnerabilidades nas fontes consultadas. Dez casos novos cobrem aprovação crítica em modo automático, chamadas negadas, cancelamento/shutdown, reconexão, argumentos/versões alterados, transporte tardio, configuração inválida, resultado de erro e disponibilidade procedural. O primeiro teste de binário alterado confirmou que a proteção existente já bloqueava o recurso antes da verificação adicional do MCP; a expectativa de exceção foi ajustada ao bloqueio real.
+
+Integração real independente: `_Output/CognitiveNativeMcpTimeoutVerified/result.txt` e `mcp-checks.txt` passaram com o fixture BCL `Build/Smoke/McpFixture` em processo stdio separado, sem instalar servidor externo. Exercitaram MCP 2026-07-28 e fallback 2025-11-25, `echo`, `isError`, negação sem despacho, credencial sentinela não herdada, proteção da configuração nativa, metadados alterados durante aprovação, mensagem excessiva, JSON malformado, crash, cancelamento pendente/em execução, rejeição de aprovação tardia e encerramento dos PIDs criados. Os ensaios iniciais revelaram perda de transporte classificada como cancelamento e JSON inválido aguardando timeout: ambos foram corrigidos, adicionando verificação de enquadramento limitada e distinção de falha de transporte/timeout contra cancelamento explícito. O cenário final também aguardou o timeout natural de 30 segundos de uma ferramenta real: falhou de forma fechada, encerrou o processo pertencente ao diagnóstico e não repetiu a chamada.
+
+Interface nativa: `_Output/CognitiveMcpUi/result.txt` passou por todas as seis abas, português/inglês, 1440×900 e mínimo 720×600, incluindo rolagem até as ações MCP; a captura compacta em português foi inspecionada. Esse cenário não preencheu um servidor pela interface com mouse/teclado. Transporte remoto HTTP/OAuth, recursos/prompts MCP e interação MRTR não são expostos nesta unidade; servidores que dependem deles precisam de outra implementação compatível. O servidor REA real não foi instalado, iniciado ou declarado operacional.
+
+## Fase 8 — manutenção incremental e consolidação revisada
+
+`BrainMaintenance` analisa notas novas/alteradas em lotes de até 64 (UI: 16; ferramenta: oito), com orçamento cooperativo de 750 ms para a análise. Reutiliza o scan/índice existente, os links e a resolução de imagens; o custo de refresh do vault é registrado separadamente no tempo total e não foi eliminado nem apresentado como incremental. Hashes de fontes procedurais e o inventário de imagens invalidam os resultados dependentes. Notas estáveis não são reanalisadas no mesmo dia; sugestões derivadas são reconstruídas gradualmente após reinício. O estado automático é uma opção INI fora do vault, desabilitada por padrão; quando habilitado, verifica oito notas a cada dez minutos sem aplicar edições.
+
+Os achados distinguem texto repetido, relações exatamente repetidas, contradições, fontes de skills alteradas, referências/imagens ausentes, conflitos de identidade, documentos grandes, possível revisão por idade e procedimentos com requisitos/capacidades iguais. Sem modelo ONNX disponível, não se afirma análise semântica. Quando disponível, vizinhos de conhecimento/descrições de habilidades usam o índice local existente e permanecem sugestões, sem criar relações factuais por similaridade. Idade de 365 dias só propõe revisão, sem declarar obsolescência nem reduzir confiança automaticamente. Recuperação efetiva de corrupção do índice é reportada separadamente, com escopo de vault; cache de layouts removidos/arquivados é liberado.
+
+O limite é explícito: 10.000 notas no inventário de análise, 2.000 achados em memória, 200 por relatório e 40 por filtro na tela. Problemas de integridade têm prioridade sobre sugestões de similaridade. Metadados para o modelo respeitam seu orçamento de caracteres e não contêm corpos; o modelo pode consultar/analisar, mas não aplicar consolidação. A configuração de lembrar conversas desabilitada também impede essa divulgação de metadados. Não se fez teste de carga com 10.000 notas nem perfil completo de memória. O orçamento é cooperativo: scan, I/O e chamada de um modelo ONNX nativo não podem ser interrompidos no meio pelo contador de 750 ms.
+
+O usuário acessa **Cérebro → Gerenciar → Manutenção do cérebro**, abre fontes e pode confirmar duas ações reversíveis. Limpeza de relações remove somente registros iguais em todos os campos, preservando evidências/proveniências diferentes. Arquivamento consolidado exige texto idêntico, mesma pasta/categoria/tipo de memória/chave e escolha explícita da fonte canônica. Semelhança semântica nunca qualifica. A cópia mantém arquivo, caminho, ID, conteúdo, relações anteriores e revisão; somente sai da recuperação ativa e recebe uma relação de revisão para a canônica. Os IDs das referências antigas continuam resolvíveis para a nota arquivada, sem redirecionamento inventado; a fonte canônica permanece recuperável. Fontes de pastas/contextos incompatíveis precisam de revisão e organização manual pelos controles existentes.
+
+Todas as versões e o vault selecionado são revalidados; `BrainService.SaveReviewedAsync` confere as dependências sob o gate real de gravação, reutilizando concorrência otimista, preservação de revisão e arquivos originais. Uma alteração externa posterior ainda pode exigir nova revisão, mas o fluxo não apaga dados. Cancelar/sair da página cancela seus diálogos, impedindo aplicar uma confirmação tardia. O scan existente pode atribuir IDs a arquivos legados sem metadados, como já fazia antes; a manutenção não introduz reescritas semânticas automáticas.
+
+Validação: **330 testes passaram**, zero falhas/skips (`_Output/CognitiveMaintenance/maintenance-all.trx`), mais um teste focado do orçamento de metadados após ampliar as asserções; build Release sem avisos/erros. Oito casos novos verificam lotes 3+20/23 e repetição sem reprocessamento, relatório limitado, relação com evidências distintas, hashes/vault alterados, arquivamento/restauração/IDs/imagens/revisões, invalidação por imagem/fonte, revisão por idade/conflito/tamanho, semântica falsa determinística somente como contrato, corrupção real de SQLite e opt-in/shutdown do worker. A primeira asserção de revisão esperava bytes de caminho relativos iguais; foi corrigida para verificar a mesma imagem resolvida, respeitando o rebasing já existente em `Archive/Revisions`.
+
+Integração nativa: `_Output/CognitiveNativeMaintenance/result.txt` passou. Os botões MAUI/WinUI reais negaram/aplicaram limpeza e escolheram a nota canônica antes de arquivar a cópia. O adaptador `recall_memory` recuperou o conteúdo consolidado; sair da página cancelou a confirmação em aberto. Uma ação `apply` inventada pelo modelo não gravou nada. As capturas normal/compacta foram produzidas e a versão compacta inspecionada. O teste usou somente dados sintéticos e não abriu microfone/nuvem nem criou grants de execução. A inspeção mais completa de habilidades, fontes, histórico e estados fica na unidade seguinte de observabilidade.
+
+## Fase 9 — fontes, estados e observabilidade na interface existente
+
+`BrainEvidenceView` integra o inspetor da página Cérebro com seções nativas recolhíveis de requisitos, fontes/componentes, observações de processos e revisões. Distingue revisão pendente, requisitos bloqueados, instruções disponíveis e instruções importadas sem execução avaliada. Aprovação de leitura é exibida separadamente de testes/execução; procedimento com requisito ausente não oferece ativação impossível. Verificação declarada no YAML, confiança e observação nativa são diferenciadas, sem conceder privilégios.
+
+As fontes mostram correspondência da versão citada, trecho literal e acesso à nota atual por ID real; referências ambíguas não escolhem uma origem arbitrária. Histórico abre revisões existentes de `Archive/Revisions`, preservando o controle de alterações não salvas. Uma divergência entre bytes lidos e snapshot provoca reconciliação antes de apresentar o nó. O inspetor confere escopo do vault e separa registros de versões anteriores. Contagens são de até 50 observações retidas de processos, não taxas de sucesso da habilidade/tarefa; execuções MCP permanecem no histórico de autorizações. `Gerenciar → Atividade do aprendizado` apresenta somente contadores de fila da sessão e explica que processar evento pode não criar memória.
+
+Validação: **330 testes passaram**, zero falhas/skips (`_Output/CognitiveEvidence/evidence-regression.trx`); build Release sem avisos/erros. `_Output/CognitiveNativeEvidenceVerified/result.txt` passou pelo fluxo nativo completo, incluindo as dez fontes públicas REA, propostas/revisão, execução SDK real, descoberta por tarefa e novo inspetor EN/PT. Os botões reais abriram a fonte e uma revisão arquivada. Habilidade MCP ausente exibiu o bloqueio; uma revisão fundamentada no episódio nativo de falha preservou o mesmo ID, permaneceu draft e não herdou a validação dos dois resultados da versão anterior. A interface normal/compacta foi capturada e inspecionada, sem microfone/nuvem.
+
+O primeiro ensaio do inspetor foi encerrado somente em seu processo isolado: a rolagem diagnóstica aguardava o evento que o WinUI não emite ao manter a posição. A espera foi removida da sondagem, sem bloquear os controles do usuário. A inspeção visual também detectou expansão indevida de botão dentro do `ContentView`; alinhamento natural e margens corrigiram o layout. O cenário final mediu 44 px no botão de fonte em ambos os idiomas e completou todos os caminhos. Esses testes usam automation peers nativos, não interação física de mouse nem uma avaliação completa com Narrator. A qualidade de seleção semântica com modelo ONNX real e linguagem natural arbitrária não é afirmada por esses testes.
+
+## Fase 10 — validação integrada e reinício real
+
+A regressão final executou **330 testes Core, todos aprovados**, sem falhas, ignorados ou abortos (`_Output/CognitiveFinalTests/cognitive-final.trx`). A referência inicial tinha 243 testes. O build completo Release passou com zero avisos/erros e `dotnet restore Laura.sln --locked-mode` restaurou as versões travadas. A consulta NuGet de vulnerabilidades da plataforma Windows, incluindo transitivas, não encontrou pacotes vulneráveis nas fontes consultadas. O benchmark sintético de descoberta manteve P@1 de 5/5 contra cobertura 0/5 do catálogo alfabético limitado; nesta execução, 25 consultas aquecidas tiveram p50 de 55,02 ms e p95 de 70,23 ms. Isso mede metadados locais sintéticos, sem avaliar um modelo neural real.
+
+`_Output/CognitiveFinal/result.txt` passou pelo fluxo nativo integrado com a fonte pública REA fixada por hash, aprovação de aquisição, propostas/revisões, descoberta por tarefa, processos SDK reais com saída zero e não zero, recusa de execução, mudança de turno e inspetor EN/PT. Fonte e revisão foram abertas pelos botões nativos reais; a revisão posterior permaneceu draft e não herdou os resultados da versão anterior. As dez fontes REA mantiveram as posições de recuperação 1, 1, 3 e 1 nas quatro consultas de referência. Não foram instalados npm, REA ou seus servidores.
+
+`BrainRestartSmokeRunner` grava somente um manifesto de metadados fora do vault no diagnóstico isolado. Um **segundo processo nativo**, após conferir o encerramento do primeiro, reconstruiu o índice derivado e verificou 25 identidades/caminhos/hashes/status de notas, três estados de aprovação/disponibilidade de habilidades e duas observações de processos com sua identidade e versão originais. Recuperou novamente conhecimento sintético e a política pública de startup MCP. `_Output/CognitiveFinal/restart-result.txt` passou: nenhuma solicitação pendente, grant, capacidade MCP conectada ou vínculo transitório de uso foi restaurado; o histórico de autorização não ganhou execuções durante a recuperação. Esse ensaio amplia a verificação anterior que apenas recriava `BrainService`; não simula queda de energia nem reinício do Windows.
+
+`_Output/CognitiveFinalUi/result.txt` passou na regressão MAUI/WinUI EN/PT: seis abas de configuração, grafo/inspetor/editor do cérebro, gravação real de Markdown, navegação repetida, monitor e janela mínima de 720×600. A manutenção também foi capturada em ambos os idiomas e tamanhos; a captura compacta em português foi inspecionada visualmente, com controles e textos legíveis. O ensaio usa controles/automation peers e pixels da própria LAURA, sem abrir microfone.
+
+`_Output/CognitiveFinalPermissionsVerified/result.txt` passou: botões reais aprovaram gravações sintéticas com janela principal visível, oculta e minimizada; negação, cancelamento e expiração impediram gravação e aprovação tardia. Ferramentas genéricas não alteraram o armazenamento de segurança, e a aba Segurança persistiu configurações sem exigir chave Gemini. A primeira chamada de regressão usou incorretamente a raiz de diagnóstico também como armazenamento: a pré-condição corretamente rejeitou o teste, mas a inicialização só reportava falhas de `--ui-smoke`. O tratamento foi ampliado aos quatro runners, com tipo de erro sanitizado, resultado separado para reinício e encerramento. `_Output/CognitiveRejectedDiagnostic/result.txt` verificou a rejeição explícita e o encerramento natural com o mesmo parâmetro inválido; o ensaio válido usa o subdiretório `Storage` documentado.
+
+`_Output/CognitiveFinalScreenshot/result.txt` passou: anotações e alinhamento de pixels, mover/remover/desfazer/refazer, exportação PNG/JPEG pelos botões reais, caminho inválido, cancelamento do formulário, round-trip da área de transferência, WGC da janela sintética da LAURA e captura local do desktop virtual de 1920×1080. Os pixels do desktop não foram gravados/transmitidos. A imagem sintética foi anexada pelo coordenador de produção ao cérebro isolado, recuperada com bytes exatos e reutilizada sem duplicar a referência Markdown. Registro nativo de atalhos e conflito entre duas combinações também passaram, com liberação ao terminar. A área de transferência ficou com a imagem sintética do teste. Nenhuma nova chamada a modelo em nuvem foi feita nesta regressão; as verificações live anteriores e seus limites continuam no relatório de captura.
+
+A unidade final acrescenta `BrainRestartSmokeRunner.cs`, amplia os cenários de `BrainSmokeRunner.cs` e `MauiSmokeRunner.cs`, e corrige o relato/encerramento de falhas diagnósticas em `LauraApplication.cs`. As unidades de produto, componentes principais e decisões estão descritos nas fases anteriores e nos commits abaixo. Nenhum processo diagnóstico permaneceu em execução após os resultados finais.
+
+Os controles de execução permanecem no `PermissionManager`; nenhuma revisão, consolidação, resultado favorável ou arquivo Markdown concede autorização. Aprovação Automática aplica somente as políticas nativas explícitas. A correção de aplicativos GUI e a validação específica do NeuralScreen estão em [Permissões](laura-permissions.md). Mudanças de código exigem recompilar/reiniciar a instância que o usuário utiliza; os diagnósticos Release e seus armazenamentos não substituem automaticamente uma instância Debug nem alteram o cérebro pessoal.
+
+### Limites finais
+
+As fases implementadas têm evidências específicas, sem alegação de autonomia universal. Descoberta semântica com ONNX real, seleção arbitrária de procedimento pelo modelo, sucesso completo de tarefas, execução de código importado, MCP HTTP/OAuth e instalação/execução do REA real não foram validados nem habilitados como consequência da aquisição. O cliente MCP stdio foi verificado com um servidor BCL independente e permissões reais, incluindo timeout, cancelamento, crash e respostas inválidas, conforme a fase 7; o processo servidor continua sujeito aos direitos da conta Windows e não é apresentado como sandbox.
+
+Permanecem verificações manuais de Narrator/navegação física, voz audível e microfone, notificações com Não Perturbe, gestos de seleção, múltiplos monitores/DPI físicos, disco cheio e aplicativos com conteúdo protegido. Não foram executados ensaio de carga de 10.000 notas, perfil completo de memória ou geração/instalação de um novo pacote final nesta fase. Artefatos `_Output` são locais e ignorados pelo Git; os runners e as asserções de reprodução ficam no código.
+
+## Registro de commits e reprodução
+
+### Fonte real indicada: REA
+
+O cenário público usa [morluto/rea](https://github.com/morluto/rea), revisão fixa `c7105d9723c835b5e0122f5fc6cfbea86265c349`. `Build/Smoke/Get-ReaSourceFixture.ps1` baixa dez arquivos textuais específicos (README, manifesto npm, quatro documentos e quatro fontes TypeScript), confere hashes SHA-256 fixados e preserva a licença no fixture ignorado pelo Git. Não clona submódulos, executa scripts nem instala Node/npm/REA. Isso valida um recorte de **156.391 bytes**, não o repositório inteiro.
+
+`BrainSourceSmokeRunner` amplia o diagnóstico nativo com `--brain-rea-smoke`. O adaptador real `study_source` importou **10/10**, excluiu zero, identificou TypeScript e dependências apenas declaradas, exigiu confirmação crítica nas duas aquisições e preservou IDs/hashes na repetição. As instruções de instalação permaneceram referências `unverified`; não apareceram skills ou concessões de permissões.
+
+Quatro consultas substantivas recuperaram os documentos de política de startup MCP, inspeção managed/ILSpy, orçamento de transporte MCP e identidade do servidor nas posições **1, 1, 3 e 1**. A informação esperada apareceu diretamente no excerpt em **1/4**; a expansão contextual do mesmo documento, com ID/hash e até **4.000 caracteres**, recuperou as quatro evidências. Os dois primeiros ensaios falharam ao procurar a evidência apenas a partir do início do trecho escolhido: o contexto relevante podia precedê-lo. O diagnóstico final explicita a leitura de até 600 caracteres anteriores e mantém os resultados iniciais como evidência dessa limitação; não se afirma precisão perfeita dos excerpts nem compreensão pelo modelo.
+
+Um novo `BrainService`, com índice lexical vazio, reabriu o Markdown, preservou as dez identidades e recuperou a política de startup. Não foi um reinício completo do Windows/processo. O inventário/bytes das fontes e as concessões de permissões ficaram inalterados. Evidências finais: `_Output/CognitiveNativeReaVerified/result.txt` e `rea-checks.txt` (PASS); **283 testes** em `_Output/CognitiveRea/rea-source-regression.trx`; build Release sem avisos/erros. Nenhum servidor MCP real REA foi iniciado e o teste não avalia qualidade neural ou resposta semântica de um modelo.
+
+```powershell
+# Usar uma raiz de diagnóstico nova. Somente esta preparação acessa HTTP.
+./Build/Smoke/Get-ReaSourceFixture.ps1 -Destination "$PWD/_Output/ReaCheck/Workspace/ReaSourceFixture"
+Laura.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/Laura.exe --storage "$PWD/_Output/ReaCheck" --brain-smoke "$PWD/_Output/ReaCheck" --brain-rea-smoke
+```
+
+A preparação HTTP é uma ferramenta explícita de validação, não um leitor de URL implementado no produto. A aquisição da LAURA permanece local e autorizada; os dados públicos ficam somente no Brain isolado do diagnóstico. O conhecimento da documentação do REA não é apresentado como capacidade de executá-lo.
+
+| Commit | Unidade testada |
+|---|---|
+| `efa7f32` | Base de permissões e captura integrada |
+| `474e94b` | Auditoria cognitiva e referência |
+| `92528d1` | Aprendizado contextual e fila observável |
+| `c1958ea` | Recibos duráveis e retomada |
+| `cb9fa0d` | Passagens e expansão de versão exata |
+| `bf39162` | Grafo limitado e proveniência |
+| `813a9f2` | Experiências observadas e reflexões draft |
+| `6d603d3` | Aplicativos aprendidos e hash no momento da execução |
+| `c5bab8f` | Aquisição local autorizada, sem executar código |
+| `5e493ae` | Aquisição e recuperação de fontes públicas REA fixadas por hash |
+| `c1cde8e` | Propostas procedurais fundamentadas e revisão por versão |
+| `11d36f5` | Abertura interativa de aplicativos e permissões por executável exato |
+| `457e69b` | Descoberta de metadados de habilidades por tarefa com índice híbrido local |
+| `d4fcbea` | Monitoramento por versão/turno a partir de resultados nativos de processos |
+| `86dfb76` | Cliente MCP stdio nativo, aprovações críticas e capacidades conectadas |
+| `8baba6c` | Manutenção incremental e consolidação revisada, reversível e por versão |
+| `cfe1108` | Inspetor de fontes, requisitos, versões, observações e revisões EN/PT |
+
+O diagnóstico público REA é registrado no commit subsequente desta documentação. Artefatos `_Output` são ignorados pelo Git e não contêm a credencial protegida.
+
+```powershell
+dotnet test Laura.Core.Tests/Laura.Core.Tests.csproj -c Release --no-restore
+dotnet build Laura.sln -c Release --no-restore
+# Raiz nova e isolada; o diagnóstico cria somente dados/fontes sintéticos.
+Laura.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/Laura.exe --storage D:/Temp/LauraBrainCheck --brain-smoke D:/Temp/LauraBrainCheck
+# Após o primeiro processo encerrar, usar o mesmo armazenamento para verificar recuperação real.
+Laura.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/Laura.exe --storage D:/Temp/LauraBrainCheck --brain-smoke D:/Temp/LauraBrainCheck --brain-restart-smoke
+```
+
+`--brain-live-smoke` é opt-in para verificar o modelo real com mensagens sintéticas; usa a credencial existente somente em processo. O diagnóstico altera apenas seus fixtures e copia um host do SDK para testar alteração de bytes. Mouse/voz completa, múltiplos monitores e servidores MCP externos reais continuam verificações separadas. O cliente stdio foi verificado com o servidor BCL independente da fase 7; a aquisição de documentação do REA não é apresentada como uma conexão ao servidor REA.

@@ -6,7 +6,7 @@ using Microsoft.Data.Sqlite;
 namespace Laura.Core.Memory;
 
 /// <summary>Parameterized SQLite storage; transactions preserve existing data on failure.</summary>
-public sealed class SqliteConversationMemory : IConversationMemory
+public sealed partial class SqliteConversationMemory : IConversationMemory
 {
     private readonly string _path;
     private readonly object _gate = new();
@@ -26,14 +26,18 @@ public sealed class SqliteConversationMemory : IConversationMemory
             using SqliteCommand version = connection.CreateCommand();
             version.CommandText = "PRAGMA user_version";
             long schemaVersion = (long)version.ExecuteScalar()!;
-            if (schemaVersion > 1) { throw new InvalidOperationException("Memory schema is newer than this Laura version."); }
+            if (schemaVersion > 4) { throw new InvalidOperationException("Memory schema is newer than this Laura version."); }
             using SqliteTransaction transaction = connection.BeginTransaction();
             using SqliteCommand migration = connection.CreateCommand();
             migration.Transaction = transaction;
             migration.CommandText = """
                 CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, source INTEGER NOT NULL, text TEXT NOT NULL, stamp TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS facts (key TEXT PRIMARY KEY, text TEXT NOT NULL, stamp TEXT NOT NULL);
-                PRAGMA user_version=1;
+                CREATE TABLE IF NOT EXISTS learning_events (message_id INTEGER PRIMARY KEY,vault TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS execution_events (id TEXT PRIMARY KEY,vault TEXT NOT NULL,payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS skill_outcomes (id TEXT PRIMARY KEY,vault TEXT NOT NULL,skill TEXT NOT NULL,hash TEXT NOT NULL,tool TEXT NOT NULL,exit_code INTEGER NOT NULL,operation TEXT NOT NULL,stamp TEXT NOT NULL);
+                CREATE INDEX IF NOT EXISTS skill_outcomes_version ON skill_outcomes(vault,skill,hash);
+                PRAGMA user_version=4;
                 """;
             migration.ExecuteNonQuery();
             transaction.Commit();
@@ -51,7 +55,16 @@ public sealed class SqliteConversationMemory : IConversationMemory
     }
 
     /// <inheritdoc />
-    public void Append(ConversationMessage message)
+    public void Append(ConversationMessage message) => AppendCore(message, "");
+    /// <summary>Atomically retains a user message and a learning receipt referencing its existing transcript row, without duplicating text.</summary>
+    public void AppendForLearning(ConversationMessage message, string vaultIdentity)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        if (message.Source == ConversationMessageSource.Assistant || vaultIdentity.Length != 64 || !vaultIdentity.All(Uri.IsHexDigit))
+        { throw new ArgumentException("Learning receipts require a user source and a hashed vault identity."); }
+        AppendCore(message, vaultIdentity);
+    }
+    private void AppendCore(ConversationMessage message, string vaultIdentity)
     {
         ArgumentNullException.ThrowIfNull(message);
         Initialize();
@@ -61,11 +74,14 @@ public sealed class SqliteConversationMemory : IConversationMemory
         command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO messages(source,text,stamp) VALUES($source,$text,$stamp);
+            INSERT INTO learning_events(message_id,vault) SELECT last_insert_rowid(),$vault WHERE length($vault)>0;
             DELETE FROM messages WHERE id NOT IN (SELECT id FROM messages ORDER BY id DESC LIMIT 2000);
+            DELETE FROM learning_events WHERE message_id NOT IN (SELECT id FROM messages);
             """;
         command.Parameters.AddWithValue("$source", (int)message.Source);
         command.Parameters.AddWithValue("$text", message.Text.Length > 16000 ? message.Text[..16000] : message.Text);
         command.Parameters.AddWithValue("$stamp", message.Timestamp.ToString("O", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$vault", vaultIdentity);
         command.ExecuteNonQuery();
         transaction.Commit();
     }
@@ -149,7 +165,7 @@ public sealed class SqliteConversationMemory : IConversationMemory
         Initialize();
         using SqliteConnection connection = Open();
         using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM messages; VACUUM;";
+        command.CommandText = "BEGIN; DELETE FROM skill_outcomes; DELETE FROM execution_events; DELETE FROM learning_events; DELETE FROM messages; COMMIT; VACUUM;";
         command.ExecuteNonQuery();
     }
 }

@@ -39,11 +39,14 @@ public static partial class BrainMarkdown
         {
             Id = id, Path = path.Replace('\\', '/'), Title = Scalar(map, "title", Scalar(map, "name", System.IO.Path.GetFileNameWithoutExtension(path))),
             Description = Scalar(map, "description", ""),
+            Procedure = Node(map, "laura_skill") is YamlMappingNode procedure ? BrainSkillCodec.Read(procedure) : null,
             Type = Scalar(map, "type", path.StartsWith("skills/", StringComparison.OrdinalIgnoreCase) ? "skill" : "document"),
             MemoryType = Scalar(map, "memory_type", "semantic"), Status = Scalar(map, "status", "active"),
             CreatedAt = Date(map, "created_at"), UpdatedAt = Date(map, "updated_at"), Confidence = Number(map, "confidence", .8), Importance = Number(map, "importance", .5),
-            Tags = Strings(map, "tags"), Aliases = Strings(map, "aliases"), Source = Scalar(map, "source", "manual"), Key = Scalar(map, "key", ""),
+            Tags = Strings(map, "tags"), Aliases = Strings(map, "aliases"), Source = Scalar(map, "source", "manual"), Verification = Scalar(map, "verification", "unspecified"), Key = Scalar(map, "key", ""),
             Revision = Scalar(map, "revision", ""), PreviousRevision = Scalar(map, "previous_revision", ""), Relations = relations,
+            Application = Node(map, "application") is YamlMappingNode application && Scalar(application, "target", "").Length <= 4096
+                && Scalar(application, "sha256", "").Length == 64 ? new(Scalar(map, "title", ""), Scalar(application, "target", ""), Scalar(application, "sha256", "")) : null,
             Body = body, Frontmatter = yaml, Hash = FileBrainStorage.Hash(content)
         };
     }
@@ -54,8 +57,10 @@ public static partial class BrainMarkdown
         foreach ((string key, string value) in new[] { ("id", note.Id), ("schema_version", "1"), ("title", note.Title), ("description", note.Description), ("type", note.Type),
             ("memory_type", note.MemoryType), ("created_at", note.CreatedAt.ToString("O", CultureInfo.InvariantCulture)), ("updated_at", note.UpdatedAt.ToString("O", CultureInfo.InvariantCulture)),
             ("status", note.Status), ("confidence", note.Confidence.ToString(CultureInfo.InvariantCulture)), ("importance", note.Importance.ToString(CultureInfo.InvariantCulture)),
-            ("source", note.Source), ("key", note.Key), ("revision", note.Revision), ("previous_revision", note.PreviousRevision) })
+            ("source", note.Source), ("verification", note.Verification), ("key", note.Key), ("revision", note.Revision), ("previous_revision", note.PreviousRevision) })
         { map.Children[new YamlScalarNode(key)] = new YamlScalarNode(value); }
+        if (note.Type == "skill" && !map.Children.ContainsKey(new YamlScalarNode("name")))
+        { map.Children[new YamlScalarNode("name")] = new YamlScalarNode(note.Title); }
         map.Children[new YamlScalarNode("tags")] = new YamlSequenceNode(note.Tags.Select(tag => new YamlScalarNode(tag)));
         map.Children[new YamlScalarNode("aliases")] = new YamlSequenceNode(note.Aliases.Select(alias => new YamlScalarNode(alias)));
         map.Children[new YamlScalarNode("relations")] = new YamlSequenceNode(note.Relations.Select(relation => new YamlMappingNode
@@ -63,6 +68,8 @@ public static partial class BrainMarkdown
             { "target", relation.Target }, { "type", relation.Type }, { "weight", relation.Weight.ToString(CultureInfo.InvariantCulture) },
             { "confidence", relation.Confidence.ToString(CultureInfo.InvariantCulture) }, { "evidence", relation.Evidence }, { "source", relation.Source }
         }));
+        if (note.Application is { } application) { map.Children[new YamlScalarNode("application")] = new YamlMappingNode { { "target", application.Target }, { "sha256", application.Hash } }; }
+        if (note.Procedure is { } procedure) { map.Children[new YamlScalarNode("laura_skill")] = BrainSkillCodec.Write(procedure); }
         using var writer = new StringWriter(CultureInfo.InvariantCulture); new YamlStream(new YamlDocument(map)).Save(writer, false);
         string yaml = writer.ToString().Trim().TrimEnd('.').TrimEnd();
         return "---\n" + yaml + "\n---\n\n" + note.Body.TrimEnd() + "\n";

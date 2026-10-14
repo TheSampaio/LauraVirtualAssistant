@@ -31,6 +31,12 @@ public sealed record BrainNote
     public IReadOnlyList<string> Aliases { get; init; } = [];
     /// <summary>Gets the attributed source, never an execution permission.</summary>
     public string Source { get; init; } = "manual";
+    /// <summary>Gets evidence status separately from confidence: unspecified, user_reported, unverified, observed_execution or verified. Authored labels never grant capabilities.</summary>
+    public string Verification { get; init; } = "unspecified";
+    /// <summary>Gets an inert local executable hint. It never authorizes execution and is excluded from automatic prompt content.</summary>
+    public BrainApplicationReference? Application { get; init; }
+    /// <summary>Gets inert structured procedure requirements and evidence, independent of local approval.</summary>
+    public BrainSkillDefinition? Procedure { get; init; }
     /// <summary>Gets a structured consolidation key, if applicable.</summary>
     public string Key { get; init; } = "";
     /// <summary>Gets the authored revision identity.</summary>
@@ -52,7 +58,7 @@ public sealed record BrainNote
 /// <summary>An attributed, directed relation; similarity alone never creates one.</summary>
 public sealed record BrainRelation(string Target, string Type = "related_to", double Weight = .5, double Confidence = .7, string Evidence = "", string Source = "manual");
 /// <summary>A resolved link with provenance and direction.</summary>
-public sealed record BrainEdge(string Source, string Target, string Type, double Weight, double Confidence, string Evidence);
+public sealed record BrainEdge(string Source, string Target, string Type, double Weight, double Confidence, string Evidence, string Provenance = "manual");
 /// <summary>A non-sensitive integrity diagnostic tied to a portable path.</summary>
 public sealed record BrainIssue(string Path, string Code);
 /// <summary>An immutable view published after a coherent scan.</summary>
@@ -62,7 +68,15 @@ public sealed record BrainSnapshot(IReadOnlyList<BrainNote> Notes, IReadOnlyList
     public static BrainSnapshot Empty { get; } = new([], [], []);
 }
 /// <summary>A ranked memory with a bounded excerpt and independently inspectable retrieval scores.</summary>
-public sealed record BrainHit(BrainNote Note, double Score, double Lexical, double Semantic, double Graph, string Excerpt);
+public sealed record BrainHit(BrainNote Note, double Score, double Lexical, double Semantic, double Graph, string Excerpt)
+{
+    /// <summary>Gets the derived matching passage; graph-only hits may have no direct passage.</summary>
+    public BrainPassage? Passage { get; init; }
+    /// <summary>Gets the actual source offset of the excerpt for progressive expansion.</summary>
+    public int ExcerptStart { get; init; }
+    /// <summary>Gets an attributed authored path when retrieval reached this note through explicit relations.</summary>
+    public BrainActivation? Activation { get; init; }
+}
 /// <summary>An optimistic-write conflict whose draft was preserved without overwriting current knowledge.</summary>
 public sealed class BrainConflictException : IOException
 {

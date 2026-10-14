@@ -7,6 +7,18 @@ namespace Laura.Core.Tests.Conversation;
 
 public sealed class GeminiLiveProtocolTests
 {
+    [Theory]
+    [InlineData("blocked", true)]
+    [InlineData("cancelled", true)]
+    [InlineData("success", false)]
+    public void StructuredToolResultsPreserveCallIdentityAndActualOutcome(string status, bool failed)
+    {
+        using var message = JsonDocument.Parse(GeminiLiveProtocol.ToolResult("actual-call", "study_github_repository",
+            new Laura.Core.Abstractions.AssistantToolResult("Observed adapter result.") { Failed = failed, Status = status }));
+        JsonElement response = message.RootElement.GetProperty("toolResponse").GetProperty("functionResponses")[0];
+        Assert.Equal("actual-call", response.GetProperty("id").GetString()); Assert.Equal(status, response.GetProperty("response").GetProperty("status").GetString());
+        Assert.False(response.GetProperty("response").GetProperty("goalVerified").GetBoolean());
+    }
     [Fact]
     public void Setup_UsesNativeAudioVoiceAndExplicitMicrophoneActivity()
     {
@@ -42,6 +54,17 @@ public sealed class GeminiLiveProtocolTests
         Assert.Single(active.RootElement.GetProperty("clientContent").GetProperty("turns").EnumerateArray());
     }
     [Theory]
+    [InlineData("image/png")]
+    [InlineData("image/jpeg")]
+    public void VisualFrameAndQuestionShareOneUserTurnAndHistoryCanAvoidTriggeringGeneration(string mimeType)
+    {
+        byte[] frame = [1, 2, 3, 4]; var turn = new ConversationTurn("Read the image", CultureInfo.GetCultureInfo("en-US"), "Synthetic") { Image = frame, ImageMimeType = mimeType };
+        using var packet = JsonDocument.Parse(GeminiLiveProtocol.Text(turn, false)); var input = packet.RootElement.GetProperty("clientContent").GetProperty("turns")[0].GetProperty("parts");
+        Assert.Equal(frame, Convert.FromBase64String(input[1].GetProperty("inlineData").GetProperty("data").GetString()!));
+        Assert.Equal(mimeType, input[1].GetProperty("inlineData").GetProperty("mimeType").GetString()); Assert.Contains("Read the image", input[0].GetProperty("text").GetString());
+        using var context = JsonDocument.Parse(GeminiLiveProtocol.Text(turn, false, false)); Assert.False(context.RootElement.GetProperty("clientContent").GetProperty("turnComplete").GetBoolean());
+    }
+    [Theory]
     [InlineData("Charon")]
     [InlineData("Puck")]
     [InlineData("Kore")]
@@ -51,6 +74,17 @@ public sealed class GeminiLiveProtocolTests
     {
         GenerativeAiOptions options = new GenerativeAiOptions { Provider = " Gemini ", Model = GeminiLiveOptions.Model, LiveVoice = voice }.Sanitized();
         Assert.Equal("gemini", options.Provider); Assert.Equal(voice, options.LiveVoice); Assert.Equal(GeminiLiveOptions.Model, options.Model);
+    }
+    [Fact]
+    public void ToolOutcomeIsBoundToItsFunctionIdentityWithoutAnUnrelatedRealtimePacket()
+    {
+        using var packet = JsonDocument.Parse(GeminiLiveProtocol.ToolResult("call-123", "read_brain_image", "Actual image"));
+        var result = packet.RootElement.GetProperty("toolResponse").GetProperty("functionResponses")[0];
+        Assert.Equal("call-123", result.GetProperty("id").GetString()); Assert.Equal("read_brain_image", result.GetProperty("name").GetString());
+        Assert.Equal("Actual image", result.GetProperty("response").GetProperty("result").GetString());
+        Assert.False(packet.RootElement.TryGetProperty("realtimeInput", out _));
+        using var text = JsonDocument.Parse(GeminiLiveProtocol.ToolResult("call-124", "file_control", "Denied"));
+        Assert.False(text.RootElement.GetProperty("toolResponse").GetProperty("functionResponses")[0].TryGetProperty("parts", out _));
     }
     [Fact]
     public void Sanitization_RejectsUnknownLiveVoiceAndUnsafeModel()

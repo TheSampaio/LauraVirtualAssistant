@@ -11,6 +11,25 @@ namespace Laura.Core.Tests.Engine;
 public sealed class AssistantEngineTests
 {
     [Fact]
+    public async Task VisualTurnUsesTheExistingQueueWithFrozenPixelsAndTextOnlyHistory()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        byte[] pixels = [1, 2, 3, 4]; byte[]? seen = null;
+        var dispatcher = new CallbackSkillDispatcher(async (request, token) =>
+        {
+            if (request.RawText == "first") { entered.SetResult(); await release.Task.WaitAsync(token); }
+            else { Assert.Equal("Explain the selected image", request.RawText); seen = request.Image; }
+            return SkillResponse.Silent();
+        });
+        await using var engine = CreateEngine(dispatcher, new RecordingSpeechSynthesizer()); await engine.StartAsync();
+        Task first = engine.SubmitCommandAsync("first"); await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Task visual = engine.SubmitVisualCommandAsync("Explain the selected image", pixels); pixels[0] = 99;
+        release.SetResult(); await first; await visual.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Equal(new byte[] { 1, 2, 3, 4 }, seen); Assert.NotSame(pixels, seen);
+        Assert.Equal(new[] { "first", "Explain the selected image" }, engine.ConversationHistory.Select(message => message.Text));
+    }
+    [Fact]
     public async Task CancelingAnActiveBriefingCancelsDispatchAndAllowsTheNextCommand()
     {
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

@@ -22,6 +22,8 @@ public sealed record SkillRequest
 
     /// <summary>Gets the origin of the command.</summary>
     public required SkillRequestSource Source { get; init; }
+    /// <summary>Gets the explicitly attached image for the corresponding conversation turn.</summary>
+    public byte[]? Image { get; init; }
 
     /// <summary>
     /// Builds a request from raw text, normalizing it.

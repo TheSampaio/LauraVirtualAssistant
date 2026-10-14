@@ -120,6 +120,8 @@ public static class LocalizationKeys
 
         /// <summary>Response when the requested application is not mapped.</summary>
         public const string LaunchNotFound = "skill.launch.notFound";
+        /// <summary>Response when launch authorization or identity validation stopped the action.</summary>
+        public const string LaunchStopped = "skill.launch.stopped";
 
         /// <summary>Triggers for locking the workstation.</summary>
         public const string LockPhrases = "phrases.lock";

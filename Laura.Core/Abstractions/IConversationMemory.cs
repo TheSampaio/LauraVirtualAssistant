@@ -6,6 +6,12 @@ namespace Laura.Core.Abstractions;
 /// <summary>Unified local storage for history and explicit user memories.</summary>
 public interface IConversationMemory
 {
+    /// <summary>Gets bounded transient user input for grounding proposals; it is never an authorization.</summary>
+    string WorkingUserText => "";
+    /// <summary>Atomically snapshots the current user turn. Adapters without turn tracking cannot attribute skill usage.</summary>
+    ConversationWorkingContext WorkingContext => new(Guid.Empty, WorkingUserText);
+    /// <summary>Updates current user input before tool dispatch without creating a persistent fact.</summary>
+    void SetWorkingContext(string text) { }
     /// <summary>Creates or migrates supported schema versions; unsupported/corrupt data is preserved.</summary>
     void Initialize();
     /// <summary>Appends one message, bounding retained conversation history.</summary>

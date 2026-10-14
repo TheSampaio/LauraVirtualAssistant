@@ -19,4 +19,10 @@ public sealed record ConversationTurn(string Prompt, CultureInfo Culture, string
     public string SkillCatalogue { get; init; } = "";
     /// <summary>Gets explicitly approved task guidance, separate from ordinary recalled facts and with no granted tools.</summary>
     public string SkillGuidance { get; init; } = "";
+    /// <summary>Gets an explicitly attached image, never persisted as a raw chat log or automatically captured.</summary>
+    public byte[]? Image { get; init; }
+    /// <summary>Gets the actual encoded image MIME type.</summary>
+    public string ImageMimeType { get; init; } = "image/png";
+    /// <summary>Gets a native continuation's original turn identity; it never grants or restores an execution authorization.</summary>
+    public Guid ContinuingTaskTurnId { get; init; }
 }

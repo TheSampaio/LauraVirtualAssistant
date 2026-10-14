@@ -10,5 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../Laura.Platform.Windows/Laura.Platform.Windows.csproj" />
+    <Compile Remove="GuiFixture/**/*.cs" />
+    <Compile Remove="McpFixture/**/*.cs" />
   </ItemGroup>
 </Project>

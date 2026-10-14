@@ -16,9 +16,11 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
 {
     private WindowsTrayHost? _tray;
     private WindowsShortcutHost? _shortcuts;
+    private WindowsScreenshotShortcuts? _screenshotShortcuts;
     private bool _started;
     private bool _stopping;
     private Task? _brainStartup;
+    private Laura.Core.Permissions.PermissionOptions? _permissionOptions;
     /// <inheritdoc />
     protected override Window CreateWindow(IActivationState? activationState)
     {
@@ -44,7 +46,13 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
             WindowsWindowTheme.Apply(native);
             nint handle = WinRT.Interop.WindowNative.GetWindowHandle(native);
             _tray = new WindowsTrayHost(handle, () => _tray?.Toggle(), () => _ = ExitAsync(window), services.GetRequiredService<MainPage>().SetWindowVisible);
-            if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { _shortcuts = new WindowsShortcutHost(window, services.GetRequiredService<MainPage>()); }
+            var approvals = services.GetRequiredService<WindowsApprovalCenter>();
+            _tray.BindApprovals(approvals.Show);
+            services.GetRequiredService<LauraNotifications>().Bind(_tray.Notify);
+            approvals.Start((title, message) => services.GetRequiredService<LauraNotifications>().Publish(title, message, LauraNotificationKind.Approval),
+                () => _tray?.IsHiddenOrMinimized != false, () => { _tray?.Show(); _ = services.GetRequiredService<MainPage>().OpenSetupAsync(); });
+            services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed += OnApprovalsChanged;
+            if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal) && !Environment.GetCommandLineArgs().Contains("--permissions-smoke", StringComparer.Ordinal) && !Environment.GetCommandLineArgs().Contains("--screenshot-smoke", StringComparer.Ordinal) && !Environment.GetCommandLineArgs().Contains("--brain-smoke", StringComparer.Ordinal)) { _shortcuts = new WindowsShortcutHost(window, services.GetRequiredService<MainPage>()); }
             services.GetRequiredService<MauiShellController>().Bind(
                 () => { _tray.Show(); _ = services.GetRequiredService<MainPage>().OpenSetupAsync(); },
                 _tray.Toggle, () => _ = ExitAsync(window), _tray.Show);
@@ -60,11 +68,17 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         {
             ISettingsService settings = services.GetRequiredService<ISettingsService>();
             using (PerformanceTrace.Measure("startup.settings")) { await settings.LoadAsync().ConfigureAwait(true); }
+            _permissionOptions = settings.Current.Permissions;
+            settings.Changed += OnPermissionSettingsChanged;
+            await PersistPermissionOptionsAsync().ConfigureAwait(true);
             if (_stopping) { interactive.Dispose(); return; }
             int import = Array.IndexOf(args, "--import-mark-lv");
             if (import >= 0 && import + 1 < args.Length) { await services.GetRequiredService<MarkLvConfigurationImporter>().ImportAsync(args[import + 1]).ConfigureAwait(true); }
             int smoke = Array.IndexOf(args, "--ui-smoke");
-            if (smoke >= 0) { await settings.UpdateAsync(settings.Current with { GreetOnStartup = false, AnnounceHourly = false }).ConfigureAwait(true); }
+            int permissionSmoke = Array.IndexOf(args, "--permissions-smoke");
+            int screenshotSmoke = Array.IndexOf(args, "--screenshot-smoke");
+            int brainSmoke = Array.IndexOf(args, "--brain-smoke");
+            if (smoke >= 0 || permissionSmoke >= 0 || screenshotSmoke >= 0 || brainSmoke >= 0) { await settings.UpdateAsync(settings.Current with { GreetOnStartup = false, AnnounceHourly = false, ClapWakeEnabled = false }).ConfigureAwait(true); }
             services.GetRequiredService<ILocalizer>().SetCulture(settings.Current.ResolveCulture());
             services.GetRequiredService<IUiLocalizer>().SetCulture(settings.Current.ResolveUiCulture());
             _brainStartup = WarmBrainAsync();
@@ -72,11 +86,17 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
             if (_stopping) { interactive.Dispose(); return; }
             await services.GetRequiredService<ReminderScheduler>().StartAsync().ConfigureAwait(true);
             services.GetRequiredService<HourlyAnnouncer>().Start();
-            if (smoke < 0) { services.GetRequiredService<ClapWakeCoordinator>().Start(); }
+            if (smoke < 0 && permissionSmoke < 0 && screenshotSmoke < 0 && brainSmoke < 0) { services.GetRequiredService<ClapWakeCoordinator>().Start(); }
             services.GetRequiredService<MainPage>().Reload();
             interactive.Dispose();
             await _brainStartup.ConfigureAwait(true);
             if (_stopping) { return; }
+            if (brainSmoke >= 0 && brainSmoke + 1 < args.Length) { await BrainSmokeRunner.RunAsync(services, args[brainSmoke + 1]).ConfigureAwait(true); return; }
+            if (screenshotSmoke >= 0 && screenshotSmoke + 1 < args.Length) { await ScreenshotSmokeRunner.RunAsync(services, Windows[0], args[screenshotSmoke + 1]).ConfigureAwait(true); return; }
+            if (smoke < 0 && permissionSmoke < 0 && !args.Contains("--screenshot-smoke", StringComparer.Ordinal) && Windows[0].Handler?.PlatformView is Microsoft.UI.Xaml.Window screenshotNative)
+            { _screenshotShortcuts = new(WinRT.Interop.WindowNative.GetWindowHandle(screenshotNative), settings, services.GetRequiredService<ScreenshotCoordinator>(), services.GetRequiredService<IUiLocalizer>(), services.GetRequiredService<LauraNotifications>()); }
+            if (permissionSmoke >= 0 && permissionSmoke + 1 < args.Length)
+            { await PermissionSmokeRunner.RunAsync(services, Windows[0], args[permissionSmoke + 1]).ConfigureAwait(true); return; }
             _ = services.GetRequiredService<Laura.Platform.Windows.System.WindowsApplicationCatalog>().RefreshAsync();
             if (smoke >= 0 && smoke + 1 < args.Length && args.Contains("--verify-background-startup", StringComparer.Ordinal))
             {
@@ -99,15 +119,17 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         catch (Exception error)
         {
             services.GetRequiredService<ILogger<LauraApplication>>().LogError("Startup failed ({ErrorType}).", error.GetType().Name);
-            int smoke = Array.IndexOf(args, "--ui-smoke");
+            int smoke = Array.FindIndex(args, argument => argument is "--ui-smoke" or "--permissions-smoke" or "--screenshot-smoke" or "--brain-smoke");
             if (smoke >= 0 && smoke + 1 < args.Length)
             {
                 string directory = Path.GetFullPath(args[smoke + 1]); Directory.CreateDirectory(directory);
-                await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "Startup failed: " + error.GetType().Name).ConfigureAwait(true);
+                string result = args.Contains("--brain-restart-smoke", StringComparer.Ordinal) ? "restart-result.txt"
+                    : args.Contains("--github-restart", StringComparer.Ordinal) ? "github-restart-result.txt" : "result.txt";
+                await File.WriteAllTextAsync(Path.Combine(directory, result), "FAIL: startup (" + error.GetType().Name + "). No raw error or credential was logged.").ConfigureAwait(true);
                 services.GetRequiredService<Laura.Core.Abstractions.IShellController>().Shutdown();
             }
             else if (args.Contains("--show", StringComparer.Ordinal))
-            { await services.GetRequiredService<MainPage>().DisplayAlertAsync("Laura", "Startup failed. Check settings and the local data directory.", "OK").ConfigureAwait(true); }
+            { await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync("Laura", "Startup failed. Check settings and the local data directory.", "OK").ConfigureAwait(true); }
         }
     }
     /// <summary>Prepares Markdown and legacy facts away from the critical interactive startup path.</summary>
@@ -118,6 +140,8 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         {
             await services.GetRequiredService<Laura.Core.Brain.BrainService>().InitializeAsync().ConfigureAwait(false);
             await Task.Run(services.GetRequiredService<Laura.Core.Brain.BrainConversationMemory>().Initialize).ConfigureAwait(false);
+            await services.GetRequiredService<Laura.Core.Brain.BrainExperiences>().RecoverAsync().ConfigureAwait(false);
+            services.GetRequiredService<Laura.Core.Brain.BrainMaintenance>().Start();
         }
         catch (Exception error) { services.GetRequiredService<ILogger<LauraApplication>>().LogWarning("Brain warmup unavailable ({ErrorType}).", error.GetType().Name); }
     }
@@ -126,7 +150,15 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
     {
         if (_stopping) { return; }
         _stopping = true;
+        services.GetRequiredService<ISettingsService>().Changed -= OnPermissionSettingsChanged;
+        services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed -= OnApprovalsChanged;
+        services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Stop();
+        services.GetRequiredService<WindowsApprovalCenter>().Dispose();
+        WindowsDialogs.CloseAll();
         _shortcuts?.Dispose(); _shortcuts = null;
+        _screenshotShortcuts?.Dispose(); _screenshotShortcuts = null;
+        await services.GetRequiredService<ScreenshotCoordinator>().StopAsync().ConfigureAwait(true);
+        await services.GetRequiredService<Laura.Core.Mcp.McpRuntime>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<ClapWakeCoordinator>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<ReminderScheduler>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<GeminiLiveClient>().ReconfigureAsync().ConfigureAwait(true);
@@ -134,11 +166,25 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         await services.GetRequiredService<IAssistantEngine>().StopAsync().ConfigureAwait(true);
         if (_brainStartup is not null) { await _brainStartup.ConfigureAwait(true); }
         await services.GetRequiredService<Laura.Core.Brain.BrainLearning>().DisposeAsync().ConfigureAwait(true);
+        await services.GetRequiredService<Laura.Core.Brain.BrainMaintenance>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<Laura.Core.Brain.BrainService>().DisposeAsync().ConfigureAwait(true);
         _tray?.Dispose(); _tray = null;
     }
     /// <summary>Exits only on an explicit domain or tray exit request.</summary>
     private async Task ExitAsync(Window window) { _tray?.AllowExit(); await StopAsync().ConfigureAwait(true); CloseWindow(window); }
+    private void OnApprovalsChanged(object? sender, EventArgs args) => MainThread.BeginInvokeOnMainThread(() =>
+        _tray?.SetApprovalCount(services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().PendingRequests.Count));
+    private void OnPermissionSettingsChanged(object? sender, Laura.Core.Configuration.LauraSettings settings)
+    {
+        if (_permissionOptions == settings.Permissions) { return; }
+        _permissionOptions = settings.Permissions; _ = PersistPermissionOptionsAsync();
+    }
+    private async Task PersistPermissionOptionsAsync()
+    {
+        try { await Task.Run(services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().RefreshOptions).ConfigureAwait(false); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or Laura.Core.Permissions.PermissionDeniedException)
+        { services.GetRequiredService<ILogger<LauraApplication>>().LogWarning("Permission retention could not be persisted ({ErrorType}).", error.GetType().Name); }
+    }
     /// <inheritdoc />
     public async ValueTask DisposeAsync() { await StopAsync().ConfigureAwait(true); GC.SuppressFinalize(this); }
 }

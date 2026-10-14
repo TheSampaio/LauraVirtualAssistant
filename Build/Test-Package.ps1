@@ -23,6 +23,9 @@ foreach ($relative in @('Laura.exe', 'hostfxr.dll', 'hostpolicy.dll', 'coreclr.d
 foreach ($brainDependency in @('YamlDotNet.dll', 'Markdig.dll', 'Microsoft.ML.OnnxRuntime.dll', 'onnxruntime.dll', 'licenses/YamlDotNet-18.1.0-LICENSE.txt', 'licenses/Markdig-1.4.0-LICENSE.txt', 'licenses/OnnxRuntime-1.31.0-LICENSE.txt', 'licenses/OnnxRuntime-1.31.0-ThirdPartyNotices.txt')) {
     if (!(Test-Path -LiteralPath (Join-Path $installed $brainDependency))) { throw "Missing Brain dependency or license: $brainDependency" }
 }
+foreach ($mcpDependency in @('ModelContextProtocol.Core.dll', 'Microsoft.Extensions.AI.Abstractions.dll', 'licenses/ModelContextProtocol.Core-2.2.0-LICENSE.txt', 'licenses/Microsoft.Extensions.AI.Abstractions-10.8.3-LICENSE.txt')) {
+    if (!(Test-Path -LiteralPath (Join-Path $installed $mcpDependency))) { throw "MCP dependency/license missing: $mcpDependency" }
+}
 if (Get-ChildItem -LiteralPath $installed -Recurse -Directory | Where-Object { $_.Name -eq 'brain' }) { throw 'Personal Brain folders must not be distributed.' }
 if (Get-ChildItem -LiteralPath $installed -Recurse -File -Filter '*.onnx') { throw 'Optional user model weights must not be distributed.' }
 foreach ($removed in @('System.Windows.Forms.dll', 'System.Speech.dll', 'OllamaSharp.dll', 'LLamaSharp.dll', 'Whisper.net.dll', 'whisper.dll', 'llama.dll', 'sherpa-onnx-c-api.dll')) {

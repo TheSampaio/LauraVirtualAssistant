@@ -149,6 +149,12 @@ public static class MauiSmokeRunner
                         await memory.PreviewBrainForSmokeAsync("graph").ConfigureAwait(true); await Task.Delay(250).ConfigureAwait(true); memory.VerifyBrainForSmoke();
                         await CaptureAsync(window, Path.Combine(directory, "brain-return-" + culture + ".png")).ConfigureAwait(true);
                         await File.WriteAllTextAsync(Path.Combine(directory, "brain.txt"), "Synthetic declarations persisted as Markdown, created attributed graph edges, rendered dark/red global/local graph, reader, editor, split, SVG file tree, selected actions and minimum 720x600 including details; native editor changed the real Markdown file.").ConfigureAwait(true);
+                        using var maintenancePage = new BrainMaintenancePage(services.GetRequiredService<Laura.Core.Brain.BrainService>(), services.GetRequiredService<Laura.Core.Brain.BrainMaintenance>(),
+                            services.GetRequiredService<ISettingsService>(), services.GetRequiredService<IUiLocalizer>(), _ => Task.CompletedTask);
+                        await NavigationMotion.PushAsync(navigation.Navigation, maintenancePage).ConfigureAwait(true); await maintenancePage.AnalyzeForSmokeAsync().ConfigureAwait(true);
+                        await Task.Delay(150).ConfigureAwait(true); await CaptureAsync(window, Path.Combine(directory, "maintenance-" + culture + ".png")).ConfigureAwait(true);
+                        window.Width = 720; window.Height = 600; await Task.Delay(200).ConfigureAwait(true); await CaptureAsync(window, Path.Combine(directory, "maintenance-compact-" + culture + ".png")).ConfigureAwait(true);
+                        await NavigationMotion.PopAsync(navigation.Navigation).ConfigureAwait(true); window.Width = 1440; window.Height = 900;
                     }
                     if (navigation.CurrentPage is SetupPage setup)
                     {
@@ -159,12 +165,12 @@ public static class MauiSmokeRunner
                             await CaptureAsync(window, Path.Combine(directory, "setup-key-masked.png")).ConfigureAwait(true);
                             await File.WriteAllTextAsync(Path.Combine(directory, "key-ui.txt"), "Valid key verified and masked; saving again preserved it; an edit during validation kept the verified credential and new draft; invalid replacement was rejected without changing the saved credential.").ConfigureAwait(true);
                         }
-                        for (int tab = 0; tab < 4; tab++)
+                        for (int tab = 0; tab < setup.TabCount; tab++)
                         {
                             setup.SelectTab(tab); await Task.Delay(250).ConfigureAwait(true);
                             if (tab == 3) { var native = (Microsoft.UI.Xaml.Window)window.Handler!.PlatformView!; string[] geometry = Describe(native.Content, native.Content).ToArray(); await File.WriteAllLinesAsync(Path.Combine(directory, "setup-apps-layout-" + culture + ".txt"), geometry).ConfigureAwait(true); }
                             setup.VerifySettingsForSmoke(); await CaptureAsync(window, Path.Combine(directory, "setup-tab-" + tab + "-" + culture + ".png")).ConfigureAwait(true);
-                            if (tab is 1 or 2)
+                            if (tab is 1 or 2 or 4 or 5)
                             {
                                 await setup.VerifySettingsScrollForSmokeAsync(true).ConfigureAwait(true);
                                 await CaptureAsync(window, Path.Combine(directory, "setup-bottom-" + tab + "-" + culture + ".png")).ConfigureAwait(true);
@@ -172,12 +178,12 @@ public static class MauiSmokeRunner
                             }
                         }
                         window.Width = 720; window.Height = 600;
-                        for (int tab = 0; tab < 4; tab++)
+                        for (int tab = 0; tab < setup.TabCount; tab++)
                         {
                             setup.SelectTab(tab); await Task.Delay(250).ConfigureAwait(true); setup.VerifySettingsForSmoke();
                             VerifyWorkspaceNavigation(window, setup, navigationStyles, services.GetRequiredService<IUiLocalizer>().Get("ui.navigation.backToLaura"));
                             await CaptureAsync(window, Path.Combine(directory, "setup-compact-" + tab + "-" + culture + ".png")).ConfigureAwait(true);
-                            if (tab is 1 or 2)
+                            if (tab is 1 or 2 or 4 or 5)
                             {
                                 await setup.VerifySettingsScrollForSmokeAsync(true).ConfigureAwait(true);
                                 await CaptureAsync(window, Path.Combine(directory, "setup-compact-bottom-" + tab + "-" + culture + ".png")).ConfigureAwait(true);
@@ -295,7 +301,7 @@ public static class MauiSmokeRunner
         { foreach (string row in Describe(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(element, index), root)) { yield return row; } }
     }
     /// <summary>Captures the application's native WinUI content rather than the user's desktop.</summary>
-    private static async Task CaptureAsync(Window window, string path)
+    internal static async Task CaptureAsync(Window window, string path)
     {
         var native = (Microsoft.UI.Xaml.Window)window.Handler!.PlatformView!;
         var bitmap = new RenderTargetBitmap();

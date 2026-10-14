@@ -21,6 +21,8 @@ The HUD bundles selected Lucide SVG icons from https://github.com/lucide-icons/l
 | Microsoft.Data.Sqlite | 9.0.10 | MIT, https://github.com/dotnet/efcore |
 | Markdig | 1.4.0 | BSD-2-Clause, https://github.com/xoofx/markdig; included license |
 | YamlDotNet | 18.1.0 | MIT, https://github.com/aaubry/YamlDotNet; included license |
+| ModelContextProtocol.Core | 2.2.0 | Apache-2.0 package declaration; upstream transition preserves MIT portions; pinned upstream notice in `licenses/ModelContextProtocol.Core-2.2.0-LICENSE.txt`, https://github.com/modelcontextprotocol/csharp-sdk |
+| Microsoft.Extensions.AI.Abstractions | 10.8.3 | MIT; SDK transitive protocol types, not a second model integration, https://github.com/dotnet/extensions |
 | Microsoft.ML.OnnxRuntime / Managed | 1.31.0 | MIT, https://github.com/microsoft/onnxruntime; included license and third-party notices |
 | SQLitePCLRaw | 2.1.12 | Apache-2.0; bundled SQLite public domain, https://www.sqlite.org/copyright.html |
 | ProtectedData | 9.0.13 | MIT, https://github.com/dotnet/runtime |

@@ -41,6 +41,10 @@ public sealed record LauraSettings
     public bool RememberConversations { get; init; } = true;
     /// <summary>Gets portable Brain location, learning, retrieval and local embedding options.</summary>
     public Laura.Core.Brain.BrainOptions Brain { get; init; } = new();
+    /// <summary>Gets independent local approval and audit settings.</summary>
+    public Laura.Core.Permissions.PermissionOptions Permissions { get; init; } = new();
+    /// <summary>Gets local screenshot capture and global shortcut preferences.</summary>
+    public Laura.Core.Screenshots.ScreenshotOptions Screenshots { get; init; } = new();
 
     /// <summary>
     /// Gets the name Laura uses to address the user.
@@ -113,6 +117,8 @@ public sealed record LauraSettings
             Voice = Voice.Sanitized(),
             GenerativeAi = GenerativeAi.Sanitized(),
             Brain = Brain.Sanitized(),
+            Permissions = Permissions.Sanitized(),
+            Screenshots = Screenshots.Sanitized(),
         };
     }
 }

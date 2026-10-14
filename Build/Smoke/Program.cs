@@ -12,6 +12,12 @@ using Laura.Platform.Windows.Speech;
 using Microsoft.Extensions.Logging.Abstractions;
 
 // Explicit smoke tests use isolated storage and never open the microphone.
+if (args.Length == 2 && args[0] == "--inspect-gui-policy")
+{
+    using var image = File.OpenRead(args[1]);
+    Console.WriteLine(JsonSerializer.Serialize(new { Metadata = Laura.Core.Files.ExecutableMetadata.Read(image), Automatic = WindowsApplicationLaunchPolicy.CanOpenAutomatically(args[1], null) }));
+    return 0;
+}
 if (args.Length == 0) { Console.Error.WriteLine("Usage: Laura.Smoke <isolated-directory> --gemini --key-file <Mark-LV api_keys.json> [--quick] [--vad]"); return 2; }
 string directory = Path.GetFullPath(args[0]);
 Directory.CreateDirectory(directory);

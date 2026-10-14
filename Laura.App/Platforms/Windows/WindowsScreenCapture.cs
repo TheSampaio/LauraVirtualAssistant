@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
+using Laura.Core.Screenshots;
 
 namespace Laura.App.Platforms.Windows;
 
@@ -10,7 +11,24 @@ public static class WindowsScreenCapture
     /// <summary>Returns a desktop PNG after the caller's trusted confirmation.</summary>
     public static async Task<byte[]> CaptureAsync(CancellationToken cancellationToken, bool jpeg = false)
     {
-        (byte[] pixels, int width, int height) = await Task.Run(CapturePixels, cancellationToken).ConfigureAwait(false);
+        using var frame = await CaptureFrameAsync(new(0, 0, GetSystemMetrics(0), GetSystemMetrics(1)), cancellationToken).ConfigureAwait(false);
+        return await EncodeAsync(frame.Pixels.ToArray(), frame.Bounds.Width, frame.Bounds.Height, jpeg, cancellationToken).ConfigureAwait(false);
+    }
+    /// <summary>Captures a bounded physical desktop rectangle, including negative monitor origins.</summary>
+    public static Task<ScreenshotFrame> CaptureFrameAsync(ScreenshotBounds bounds, CancellationToken cancellationToken) =>
+        Task.Run(() => CapturePixels(bounds), cancellationToken);
+    /// <summary>Gets current physical monitor geometry; recalculate after display/DPI changes.</summary>
+    public static ScreenshotBounds DesktopBounds(bool allDisplays = true)
+    {
+        if (allDisplays) { return new(GetSystemMetrics(76), GetSystemMetrics(77), GetSystemMetrics(78), GetSystemMetrics(79)); }
+        var monitor = new MonitorInfo { Size = (uint)Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(MonitorFromWindow(GetForegroundWindow(), 2), ref monitor)) { throw new InvalidOperationException("Display unavailable."); }
+        return new(monitor.Monitor.Left, monitor.Monitor.Top, monitor.Monitor.Right - monitor.Monitor.Left, monitor.Monitor.Bottom - monitor.Monitor.Top);
+    }
+    /// <summary>Encodes flattened BGRA pixels in memory using the existing Windows codec; never creates temporary files.</summary>
+    public static async Task<byte[]> EncodeAsync(byte[] pixels, int width, int height, bool jpeg, CancellationToken cancellationToken)
+    {
+        if (width <= 0 || height <= 0 || (long)width * height > 32000000 || pixels.Length != checked(width * height * 4)) { throw new ArgumentException("Invalid screenshot pixels.", nameof(pixels)); }
         using var stream = new InMemoryRandomAccessStream();
         BitmapEncoder encoder = await BitmapEncoder.CreateAsync(jpeg ? BitmapEncoder.JpegEncoderId : BitmapEncoder.PngEncoderId, stream).AsTask(cancellationToken).ConfigureAwait(false);
         encoder.SetPixelData(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Ignore, (uint)width, (uint)height, 96, 96, pixels);
@@ -23,19 +41,21 @@ public static class WindowsScreenCapture
         return png;
     }
     /// <summary>Reads top-down 32-bit primary-display pixels and releases every GDI resource.</summary>
-    private static (byte[], int, int) CapturePixels()
+    private static ScreenshotFrame CapturePixels(ScreenshotBounds bounds)
     {
-        int width = GetSystemMetrics(0), height = GetSystemMetrics(1);
+        int width = bounds.Width, height = bounds.Height;
+        if (width <= 0 || height <= 0 || (long)width * height > 32000000) { throw new InvalidOperationException("Screenshot exceeds the 32-megapixel limit."); }
         nint desktop = GetDC(0), memory = CreateCompatibleDC(desktop), bitmap = CreateCompatibleBitmap(desktop, width, height);
         nint previous = SelectObject(memory, bitmap);
         try
         {
-            if (!BitBlt(memory, 0, 0, width, height, desktop, 0, 0, 0x40CC0020)) { throw new InvalidOperationException("Desktop capture failed."); }
+            if (desktop == 0 || memory == 0 || bitmap == 0 || !BitBlt(memory, 0, 0, width, height, desktop, bounds.X, bounds.Y, 0x40CC0020)) { throw new InvalidOperationException("Desktop capture failed."); }
             SelectObject(memory, previous);
             byte[] pixels = new byte[checked(width * height * 4)];
             var info = new BitmapInfo { Size = 40, Width = width, Height = -height, Planes = 1, BitCount = 32 };
             if (GetDIBits(memory, bitmap, 0, (uint)height, pixels, ref info, 0) == 0) { throw new InvalidOperationException("Desktop pixels are unavailable."); }
-            return (pixels, width, height);
+            for (int index = 3; index < pixels.Length; index += 4) { pixels[index] = 255; }
+            return new(bounds, pixels);
         }
         finally { SelectObject(memory, previous); DeleteObject(bitmap); DeleteDC(memory); _ = ReleaseDC(0, desktop); }
     }
@@ -45,6 +65,11 @@ public static class WindowsScreenCapture
         internal uint Compression; internal uint ImageSize; internal int XPixelsPerMeter; internal int YPixelsPerMeter; internal uint ColorsUsed; internal uint ColorsImportant;
     }
     [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
+    [StructLayout(LayoutKind.Sequential)] private struct NativeRect { internal int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)] private struct MonitorInfo { internal uint Size; internal NativeRect Monitor, Work; internal uint Flags; }
+    [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern nint MonitorFromWindow(nint window, uint flags);
+    [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
     [DllImport("user32.dll")] private static extern nint GetDC(nint window);
     [DllImport("user32.dll")] private static extern int ReleaseDC(nint window, nint dc);
     [DllImport("gdi32.dll")] private static extern nint CreateCompatibleDC(nint dc);

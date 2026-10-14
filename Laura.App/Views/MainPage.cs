@@ -56,6 +56,7 @@ public sealed class MainPage : ContentPage, IDisposable
     private readonly Label _coreTitle;
     private readonly Label _activityTitle;
     private readonly ImageButton _setupButton;
+    private readonly Button _approvalsButton;
     private readonly Button _memoryButton;
     private readonly ImageButton _interruptButton;
     private readonly ImageButton _microphoneButton;
@@ -105,17 +106,22 @@ public sealed class MainPage : ContentPage, IDisposable
         _listen = Theme.IconButton("audio_lines", ToggleListeningAsync);
         _monitorTitle = Theme.Caption(""); _coreTitle = Theme.Caption(""); _activityTitle = Theme.Caption("");
         _setupButton = Theme.IconButton("settings_2", OpenSetupAsync);
+        _approvalsButton = Theme.ActionButton("", "shield_check", () => { _services.GetRequiredService<Laura.App.Platforms.Windows.WindowsApprovalCenter>().Show(); return Task.CompletedTask; });
+        _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed += OnApprovalsChanged;
+        UpdateApprovals();
         _memoryButton = Theme.ActionButton("", "brain", OpenBrainAsync);
         _interruptButton = Theme.IconButton("square", InterruptAsync);
         _microphoneButton = Theme.IconButton("mic_off", ToggleMicrophoneAsync);
         _sendButton = Theme.IconButton("send", SendAsync, true, CanSend);
         _monitorButton = Theme.IconButton("activity", () => { _showMonitor = !_showMonitor; SetLayout(_narrow); return Task.CompletedTask; });
+        var screenshot = Theme.IconButton("scan", async () => { await _services.GetRequiredService<ScreenshotCoordinator>().CaptureAsync(Laura.Core.Screenshots.ScreenshotMode.Region, true).ConfigureAwait(true); });
+        Theme.DescribeAction(screenshot, _ui.Get("ui.screenshot.capture.Region"));
         var header = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Auto)], Margin = new Thickness(0, 0, 0, 20) };
         var brand = Theme.Stack(new Label { Text = "L A U R A", FontSize = 26, FontAttributes = FontAttributes.Bold, TextColor = Theme.Accent }, _subtitle); brand.Spacing = 4;
         header.Add(brand);
         _clock.FontSize = 18; _clock.Margin = new Thickness(0, 0, 8, 0); _clock.VerticalOptions = LayoutOptions.Center;
         var actions = new HorizontalStackLayout { Spacing = 8, VerticalOptions = LayoutOptions.Center };
-        actions.Add(_clock); actions.Add(_monitorButton); actions.Add(_setupButton); header.Add(actions, 1);
+        actions.Add(_clock); actions.Add(_monitorButton); actions.Add(screenshot); actions.Add(_approvalsButton); actions.Add(_setupButton); header.Add(actions, 1);
         _monitor = BuildMonitor();
         var centerGrid = new Grid { RowDefinitions = [new(GridLength.Auto), new(GridLength.Star), new(GridLength.Auto)], RowSpacing = 12 };
         centerGrid.Add(SectionHeader("audio_lines", _coreTitle)); centerGrid.Add(_reactor, 0, 1);
@@ -394,7 +400,7 @@ public sealed class MainPage : ContentPage, IDisposable
     /// <summary>Toggles automatic turn detection; a natural speech pause triggers a response without another click.</summary>
     private async Task ToggleListeningAsync()
     {
-        if (_settings.Current.MicrophoneMuted) { await DisplayAlertAsync("Laura", _ui.Get("ui.maui.unmuteFirst"), "OK").ConfigureAwait(true); return; }
+        if (_settings.Current.MicrophoneMuted) { await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync("Laura", _ui.Get("ui.maui.unmuteFirst"), "OK").ConfigureAwait(true); return; }
         if (_live.IsListening) { await _live.StopListeningAsync().ConfigureAwait(true); }
         else { await _live.StartListeningAsync().ConfigureAwait(true); }
         Reload();
@@ -491,6 +497,14 @@ public sealed class MainPage : ContentPage, IDisposable
     /// <summary>Restricts diagnostic state changes to an explicit isolated rendering run.</summary>
     private static void EnsureSmoke()
     { if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("HUD previews require isolated UI smoke verification."); } }
+    private void OnApprovalsChanged(object? sender, EventArgs args) => MainThread.BeginInvokeOnMainThread(UpdateApprovals);
+    private void UpdateApprovals()
+    {
+        int count = _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().PendingRequests.Count;
+        _approvalsButton.Text = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Theme.DescribeAction(_approvalsButton, _ui.Get("ui.permissions.center") + " · " + count);
+        _approvalsButton.BackgroundColor = count > 0 ? Theme.Primary : Theme.Field;
+    }
     /// <inheritdoc />
-    public void Dispose() { _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this); }
+    public void Dispose() { _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed -= OnApprovalsChanged; _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this); }
 }
