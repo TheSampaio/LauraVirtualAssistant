@@ -41,10 +41,11 @@ public sealed class BrainApplications(BrainService brain, ISettingsService setti
         string normalized = TextNormalizer.Normalize(name);
         BrainNote[] matches = brain.Snapshot.Notes.Where(note => note.IsKnowledge && note.Type == "application" && note.Application is not null
             && (TextNormalizer.Normalize(note.Title) == normalized || MatchExecutableName(note.Title, name) >= 100
-                || note.Aliases.Any(alias => TextNormalizer.Normalize(alias) == normalized))
-            && !brain.Snapshot.Issues.Any(issue => issue.Path == note.Path && issue.Code == "conflicting_id")).Take(2).ToArray();
+                || note.Aliases.Any(alias => TextNormalizer.Normalize(alias) == normalized))).Take(2).ToArray();
         if (matches.Length == 0) { return new(false, null); }
         if (matches.Length != 1) { return new(true, null, "Stored application aliases are ambiguous; clarify the intended application."); }
+        if (brain.Snapshot.Issues.Any(issue => issue.Path == matches[0].Path && issue.Code == "conflicting_id"))
+        { return new(true, null, "Stored application identity conflicts; resolve it before launching."); }
         if (matches[0].Verification == "unverified" || brain.Snapshot.Edges.Any(edge => edge.Type == "contradicts" && (edge.Source == matches[0].Id || edge.Target == matches[0].Id)))
         { return new(true, null, "Stored installation evidence is unverified or contradictory; request clarification."); }
         BrainApplicationReference reference = matches[0].Application!;

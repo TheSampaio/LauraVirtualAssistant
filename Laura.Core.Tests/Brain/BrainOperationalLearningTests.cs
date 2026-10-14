@@ -7,6 +7,16 @@ namespace Laura.Core.Tests.Brain;
 public sealed partial class BrainTests
 {
     [Fact]
+    public async Task ConflictingStoredIdentityRemainsKnownAndCannotTriggerSpeculativeDiscovery()
+    {
+        BrainService brain = Create(); var launch = await SyntheticLaunchAsync("NeuralScreen");
+        using var apps = new BrainApplications(brain, _settings, new(_root), NullLogger<BrainApplications>.Instance);
+        BrainNote original = (await apps.RememberAsync("Neural Screen", "Neural Screen", launch, brain.Location))!;
+        var storage = new FileBrainStorage(brain.Location);
+        storage.Write("Knowledge/Applications/Duplicate.md", BrainMarkdown.Render(original), null); await brain.RefreshAsync();
+        BrainApplicationResolution result = await apps.ResolveAsync("Neural Screen"); Assert.True(result.Known); Assert.Null(result.Reference);
+    }
+    [Fact]
     public async Task DeclaredInstallationResolvesTheNamedExecutableAndOnlyObservedLaunchPromotesEvidence()
     {
         BrainService brain = Create(); await using var learning = new BrainLearning(brain, _settings, _localizer, NullLogger<BrainLearning>.Instance);

@@ -302,7 +302,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                     if (matches.Count == 0) { return new("No matching application was found. Ask the user for the installed program name or path. Do not claim success.") { Failed = true }; }
                     var ranked = matches.GroupBy(app => ApplicationNameMatcher.Score(app.Name, requested)).OrderByDescending(group => group.Key).First().ToArray();
                     if (ranked.Length > 1 && ranked.Select(app => app.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
-                    { return new("Choose an application: " + JsonSerializer.Serialize(ranked)); }
+                    { return new("Choose an application: " + JsonSerializer.Serialize(ranked)) { Failed = true }; }
                     InstalledApplication target = ranked[0];
                     string observedVault = rememberedApps.Location;
                     ProcessLaunchResult started = await launcher.TryStartObservedAsync(target.Target, cancellationToken: cancellationToken).ConfigureAwait(false);

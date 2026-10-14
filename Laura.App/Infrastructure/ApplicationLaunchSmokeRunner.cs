@@ -21,6 +21,10 @@ internal static class ApplicationLaunchSmokeRunner
         foreach (string file in Directory.EnumerateFiles(Path.GetDirectoryName(fixtureExecutable)!, "Laura.GuiFixture*"))
         { File.Copy(file, Path.Combine(workspace, Path.GetFileName(file)), overwrite: false); }
         string target = Path.Combine(workspace, "Laura.GuiFixture.exe"); string marker = Path.Combine(workspace, "observed.json");
+        var learning = services.GetRequiredService<Laura.Core.Brain.BrainLearning>();
+        var brain = services.GetRequiredService<Laura.Core.Brain.BrainService>();
+        const string learnedName = "Laura GuiFixture";
+        await learning.LearnAsync("The " + learnedName + " is installed in " + target).ConfigureAwait(true);
         await settings.UpdateAsync(settings.Current with { Permissions = settings.Current.Permissions with { Mode = ApprovalMode.Ask } }).ConfigureAwait(true);
         using var open = JsonDocument.Parse(JsonSerializer.Serialize(new { name = target }));
         Task<AssistantToolResult> denied = tools.ExecuteAsync("open_app", open.RootElement, CancellationToken.None);
@@ -41,6 +45,20 @@ internal static class ApplicationLaunchSmokeRunner
         if (fixture.HasExited) { throw new InvalidOperationException("CLI timeout terminated the graphical application."); }
         await fixture.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
         var results = new List<string> { "Absolute GUI path: native denial prevented execution. One-shot approval of a misrouted run_program opened the actual GUI fixture, used its own directory, returned before exit and did not kill it at the CLI timeout. The fixture exited naturally." };
+        File.Delete(marker);
+        using var byName = JsonDocument.Parse(JsonSerializer.Serialize(new { name = learnedName }));
+        Task<AssistantToolResult> learnedLaunch = tools.ExecuteAsync("open_app", byName.RootElement, CancellationToken.None);
+        await AwaitAsync().ConfigureAwait(true); center.Show(); await Task.Delay(100).ConfigureAwait(true); center.InvokeForSmoke("once");
+        AssistantToolResult learnedResult = await learnedLaunch.ConfigureAwait(true);
+        if (learnedResult.Launch is not { Accepted: true, ProcessId: > 0 } || learnedResult.Failed)
+        { throw new InvalidOperationException("Declared application location did not produce an observed native process."); }
+        using var learnedWait = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!File.Exists(marker)) { await Task.Delay(20, learnedWait.Token).ConfigureAwait(true); }
+        using Process learnedProcess = Process.GetProcessById(learnedResult.Launch.ProcessId.Value);
+        await learnedProcess.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+        if (!brain.Snapshot.Notes.Any(note => note.Title == learnedName && note.Application?.Hash == learnedResult.Launch.TargetHash && note.Verification == "observed_execution"))
+        { throw new InvalidOperationException("Observed launch did not promote the declared application reference."); }
+        results.Add("Literal installation knowledge resolved by name, revalidated the executable, required fresh native approval and produced a real process; declaration promoted only after process observation.");
         if (installedTarget is not null)
         {
             if (!WindowsApplicationLaunchPolicy.IsBoundedInstalledApplication(installedTarget, null)) { throw new InvalidOperationException("The installed target does not meet the bounded-GUI policy."); }
