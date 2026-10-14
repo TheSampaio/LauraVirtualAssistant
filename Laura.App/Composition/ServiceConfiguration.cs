@@ -93,6 +93,7 @@ public static class ServiceConfiguration
             () => provider.GetRequiredService<IAssistantTools>() is MauiAssistantTools native ? native.RegisteredToolNames : new HashSet<string>(StringComparer.Ordinal),
             new BrainIndex(Path.Combine(brainCache, "Skills"), provider.GetRequiredService<IBrainEmbedding>())));
         services.AddSingleton<BrainConversationMemory>();
+        services.AddSingleton<BrainSkillUsage>();
         services.AddSingleton<IConversationMemory>(provider => provider.GetRequiredService<BrainConversationMemory>());
         // Explicit live diagnostics read the already protected credential in-process; it is neither printed nor copied into fixtures.
         string credentialDirectory = storageDirectory is not null && (Environment.GetCommandLineArgs().Contains("--permissions-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--screenshot-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--brain-live-smoke", StringComparer.Ordinal))

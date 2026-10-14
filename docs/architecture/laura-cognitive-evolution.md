@@ -152,6 +152,16 @@ Validação: **306 testes passaram**, zero falhas/skips (`_Output/CognitiveSkill
 
 Integração nativa sem nuvem: `_Output/CognitiveNativeDiscovery/result.txt` passou. O adaptador real encontrou instruções revisadas e a proposta MCP bloqueada, apresentou dependências reais e não expôs os passos nem criou aprovações. Monitoramento de resultados e MCP conectado continuam unidades seguintes.
 
+### Monitoramento por versão e turno — 14/10/2026
+
+`BrainSkillUsage` vincula instruções efetivamente carregadas ao ID transitório do turno, vault e hash revisado. O adaptador congela esse vínculo antes de enfileirar a ferramenta e revalida aprovação, fontes, ferramenta declarada, turno e limite de dez minutos depois da execução. Somente o `BrainExecutionObservation` nativo de um processo encerrado produz recibo. Abrir instruções, negar execução, um relato do modelo ou trocar de turno não produz resultado de habilidade. Procedimentos genéricos sem `run_program` declarado não recebem atribuição de processos. Dados sensíveis e aprendizado/histórico desabilitados continuam excluídos.
+
+O SQLite existente evolui para esquema 4 e retém até 1.000 observações globalmente, idempotentes por evento, separadas por versão; `read_brain_skill_usage` lê até 50 recentes. O recibo contém IDs, hashes, ferramenta, horário e exit code, sem argumentos, stdout, transcrição ou causa inventada. Limpar histórico remove esses recibos. Não há porcentagem de sucesso da tarefa baseada em exit code. Uma falha observada pode fundamentar uma revisão pelo mecanismo existente de propostas, com fontes atuais, histórico preservado e nova aprovação; não ocorre atualização destrutiva automática.
+
+Validação: **312 testes passaram**, zero falhas/skips (`_Output/CognitiveSkillUsage/usage-verified.trx`), mais uma execução focada da exclusão de contexto sensível após ampliar a asserção. Build Release sem avisos/erros. Casos novos cobrem idempotência, reinicialização do armazenamento, versões, revogação/fontes alteradas, troca de turno durante refresh, expiração, privacidade, isolamento de vault, retenção/migração v3 e revisão draft fundamentada em falha. O primeiro ensaio completo expôs uma preparação de teste que tentava sobrescrever uma fonte sem hash; a fixture foi corrigida para reutilizar a versão real.
+
+Integração nativa: `_Output/CognitiveNativeSkillUsageVerified/result.txt` e `skill-usage-checks.txt` passaram. Processos SDK reais produziram exit codes 0 e 1, registrados na versão correta; execução negada e turno posterior não alteraram a contagem. As duas primeiras execuções nativas usavam a palavra `diagnostic` no contexto, excluída pelo filtro conservador de dados médicos existente: não houve recibos, corretamente. O cenário final usa um pedido sintético não sensível; não se enfraqueceu o filtro para fazer o teste passar. O filtro pode excluir diagnósticos computacionais legítimos e continua uma limitação conhecida. Não foi comprovado que uma habilidade arbitrária executa todos os seus passos ou resolve todo o objetivo do usuário.
+
 ## Registro de commits e reprodução
 
 ### Fonte real indicada: REA
@@ -186,6 +196,7 @@ A preparação HTTP é uma ferramenta explícita de validação, não um leitor 
 | `5e493ae` | Aquisição e recuperação de fontes públicas REA fixadas por hash |
 | `c1cde8e` | Propostas procedurais fundamentadas e revisão por versão |
 | `11d36f5` | Abertura interativa de aplicativos e permissões por executável exato |
+| `457e69b` | Descoberta de metadados de habilidades por tarefa com índice híbrido local |
 
 O diagnóstico público REA é registrado no commit subsequente desta documentação. Artefatos `_Output` são ignorados pelo Git e não contêm a credencial protegida.
 

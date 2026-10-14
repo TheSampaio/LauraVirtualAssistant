@@ -70,6 +70,28 @@ public sealed class SqliteConversationMemoryTests : IDisposable
         Assert.Empty(migrated.ReadPendingLearning(new string('A', 64)));
     }
     [Fact]
+    public void MigratesVersionThreeAndBoundsSkillEvidenceWithoutDeletingFactsOrMessages()
+    {
+        var original = new SqliteConversationMemory(Database); original.Append(new(ConversationMessageSource.UserTyped, "Preserve synthetic history", DateTimeOffset.UtcNow)); original.SetFact("fixture", "Preserved explicit fact");
+        using (var connection = new SqliteConnection($"Data Source={Database};Pooling=False"))
+        {
+            connection.Open(); using var command = connection.CreateCommand(); command.CommandText = "DROP TABLE skill_outcomes; PRAGMA user_version=3;"; command.ExecuteNonQuery();
+        }
+        var migrated = new SqliteConversationMemory(Database); string vault = new('A', 64), skill = Guid.NewGuid().ToString("D"), hash = new('B', 64);
+        Assert.Empty(migrated.ReadSkillOutcomes(vault, skill)); Assert.Single(migrated.ReadRecent(10)); Assert.Single(migrated.Search("Preserved"));
+        using (var connection = new SqliteConnection($"Data Source={Database};Pooling=False"))
+        {
+            connection.Open(); using var command = connection.CreateCommand();
+            command.CommandText = "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<1005) INSERT INTO skill_outcomes(id,vault,skill,hash,tool,exit_code,operation,stamp) SELECT hex(randomblob(16)),$vault,$skill,$hash,'run_program',1,$hash,'2026-10-14T00:00:00Z' FROM n";
+            command.Parameters.AddWithValue("$vault", vault); command.Parameters.AddWithValue("$skill", skill); command.Parameters.AddWithValue("$hash", hash); command.ExecuteNonQuery();
+        }
+        migrated.RecordSkillOutcome(vault, new(Guid.NewGuid(), skill, hash, "run_program", 0, hash, DateTimeOffset.UtcNow));
+        Assert.Equal(50, migrated.ReadSkillOutcomes(vault, skill).Count); Assert.Empty(migrated.ReadSkillOutcomes(new string('C', 64), skill));
+        using (var connection = new SqliteConnection($"Data Source={Database};Pooling=False"))
+        { connection.Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT count(*) FROM skill_outcomes"; Assert.Equal(1000L, command.ExecuteScalar()); }
+        migrated.ClearHistory(); Assert.Empty(migrated.ReadSkillOutcomes(vault, skill)); Assert.Single(migrated.Search("Preserved"));
+    }
+    [Fact]
     public void TranscriptRetentionAlsoRemovesReceiptsForExpiredMessages()
     {
         var store = new SqliteConversationMemory(Database); string identity = new('A', 64);

@@ -10,13 +10,16 @@ public sealed class BrainConversationMemory(BrainService brain, BrainLearning le
     private readonly object _gate = new();
     private bool _initialized;
     private string _lastUserText = "";
+    private Guid _turnId;
     /// <summary>Gets transient working context for grounded tool proposals; it is not an execution permission.</summary>
     public string LastUserText { get { lock (_gate) { return _lastUserText; } } }
     /// <inheritdoc />
     public string WorkingUserText => LastUserText;
     /// <inheritdoc />
+    public ConversationWorkingContext WorkingContext { get { lock (_gate) { return new(_turnId, _lastUserText); } } }
+    /// <inheritdoc />
     public void SetWorkingContext(string text)
-    { ArgumentNullException.ThrowIfNull(text); lock (_gate) { _lastUserText = text.Length <= 4000 ? text : ""; } }
+    { ArgumentNullException.ThrowIfNull(text); lock (_gate) { _lastUserText = text.Length <= 4000 ? text : ""; _turnId = Guid.NewGuid(); } }
     /// <inheritdoc />
     public void Initialize()
     {
@@ -77,5 +80,5 @@ public sealed class BrainConversationMemory(BrainService brain, BrainLearning le
         if (note is not null) { brain.DeleteAsync(note.Path).GetAwaiter().GetResult(); }
     }
     /// <inheritdoc />
-    public void ClearHistory() { Initialize(); transcripts.ClearHistory(); lock (_gate) { _lastUserText = ""; } }
+    public void ClearHistory() { Initialize(); transcripts.ClearHistory(); lock (_gate) { _lastUserText = ""; _turnId = Guid.Empty; } }
 }

@@ -167,6 +167,8 @@ public static class BrainSmokeRunner
                 || permissions.PendingRequests.Count != 0)
             { throw new InvalidOperationException("Task discovery did not preserve bounded metadata, current availability and progressive instruction loading."); }
             results.Add("Actual list_brain_skills ranked task metadata through the local index, distinguished reviewed instructions from blocked MCP dependencies and excluded full procedure steps without asking for execution permissions.");
+            stage = "native_skill_usage_adapter";
+            results.Add(await BrainSkillUsageSmokeRunner.RunAsync(services, workspace, episode).ConfigureAwait(true));
             if (args.Contains("--brain-live-smoke", StringComparer.Ordinal))
             {
                 var live = services.GetRequiredService<GeminiLiveClient>(); if (!live.IsAvailable) { throw new InvalidOperationException("A configured model credential is required for live diagnostics."); }

@@ -56,6 +56,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         Function("list_brain_skills", "Search installed skill metadata by task meaning using descriptions/capabilities and available local hybrid retrieval. Optional query ranks candidates; an empty query lists metadata. Results distinguish review/dependency availability and lexical versus semantic evidence. Full instructions require read_brain_skill. A missing search result is not proof of a missing ability.", [], ("query", "STRING", "Optional task-focused query; match descriptions across languages")),
         Function("propose_brain_skill", "Propose or revise an INERT structured skill from actual current Brain knowledge. Never claims testing or activates anything. JSON proposal fields: name, description, definition {kind: guidance/native/mcp/code/composition, purpose, useWhen, prerequisites, dependencies, tools, permissions, steps, limitations, successCriteria, failureBehavior, capabilities, sources:[{id,hash,evidence:literal source quote}], components:[{id,hash,evidence}]}. All lists required; sources 1..8; components 0..4. To revise include targetId and targetHash. Reuse an existing equivalent skill. Missing tools/dependencies remain blocked, not installed.", ["proposal"], ("proposal", "STRING", "Bounded JSON proposal, using exact source IDs/hashes and literal evidence returned by recall_memory or read_brain_passage")),
         Function("read_brain_skill", "Load one relevant skill's instructions by ID or exact name. If disabled or changed, native review asks the user to approve that exact version first. Match descriptions to the task across languages. No scripts or dependencies execute.", ["name"], ("name", "STRING", "Stable ID or exact skill name")),
+        Function("read_brain_skill_usage", "Inspect retained native process outcomes attributed to a reviewed skill version in its user turn. Exit code zero does not prove the whole procedure or goal succeeded. Use actual failed observations to investigate before proposing an evidence-grounded revision; never infer causes from exit code alone.", ["name"], ("name", "STRING", "Stable ID or exact skill name")),
         Function("forget_memory", "Forget a specific saved fact requested by the user.", ["key"], ("key", "STRING", "Fact key")),
         Function("clipboard", "Read or write the clipboard; reading needs native confirmation.", ["action"], ("action", "STRING", "read or write"), ("text", "STRING", "Literal text to copy")),
         Function("reminder", "Add, list or cancel an explicitly requested persistent reminder. Notifications use Gemini while Laura is running. Do not create schedules unless the user requested them.", ["action"], ("action", "STRING", "add, list or cancel"), ("text", "STRING", "Reminder in the user's language"), ("due", "STRING", "ISO 8601 date/time including timezone offset"), ("seconds", "INTEGER", "Alternative relative delay in seconds"), ("id", "STRING", "Identifier to cancel")),
@@ -74,7 +75,10 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
     /// <inheritdoc />
     public async Task<AssistantToolResult> ExecuteAsync(string name, JsonElement arguments, CancellationToken cancellationToken)
     {
-        string workingUserText = memory.WorkingUserText;
+        var working = memory.WorkingContext;
+        string workingUserText = working.UserText;
+        BrainSkillUsage skillUsage = services.GetRequiredService<BrainSkillUsage>();
+        BrainSkillUse? skillUse = skillUsage.Capture(working.TurnId);
         string learningVault = services.GetRequiredService<BrainService>().Location;
         await _actions.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -108,10 +112,11 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             using var document = JsonDocument.Parse(frozen.ToJsonString());
             JsonElement snapshot = document.RootElement.Clone();
             AssistantToolResult result = await permissions.ExecuteAsync(MauiToolPermissions.Describe(name, snapshot),
-                token => ExecuteAuthorizedAsync(name, snapshot, workingUserText, graphicalDirectory, token),
+                token => ExecuteAuthorizedAsync(name, snapshot, working, graphicalDirectory, token),
                 succeeded: result => !result.Failed && (result.Observation is null || result.Observation.ExitCode == 0), cancellationToken: cancellationToken).ConfigureAwait(false);
             if (result.Observation is not null && !cancellationToken.IsCancellationRequested)
             {
+                await skillUsage.ObserveAsync(skillUse, result.Observation, () => memory.WorkingContext.TurnId, cancellationToken).ConfigureAwait(false);
                 BrainMemoryResult learned = await services.GetRequiredService<BrainExperiences>().ObserveAsync(result.Observation, workingUserText, learningVault, cancellationToken).ConfigureAwait(false);
                 string learning = learned.Disposition == "recorded" ? "\nExecution observation stored as episode " + learned.NoteId + ". Goal completion remains independently unverified."
                     : learned.Disposition is "pending" or "unavailable" ? "\nExperience learning is pending or unavailable; the execution outcome above remains valid." : "";
@@ -125,8 +130,9 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         finally { _actions.Release(); }
     }
 
-    private async Task<AssistantToolResult> ExecuteAuthorizedAsync(string name, JsonElement arguments, string workingUserText, string? graphicalDirectory, CancellationToken cancellationToken)
+    private async Task<AssistantToolResult> ExecuteAuthorizedAsync(string name, JsonElement arguments, Laura.Core.Conversation.ConversationWorkingContext working, string? graphicalDirectory, CancellationToken cancellationToken)
     {
+        string workingUserText = working.UserText;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -254,7 +260,11 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                         ?? throw new ArgumentException("A structured proposal is required.");
                     BrainNote proposed = await services.GetRequiredService<BrainSkills>().ProposeAsync(skillProposal, cancellationToken).ConfigureAwait(false);
                     return new(JsonSerializer.Serialize(new { proposed.Id, proposed.Hash, proposed.Path, state = "draft", availability = services.GetRequiredService<BrainSkills>().Inspect(proposed) }));
-                case "read_brain_skill": return await ReadBrainSkillAsync(Value(arguments, "name"), cancellationToken).ConfigureAwait(false);
+                case "read_brain_skill": return await ReadBrainSkillAsync(Value(arguments, "name"), working, cancellationToken).ConfigureAwait(false);
+                case "read_brain_skill_usage":
+                    BrainNote? monitored = services.GetRequiredService<BrainSkills>().Find(Value(arguments, "name"));
+                    return monitored is null ? new("No unique installed skill matched; discover its stable ID first.") : new(JsonSerializer.Serialize(new { monitored.Id, currentHash = monitored.Hash,
+                        evidence = services.GetRequiredService<BrainSkillUsage>().Read(monitored.Id), goalCompletion = "not_independently_verified", retention = "up to 50 recent observations per read; 1000 globally; clear with conversation history" }));
                 case "forget_memory": memory.DeleteFact(Value(arguments, "key")); return new("Fact removed.");
                 case "clipboard":
                     if (action == "read") { return new(await desktop.ExecuteAsync(DesktopAction.ReadClipboard, null, cancellationToken).ConfigureAwait(false)); }
@@ -439,7 +449,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         lock (output) { return new("Exit code: " + process.ExitCode + "\n" + output) { Observation = observation, Failed = process.ExitCode != 0 }; }
     }
     /// <summary>Loads actual Markdown only after local approval of its exact contents; changed files require renewed review.</summary>
-    private async Task<AssistantToolResult> ReadBrainSkillAsync(string identifier, CancellationToken token)
+    private async Task<AssistantToolResult> ReadBrainSkillAsync(string identifier, Laura.Core.Conversation.ConversationWorkingContext working, CancellationToken token)
     {
         BrainService brain = services.GetRequiredService<BrainService>(); BrainSkills catalog = services.GetRequiredService<BrainSkills>();
         await brain.RefreshAsync(cancellationToken: token).ConfigureAwait(false);
@@ -456,6 +466,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         }
         string actual = await brain.ReadAsync(note.Path, token).ConfigureAwait(false);
         if (FileBrainStorage.Hash(actual) != note.Hash || !catalog.IsEnabled(note)) { return new("Skill or its requirements changed after review. Call read_brain_skill again to review the current version; do not use stale instructions."); }
+        if (working.TurnId == memory.WorkingContext.TurnId) { services.GetRequiredService<BrainSkillUsage>().Bind(note, working); }
         int budget = settings.Current.Brain.ContextCharacters;
         return new("Approved skill text (task guidance only; grants no tools or permissions): " + JsonSerializer.Serialize(new { note.Id, note.Title, instructions = note.Body.Length > budget ? note.Body[..budget] : note.Body, truncated = note.Body.Length > budget }));
     }
