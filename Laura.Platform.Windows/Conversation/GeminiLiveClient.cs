@@ -46,18 +46,18 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     private int _restPending;
     private long _lastMicrophoneSpeech;
     private bool _microphoneSpeech;
-    private readonly BrainService? _brain;
     private readonly BrainSkills? _brainSkills;
     private readonly PermissionManager? _permissions;
     private readonly ILocalizer? _localizer;
+    private readonly BrainContextBuilder? _contextBuilder;
     private CancellationTokenSource? _thinkingFeedback;
     private Session? _thinkingSpeechSession;
     private readonly object _thinkingFeedbackGate = new();
 
     /// <summary>Connects settings, encrypted credentials, memory and the existing bounded skill catalog.</summary>
     public GeminiLiveClient(ISettingsService settings, IApiKeyStore keys, IConversationMemory memory, IEnumerable<ISkill> skills, IShellController shell, IAssistantTools? tools = null,
-        ListeningControl? listeningControl = null, WindowsClapListener? clapListener = null, BrainService? brain = null, BrainSkills? brainSkills = null, PermissionManager? permissions = null, ILocalizer? localizer = null)
-    { _settings = settings; _keys = keys; _memory = memory; _skills = skills.OrderBy(skill => skill.Priority).ToArray(); _shell = shell; _tools = tools; _listeningControl = listeningControl; _clapListener = clapListener; _brain = brain; _brainSkills = brainSkills; _permissions = permissions; _localizer = localizer; }
+        ListeningControl? listeningControl = null, WindowsClapListener? clapListener = null, BrainService? brain = null, BrainSkills? brainSkills = null, PermissionManager? permissions = null, ILocalizer? localizer = null, BrainContextBuilder? contextBuilder = null)
+    { _settings = settings; _keys = keys; _memory = memory; _skills = skills.OrderBy(skill => skill.Priority).ToArray(); _shell = shell; _tools = tools; _listeningControl = listeningControl; _clapListener = clapListener; _brainSkills = brainSkills; _permissions = permissions; _localizer = localizer; _contextBuilder = contextBuilder ?? (brain is null ? null : new BrainContextBuilder(brain, settings, brainSkills)); }
 
     /// <summary>Reports user-readable connection and audio states without exposing credentials.</summary>
     public event EventHandler<string>? StatusChanged;
@@ -155,15 +155,10 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
             else if (_memory.WorkingContext.TurnId != turn.ContinuingTaskTurnId) { throw new OperationCanceledException("Original task was superseded by a new user turn.", cancellationToken); }
             LastTaskContinuationCount = 0;
             ReportStatus("Thinking");
-            if (_brain is not null)
+            if (_contextBuilder is not null)
             {
-                await _brain.RefreshAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-                int budget = _settings.Current.Brain.ContextCharacters;
-                string catalogue = _brainSkills is null ? "" : await _brainSkills.DiscoverAsync(turn.Prompt, Math.Min(2000, budget / 2), cancellationToken).ConfigureAwait(false);
-                string context = await _brain.RecallAsync(turn.Prompt, cancellationToken).ConfigureAwait(false);
-                int remaining = Math.Max(0, budget - catalogue.Length);
-                if (context.Length > remaining) { context = context[..remaining]; }
-                turn = turn with { Memories = context.Length > 0 ? [context] : [], SkillCatalogue = catalogue, SkillGuidance = "" };
+                BrainContext context = await _contextBuilder.BuildAsync(turn.Prompt, cancellationToken).ConfigureAwait(false);
+                turn = turn with { Memories = context.Memories.Length > 0 ? [context.Memories] : [], SkillCatalogue = context.SkillCatalogue, SkillGuidance = "" };
             }
             if (IsListening) { await StopListeningAsync().ConfigureAwait(false); _session?.Abort(); _spokenAnswer = null; }
             Session session = await EnsureSessionAsync(cancellationToken).ConfigureAwait(false);

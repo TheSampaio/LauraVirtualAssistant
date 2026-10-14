@@ -98,6 +98,7 @@ public static class ServiceConfiguration
             new BrainIndex(Path.Combine(brainCache, "Skills"), provider.GetRequiredService<IBrainEmbedding>()), provider.GetRequiredService<Laura.Core.Mcp.McpRuntime>().DependencyAvailable));
         services.AddSingleton<BrainConversationMemory>();
         services.AddSingleton<BrainSkillUsage>();
+        services.AddSingleton<BrainContextBuilder>();
         services.AddSingleton<BrainMaintenance>();
         services.AddSingleton<IConversationMemory>(provider => provider.GetRequiredService<BrainConversationMemory>());
         // Explicit live diagnostics read the already protected credential in-process; it is neither printed nor copied into fixtures.

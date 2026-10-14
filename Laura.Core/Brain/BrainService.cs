@@ -69,6 +69,20 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         finally { _gate.Release(); }
         Changed?.Invoke(this, EventArgs.Empty);
     }
+    /// <summary>Reconciles watcher-detected changes on demand, reusing a coherent clean snapshot for repeated interactions.</summary>
+    public async Task RefreshIfDirtyAsync(CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (Volatile.Read(ref _dirty) == 0) { return; }
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        bool changed = false;
+        try
+        {
+            if (Volatile.Read(ref _dirty) != 0) { await Task.Run(() => Scan(false), cancellationToken).ConfigureAwait(false); changed = true; }
+        }
+        finally { _gate.Release(); }
+        if (changed) { Changed?.Invoke(this, EventArgs.Empty); }
+    }
     /// <summary>Indexes valid files and isolates malformed or conflicting nodes without guessing which version is correct.</summary>
     private void Scan(bool rebuild)
     {
