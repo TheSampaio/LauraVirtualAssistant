@@ -2,7 +2,7 @@
 
 ## Auditoria antes da integração
 
-Base: `61bcf84`. O produto suporta Gemini Live; `GenerativeAiOptions.Sanitized` fixa `Provider=gemini`. A extensão recebida menciona uma especificação anterior Gemini/GPT que não foi anexada. Não há adaptador GPT existente a preservar nem evidência de testes com GPT. Os controles de sessão/exportação serão independentes de provedor; suporte novo depende da definição dessa parte.
+Base da auditoria original: `61bcf84`, quando o produto suportava somente Gemini Live. Após a entrega inicial, o usuário confirmou a inclusão de GPT opcional. O novo adaptador, a seleção explícita e as verificações adicionais estão documentados em [GPT opcional](laura-gpt-provider.md). Gemini continua padrão e provedor de voz.
 
 PrtSc: `ScreenshotOptions` e os defaults de INI usam PrtSc/Ctrl+PrtSc/Shift+PrtSc. `WindowsScreenshotShortcuts` registra via RegisterHotKey e relata falha, mas não trata o conjunto antigo que disputa captura do Windows. Não há hook de teclado a remover. [Microsoft RegisterHotKey](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey) documenta conflito de registro, interação especial com PrintScreen e reserva de F12. A correção troca apenas os três defaults legados por Ctrl+Shift+F8/F9/F10 e preserva customizações; não altera o registro/políticas do Windows.
 
@@ -30,7 +30,7 @@ Referências complementares: [skills OpenClaw](https://github.com/openclaw/openc
 | Falhas | Códigos, tipos de exceção e frames sem paths/mensagens; perda/falha de log explícita |
 | Permissões/isolamento | PermissionManager preservado; eventos técnicos registram apenas operação/risco/outcome |
 | Streaming | Apenas transcrição visível do output; nenhuma gravação de raciocínio interno ou protocolo bruto |
-| Provedores | Contrato de reset falha explicitamente se um futuro adaptador não suportar teardown seguro; GPT não foi declarado validado |
+| Provedores | Reset comum com cancelamento/drenagem; Gemini padrão e GPT opcional com credencial independente. Validação real Gemini e fixtures HTTP/nativas GPT, com limites descritos no relatório adicional |
 
 ## Etapas de implementação
 
@@ -84,7 +84,7 @@ Durante a validação, o primeiro ensaio precisou reconhecer a normalização na
 | 11/12 — histórico completo/formatos | 231 linhas retidas contra 200 da UI, corpo de 50.000 caracteres e MD/TXT/JSON |
 | 13 — confidencialidade | Logger sem formatter/valores, hashes, padrões/segredo exato removidos e arquivos adulterados filtrados |
 | 14 — histórico extenso | Retenção de 2.000, virtualização de 200, exportação em worker e colagem nativa medida; não houve ensaio de milhões de mensagens |
-| 15 — Gemini/GPT | Gemini real aprovado. Contratos comuns preparados; **GPT não implementado nem testado**, pois não existe no produto atual e a especificação anterior citada não foi fornecida |
+| 15 — Gemini/GPT | Gemini real aprovado. GPT opcional implementado posteriormente: transporte/ferramentas/reset em fixtures HTTP, integração nativa e troca em ambas as direções. API real GPT pendente de chave OpenAI; ver relatório adicional |
 | 16 — concorrência/duplicação | Cancelamento de dispatcher que ignora token, comandos velhos não executados, sessão remota drenada e merge preservando repetição legítima |
 
 ### Limites restantes
