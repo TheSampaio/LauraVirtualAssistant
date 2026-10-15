@@ -13,7 +13,7 @@ using System.Collections.ObjectModel;
 namespace Laura.App.Views;
 
 /// <summary>Responsive three-column MAUI HUD with a vector reactor and native chat and microphone controls.</summary>
-public sealed class MainPage : ContentPage, IDisposable
+public sealed partial class MainPage : ContentPage, IDisposable
 {
     private readonly IServiceProvider _services;
     private readonly IAssistantEngine _engine;
@@ -25,7 +25,7 @@ public sealed class MainPage : ContentPage, IDisposable
     private readonly Grid _body = new() { ColumnSpacing = 16, RowSpacing = 16 };
     private readonly ObservableCollection<ConversationMessage> _messages = [];
     private readonly CollectionView _chat;
-    private readonly Entry _draft = Theme.Entry();
+    private readonly Editor _draft = new() { AutoSize = EditorAutoSizeOption.TextChanges, MinimumHeightRequest = 44, MaximumHeightRequest = 180, TextColor = Theme.Text, FontSize = 14, PlaceholderColor = Theme.Muted };
     private readonly Label _status = Theme.Label("Ready", 15, Theme.Accent);
     private readonly Label _provider = Theme.Label("", 12, Theme.Muted);
     private readonly Label _clock = Theme.Label("", 22, Theme.Accent);
@@ -78,9 +78,7 @@ public sealed class MainPage : ContentPage, IDisposable
     private string _chatCulture = "";
     private float? _smokeAngle;
     private bool _showMonitor;
-    private bool _scrollQueued;
     private bool _samplingMetrics;
-    private bool _followConversation = true;
     private ReactorMode _visualMode;
     private string _reportedStatus = "Ready";
     private readonly global::Windows.UI.ViewManagement.UISettings _accessibility = new();
@@ -90,6 +88,13 @@ public sealed class MainPage : ContentPage, IDisposable
     {
         using var performance = PerformanceTrace.Measure("hud.construct");
         _services = services; _engine = engine; _settings = settings; _ui = ui; _live = live; _resources = resources; _clapListener = clapListener;
+        _conversations = services.GetRequiredService<ConversationActions>();
+        _returnLatest = Theme.IconButton("chevron_down", FollowLatestAsync);
+        _returnLatest.IsVisible = false; _returnLatestHost.Add(_returnLatest);
+        var unreadBadge = Theme.Card(_unreadCount, 3); unreadBadge.BackgroundColor = Theme.Primary; unreadBadge.StrokeThickness = 0;
+        unreadBadge.HorizontalOptions = LayoutOptions.End; unreadBadge.VerticalOptions = LayoutOptions.Start; unreadBadge.InputTransparent = true; unreadBadge.IsVisible = false; _returnLatestHost.Add(unreadBadge);
+        _conversationScroll = new((visible, unread) => { _returnLatest.IsVisible = visible; _returnLatestHost.IsVisible = visible; unreadBadge.IsVisible = unread > 0; _unreadCount.Text = unread.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            Theme.DescribeAction(_returnLatest, _ui.Get("ui.chat.latest") + (unread > 0 ? " · " + _unreadCount.Text : "")); });
         BackgroundColor = Theme.Background;
         NavigationPage.SetHasNavigationBar(this, false);
         _reactor = new GraphicsView { Drawable = _core, MinimumHeightRequest = 180, VerticalOptions = LayoutOptions.Fill };
@@ -98,11 +103,10 @@ public sealed class MainPage : ContentPage, IDisposable
         _chat.ItemTemplate = new DataTemplate(() =>
         {
             var cell = new ContentView { Padding = new Thickness(0, 4, 4, 8) };
-            cell.BindingContextChanged += (_, _) => { if (cell.BindingContext is ConversationMessage message) { cell.Content = new ConversationBubble(message, Author(message)); } };
+            cell.BindingContextChanged += (_, _) => { if (cell.BindingContext is ConversationMessage message) { cell.Content = new ConversationBubble(message, Author(message), _ui); } };
             return cell;
         });
-        _chat.Scrolled += (_, args) => { if (Math.Abs(args.VerticalDelta) > .1) { _followConversation = args.LastVisibleItemIndex >= _messages.Count - 2; } };
-        _chat.Loaded += (_, _) => RequestConversationScroll(); _chat.SizeChanged += (_, _) => RequestConversationScroll();
+        _chat.Loaded += (_, _) => AttachConversationScroll(); _chat.HandlerChanged += (_, _) => AttachConversationScroll(); _chat.SizeChanged += (_, _) => RequestConversationScroll();
         _listen = Theme.IconButton("audio_lines", ToggleListeningAsync);
         _monitorTitle = Theme.Caption(""); _coreTitle = Theme.Caption(""); _activityTitle = Theme.Caption("");
         _setupButton = Theme.IconButton("settings_2", OpenSetupAsync);
@@ -130,34 +134,39 @@ public sealed class MainPage : ContentPage, IDisposable
         footer.Add(state); footer.Add(_memoryButton, 1); centerGrid.Add(footer, 0, 2); _center = Theme.Card(centerGrid, 20);
         _center.BackgroundColor = Theme.Background;
         var chatGrid = new Grid { RowDefinitions = [new(GridLength.Auto), new(GridLength.Star), new(GridLength.Auto)], RowSpacing = 16 };
-        chatGrid.Add(SectionHeader("activity", _activityTitle));
+        var chatHeader = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Auto)] };
+        chatHeader.Add(SectionHeader("activity", _activityTitle));
+        _chatActionsButton = Theme.IconButton("ellipsis", ChatActionsAsync); chatHeader.Add(_chatActionsButton, 1);
+        chatGrid.Add(chatHeader);
         var conversation = new Grid(); conversation.Add(_chat);
         var empty = Theme.Stack(Theme.Icon("audio_lines", true, 32), _emptyTitle, _emptyHint); empty.Spacing = 12;
         empty.HorizontalOptions = LayoutOptions.Center; empty.VerticalOptions = LayoutOptions.Center; empty.Padding = 16;
         _emptyTitle.HorizontalTextAlignment = TextAlignment.Center; _emptyHint.HorizontalTextAlignment = TextAlignment.Center;
-        _emptyState = empty; conversation.Add(empty); chatGrid.Add(conversation, 0, 1);
+        _emptyState = empty; conversation.Add(empty); conversation.Add(_returnLatestHost); chatGrid.Add(conversation, 0, 1);
         var compose = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Auto)], ColumnSpacing = 8 };
         _draft.BackgroundColor = Colors.Transparent;
         compose.Add(_draft); compose.Add(_sendButton, 1);
         var input = Theme.Card(compose, 4); input.BackgroundColor = Theme.Field; input.StrokeShape = new Microsoft.Maui.Controls.Shapes.RoundRectangle { CornerRadius = Theme.ControlRadius };
         _draft.HandlerChanged += (_, _) =>
-        { if (_draft.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.TextBox native) { native.BorderThickness = new Microsoft.UI.Xaml.Thickness(0); } };
+        { ConfigureComposer(); };
         _draft.Focused += (_, _) => { input.Stroke = Theme.Accent; input.StrokeThickness = 1.5; };
         _draft.Unfocused += (_, _) => { input.Stroke = Theme.Line; input.StrokeThickness = 1; };
-        _draft.Completed += async (_, _) => await SendAsync().ConfigureAwait(true);
         _draft.TextChanged += (_, _) => UpdateSendAction();
         var voiceActions = new Grid { ColumnDefinitions = [new(GridLength.Auto), new(GridLength.Auto), new(GridLength.Auto), new(GridLength.Star)], ColumnSpacing = 8 };
         voiceActions.Add(_microphoneButton); voiceActions.Add(_listen, 1); voiceActions.Add(_interruptButton, 2);
         _voiceHint.VerticalOptions = LayoutOptions.Center; _voiceHint.HorizontalTextAlignment = TextAlignment.End; voiceActions.Add(_voiceHint, 3);
-        var controls = Theme.Stack(voiceActions, input, _shortcutHint); controls.Spacing = 12;
+        _chatNotice.IsVisible = false;
+        var controls = Theme.Stack(voiceActions, input, _shortcutHint, _chatNotice); controls.Spacing = 12;
         chatGrid.Add(controls, 0, 2); _activity = Theme.Card(chatGrid, 20);
         var root = new Grid { Padding = 24, RowDefinitions = [new(GridLength.Auto), new(GridLength.Star)] };
         root.Add(header); root.Add(_body, 0, 1); Content = root;
         SetLayout(false);
         SizeChanged += (_, _) => { if (Width <= 0) { return; } bool narrow = Width < 1220; if (narrow != _narrow) { SetLayout(narrow); } };
-        engine.ConversationMessageReceived += (_, message) => MainThread.BeginInvokeOnMainThread(() => AddMessage(message));
+        engine.ConversationMessageReceived += ReceiveMessage;
         engine.StateChanged += (_, state) => MainThread.BeginInvokeOnMainThread(() => SetState(state.ToString()));
-        live.MessageReceived += (_, message) => MainThread.BeginInvokeOnMainThread(() => AddMessage(message));
+        live.MessageReceived += ReceiveMessage;
+        live.StreamUpdated += ReceiveStream;
+        live.Interrupted += StreamInterrupted;
         live.StatusChanged += (_, state) => MainThread.BeginInvokeOnMainThread(() => SetState(state));
         settings.Changed += (_, _) => MainThread.BeginInvokeOnMainThread(Reload);
         clapListener.CaptureChanged += (_, _) => MainThread.BeginInvokeOnMainThread(RefreshFeedback);
@@ -189,6 +198,7 @@ public sealed class MainPage : ContentPage, IDisposable
         using var performance = PerformanceTrace.Measure("hud.reload");
         if (_chatCulture != _ui.Culture.Name) { _chatCulture = _ui.Culture.Name; _chat.ItemsSource = null; _chat.ItemsSource = _messages; }
         _draft.Placeholder = _ui.Get("ui.hud.compose");
+        Theme.DescribeAction(_chatActionsButton, _ui.Get("ui.chat.actions"));
         _subtitle.Text = _ui.Get("ui.hud.subtitle");
         _monitorTitle.Text = _ui.Get("ui.maui.monitor").ToUpperInvariant(); _coreTitle.Text = _ui.Get("ui.maui.core").ToUpperInvariant(); _activityTitle.Text = _ui.Get("ui.maui.activity").ToUpperInvariant();
         Theme.DescribeAction(_setupButton, _ui.Get("ui.maui.setup")); _memoryButton.Text = _ui.Get("ui.tab.memory");
@@ -237,7 +247,7 @@ public sealed class MainPage : ContentPage, IDisposable
     /// <summary>Enables sending only when a draft exists and the previous command has completed.</summary>
     private void UpdateSendAction() => _sendButton.IsEnabled = CanSend();
     /// <summary>Checks the same submission condition for typing and action completion.</summary>
-    private bool CanSend() => _command is null && !string.IsNullOrWhiteSpace(_draft.Text);
+    private bool CanSend() => !_clearing && !_conversations.IsResetting && _command is null && !string.IsNullOrWhiteSpace(_draft.Text);
     /// <summary>Opens the native settings workspace.</summary>
     public Task OpenSetupAsync()
     {
@@ -276,6 +286,8 @@ public sealed class MainPage : ContentPage, IDisposable
         bool animate = _accessibility.AnimationsEnabled;
         _core.Level = animate ? _core.Level + ((_core.Mode == ReactorMode.Listening ? _live.InputLevel : _live.OutputLevel) - _core.Level) * .25f : 0;
         long frame = Stopwatch.GetTimestamp();
+        double frameDelay = Stopwatch.GetElapsedTime(_lastFrame, frame).TotalMilliseconds;
+        if (_windowVisible && _pageVisible && frameDelay > 100) { Laura.Core.Diagnostics.LauraDiagnostics.Record("ui.dispatcher_gap", frameDelay); }
         float seconds = (float)Math.Clamp(Stopwatch.GetElapsedTime(_lastFrame, frame).TotalSeconds, 0, .1); _lastFrame = frame;
         if (_smokeAngle is { } angle) { _core.Angle = angle; _core.Level = 0; _reactor.Invalidate(); }
         else if (animate) { _core.Angle = (_core.Angle + (_core.Active ? 36 : 14) * seconds) % AssistantCoreDrawable.CycleDegrees; _reactor.Invalidate(); }
@@ -362,22 +374,17 @@ public sealed class MainPage : ContentPage, IDisposable
     /// <summary>Adds a bounded chat bubble and scrolls it into view.</summary>
     private void AddMessage(ConversationMessage message)
     {
+        if (message.Source == ConversationMessageSource.Assistant) { RemoveProvisional(); }
         if (_messages.Contains(message)) { return; }
         _messages.Add(message); if (_messages.Count > 200) { _messages.RemoveAt(0); }
         _emptyState.IsVisible = false;
+        _conversationScroll.MessageArrived();
         RequestConversationScroll();
     }
     /// <summary>Coalesces scrolling by position after layout, so queued work never references a removed bubble.</summary>
     private void RequestConversationScroll()
     {
-        if (!_followConversation || _scrollQueued) { return; }
-        _scrollQueued = true;
-        Dispatcher.Dispatch(() =>
-        {
-            _scrollQueued = false;
-            if (!_followConversation || !_pageVisible || _chat.Handler is null) { return; }
-            if (_messages.Count > 0) { _chat.ScrollTo(_messages.Count - 1, position: ScrollToPosition.End, animate: false); }
-        });
+        if (_pageVisible) { _conversationScroll.Request(); }
     }
     /// <summary>Resolves the message author's localized display name.</summary>
     private string Author(ConversationMessage message) => message.Source == ConversationMessageSource.Assistant ? "LAURA" : _ui.Get("ui.hud.you");
@@ -390,8 +397,8 @@ public sealed class MainPage : ContentPage, IDisposable
     /// <summary>Submits a text command through the existing assistant queue.</summary>
     private async Task SendAsync()
     {
-        string text = _draft.Text?.Trim() ?? "";
-        if (text.Length == 0 || _command is not null) { return; }
+        string text = _draft.Text ?? "";
+        if (string.IsNullOrWhiteSpace(text) || _command is not null || _clearing || _conversations.IsResetting) { return; }
         _command = new CancellationTokenSource(); _draft.Text = ""; UpdateSendAction();
         try { await _engine.SubmitCommandAsync(text, _command.Token).ConfigureAwait(true); }
         catch (OperationCanceledException) { }
@@ -470,18 +477,18 @@ public sealed class MainPage : ContentPage, IDisposable
     /// <summary>Reproduces queued scrolling after history replacement and verifies reading older messages.</summary>
     internal async Task VerifyConversationScrollingForSmokeAsync()
     {
-        EnsureSmoke(); _followConversation = true;
+        EnsureSmoke(); _conversationScroll.Follow();
         for (int index = 0; index < 205; index++)
         { AddMessage(new(ConversationMessageSource.Assistant, _ui.Get("ui.maui.listeningHelp"), DateTimeOffset.Now)); }
         if (_messages.Count != 200) { throw new InvalidOperationException("Conversation history must remain bounded."); }
         PreviewConversationForSmoke(); PreviewConversationForSmoke();
         await Task.Delay(300).ConfigureAwait(true);
         _chat.ScrollTo(0, position: ScrollToPosition.Start, animate: false); await Task.Delay(200).ConfigureAwait(true);
-        _followConversation = false;
+        _conversationScroll.ObserveManualForSmoke(100);
         AddMessage(new(ConversationMessageSource.Assistant, _ui.Get("ui.maui.listeningHelp"), DateTimeOffset.Now));
         await Task.Delay(150).ConfigureAwait(true);
-        if (_followConversation) { throw new InvalidOperationException("Reading earlier messages must not force scrolling to a new response."); }
-        _followConversation = true; PreviewConversationForSmoke(); await Task.Delay(200).ConfigureAwait(true);
+        if (_conversationScroll.Following) { throw new InvalidOperationException("Reading earlier messages must not force scrolling to a new response."); }
+        _conversationScroll.Follow(); PreviewConversationForSmoke(); await Task.Delay(200).ConfigureAwait(true);
     }
     /// <summary>Checks usable input geometry, accessible actions and actual microphone safety.</summary>
     internal void VerifyHudForSmoke()
@@ -506,5 +513,5 @@ public sealed class MainPage : ContentPage, IDisposable
         _approvalsButton.BackgroundColor = count > 0 ? Theme.Primary : Theme.Field;
     }
     /// <inheritdoc />
-    public void Dispose() { _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed -= OnApprovalsChanged; _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this); }
+    public void Dispose() { _engine.ConversationMessageReceived -= ReceiveMessage; _live.MessageReceived -= ReceiveMessage; _live.StreamUpdated -= ReceiveStream; _live.Interrupted -= StreamInterrupted; _conversationScroll.Dispose(); _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed -= OnApprovalsChanged; _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this); }
 }

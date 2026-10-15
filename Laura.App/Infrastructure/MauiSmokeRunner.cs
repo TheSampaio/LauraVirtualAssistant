@@ -19,6 +19,8 @@ public static class MauiSmokeRunner
         Directory.CreateDirectory(directory);
         try
         {
+            if (Environment.GetCommandLineArgs().Contains("--chat-diagnostics-smoke", StringComparer.Ordinal))
+            { await ChatDiagnosticsSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--voice-cancellation-smoke", StringComparer.Ordinal))
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));

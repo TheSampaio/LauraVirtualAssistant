@@ -67,6 +67,7 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         try
         {
             ISettingsService settings = services.GetRequiredService<ISettingsService>();
+            services.GetRequiredService<RuntimeDiagnosticContext>();
             using (PerformanceTrace.Measure("startup.settings")) { await settings.LoadAsync().ConfigureAwait(true); }
             _permissionOptions = settings.Current.Permissions;
             settings.Changed += OnPermissionSettingsChanged;
@@ -84,6 +85,7 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
             _brainStartup = WarmBrainAsync();
             services.GetRequiredService<IAssistantEngine>().StateChanged += OnEngineStateChanged;
             using (PerformanceTrace.Measure("startup.engine-and-history")) { await services.GetRequiredService<IAssistantEngine>().StartAsync().ConfigureAwait(true); }
+            await services.GetRequiredService<ConversationActions>().InitializeAsync().ConfigureAwait(true);
             if (_stopping) { interactive.Dispose(); return; }
             await services.GetRequiredService<ReminderScheduler>().StartAsync().ConfigureAwait(true);
             services.GetRequiredService<HourlyAnnouncer>().Start();
@@ -178,6 +180,8 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         await services.GetRequiredService<Laura.Core.Brain.BrainLearning>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<Laura.Core.Brain.BrainMaintenance>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<Laura.Core.Brain.BrainService>().DisposeAsync().ConfigureAwait(true);
+        services.GetRequiredService<RuntimeDiagnosticContext>().Dispose();
+        await services.GetRequiredService<Laura.Core.Diagnostics.RuntimeJournal>().DisposeAsync().ConfigureAwait(true);
         _tray?.Dispose(); _tray = null;
     }
     /// <summary>Exits only on an explicit domain or tray exit request.</summary>

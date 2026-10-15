@@ -24,6 +24,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
 {
     private readonly SemaphoreSlim _actions = new(1, 1);
     private readonly Dictionary<Guid, Laura.Core.Engine.CognitiveTaskRun> _tasks = [];
+    private IReadOnlySet<string>? _registeredToolNames;
     /// <summary>Reports public-source diagnostic calls only when the explicit isolated smoke option is present.</summary>
     internal event Action<string, JsonElement, AssistantToolResult>? PublicSourceToolObserved;
     private static readonly JsonSerializerOptions SkillProposalJson = new() { PropertyNameCaseInsensitive = true, MaxDepth = 12 };
@@ -81,7 +82,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         Function("run_local_command", "Execute existing Laura commands such as time, weather, web/YouTube search, notes, undo, volume and settings. For general app launch use open_app.", ["command"], ("command", "STRING", "Plain local command")),
         Function("shutdown_assistant", "Exit Laura only when the user asks to close the assistant.", [])
     } }];
-    internal IReadOnlySet<string> RegisteredToolNames => JsonSerializer.SerializeToElement(Declarations).EnumerateArray()
+    internal IReadOnlySet<string> RegisteredToolNames => _registeredToolNames ??= JsonSerializer.SerializeToElement(Declarations).EnumerateArray()
         .Where(group => group.TryGetProperty("functionDeclarations", out _)).SelectMany(group => group.GetProperty("functionDeclarations").EnumerateArray())
         .Select(function => function.GetProperty("name").GetString()!).ToHashSet(StringComparer.Ordinal);
 
@@ -127,6 +128,8 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         }
         finally { _actions.Release(); }
     }
+    /// <inheritdoc />
+    public bool IsRegisteredTool(string name) => RegisteredToolNames.Contains(name);
 
     /// <summary>Reads an isolated diagnostic's observed task without adding a model call or exposing user data outside smoke mode.</summary>
     internal object ObservedTaskForSmoke(Guid turn)

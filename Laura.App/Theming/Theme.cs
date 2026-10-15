@@ -143,7 +143,7 @@ public static class Theme
     {
         button.IsEnabled = false;
         try { await action().ConfigureAwait(true); }
-        catch (Exception) { if (Application.Current is { Windows.Count: > 0 } app && app.Windows[0].Page is { } page) { await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync("Laura", "The operation failed. Check the configuration and try again.", "OK").ConfigureAwait(true); } }
+        catch (Exception error) { Laura.Core.Diagnostics.LauraDiagnostics.Record("ui.action_failed", outcome: error.GetType().Name); if (Application.Current is { Windows.Count: > 0 } app && app.Windows[0].Page is { } page) { await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync("Laura", "The operation failed. Check the configuration and try again.", "OK").ConfigureAwait(true); } }
         finally { button.IsEnabled = canExecute?.Invoke() ?? true; }
     }
     /// <summary>Creates a native input with the shared dark palette.</summary>

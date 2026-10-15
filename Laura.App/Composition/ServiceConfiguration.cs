@@ -68,6 +68,10 @@ public static class ServiceConfiguration
 
         string settingsPath = storageDirectory is null ? IniSettingsStore.GetDefaultFilePath() : Path.Combine(storageDirectory, "settings.ini");
         services.AddSingleton(new AssistantStorage(Path.GetDirectoryName(Path.GetFullPath(settingsPath))!));
+        services.AddSingleton(provider => new Laura.Core.Diagnostics.RuntimeJournal(storageDirectory is null
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Laura", "Diagnostics")
+            : Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Diagnostics")));
+        services.AddSingleton<ILoggerProvider, Laura.Core.Diagnostics.RuntimeLogProvider>();
         services.AddSingleton<ISettingsStore>(provider => new IniSettingsStore(
             settingsPath,
             provider.GetRequiredService<ILogger<IniSettingsStore>>()));
@@ -190,6 +194,8 @@ public static class ServiceConfiguration
     {
         services.AddSingleton<IUiDispatcher, MauiUiDispatcher>();
         services.AddSingleton<LauraNotifications>();
+        services.AddSingleton<ConversationActions>();
+        services.AddSingleton<RuntimeDiagnosticContext>();
         services.AddSingleton<ScreenshotCoordinator>();
         services.AddSingleton<Laura.App.Platforms.Windows.WindowsApprovalCenter>();
         services.AddSingleton<IDesktopTools, MauiDesktopTools>();
