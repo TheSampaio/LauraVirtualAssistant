@@ -56,6 +56,12 @@ Other tools provide real window selection, keyboard/mouse input, browser navigat
 
 Retrieval adapts to the interaction: a closed set of greetings/time/date messages skips Brain work, while other requests use coherent snapshots and bounded context. Literal installation declarations (including explicit corrections) become inert application knowledge. Opening a learned application resolves a unique executable, revalidates its identity and requires the original native launch authorization; missing, conflicting or changed knowledge does not trigger speculative fallback. Typed input and completed voice transcripts share durable learning, and partial speech preserves the current turn identity. Brain writes publish changed documents and reuse unaffected index/graph state; visual refreshes are coalesced, and body edits keep graph positions. Playback preserves full 16-bit PCM samples across fragment boundaries, validates the native output format and reports observed gaps. See [audit, measured improvements, A/B audio diagnostics and remaining limits](docs/architecture/laura-brain-audio-stability.md).
 
+Screenshot defaults use **Ctrl+Shift+F8** (region), **Ctrl+Shift+F9** (window) and **Ctrl+Shift+F10** (screen), leaving PrtSc to Windows. The original three default PrtSc chords migrate together; customized chords are preserved. Preferences offers recommended shortcuts and reports actual registration conflicts without replacing another app's registration.
+
+The chat's **⋯** menu clears the real conversation session with confirmation, exports the complete retained dialogue to Markdown/TXT/JSON, and exports a **technical diagnostic ZIP** for manual sharing with ChatGPT. Conversation reset preserves Brain knowledge and permissions and fences late responses; already started external effects are not undone. Native selection/copy and multiline paste preserve text; Enter sends and Shift+Enter adds a line. Streaming/layout changes follow the newest message until you scroll upward; the down button resumes following.
+
+Technical logs are local metadata in `%LOCALAPPDATA%/Laura/Diagnostics` (up to eight 1 MiB segments, at most seven days). They include timings, outcomes, configuration modes, audio gaps and resource counters without prompts, responses, screenshots, audio, paths, credential values or exception messages. The exported ZIP contains `report.md`, `summary.json` and `events.jsonl`, with explicit loss/failure counters. Export the conversation separately when its content is needed for behavior analysis and review personal data before sharing. Nothing uploads automatically. See [OpenClaw/OpenJarvis audit, chat/session architecture, diagnostics and validation](docs/architecture/laura-chat-diagnostics.md).
+
 Reminders persist locally and speak through Gemini while Laura runs; overdue reminders resume on a subsequent launch. They are not OS tasks that wake a closed app. See `docs/architecture/maui-gemini-delivery.md` for the reference capability comparison and limits. The Python plugin loader, mobile dashboard, proactive news monitoring and embedded video player from Mark-LV are not yet implemented. No reference source or assets are bundled.
 
 ## Build and verification
@@ -94,6 +100,12 @@ dotnet run --project Build/Smoke/Laura.Smoke.csproj -- _Output/AudioSmoke --gemi
 
 # Measure 90 seconds of native PCM while Brain writes and the visible UI remain active.
 Laura.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/Laura.exe --show --storage _Output/ConcurrentSmoke/Storage --ui-smoke _Output/ConcurrentSmoke --brain-performance-smoke --brain-audio-concurrency-smoke
+
+# Isolated native chat/shortcut/diagnostic contracts (uses and restores clipboard formats in memory).
+Laura.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/Laura.exe --show --storage _Output/ChatSmoke/Storage --ui-smoke _Output/ChatSmoke --chat-diagnostics-smoke
+
+# Real Gemini streaming cancellation and clean-session verification with synthetic dialogue and volume zero.
+dotnet run --project Build/Smoke/Laura.Smoke.csproj -- _Output/SessionResetSmoke --gemini --key-file ../Mark-LV/config/api_keys.json --session-reset-smoke
 ```
 
 Adding `--live-tools-smoke --import-mark-lv ../Mark-LV/config/api_keys.json` to the isolated UI test explicitly exercises a real Gemini request opening Steam and PCSX2. Do not commit test credentials or private data. Normal launch preserves your protected key and does not import it again.
