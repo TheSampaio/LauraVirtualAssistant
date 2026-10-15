@@ -175,6 +175,7 @@ public sealed class IniSettingsStore : ISettingsStore
                 Provider = document.GetString(GenerativeAiSection, "Provider", defaults.GenerativeAi.Provider),
                 Endpoint = document.GetString(GenerativeAiSection, "Endpoint", defaults.GenerativeAi.Endpoint),
                 Model = document.GetString(GenerativeAiSection, "Model", defaults.GenerativeAi.Model),
+                OpenAiModel = document.GetString(GenerativeAiSection, "OpenAiModel", defaults.GenerativeAi.OpenAiModel),
                 Persona = document.GetString(GenerativeAiSection, "Persona", defaults.GenerativeAi.Persona),
                 LiveVoice = document.GetString(GenerativeAiSection, "LiveVoice", defaults.GenerativeAi.LiveVoice),
                 ContinuousListening = document.GetBoolean(GenerativeAiSection, "ContinuousListening", false),
@@ -243,6 +244,7 @@ public sealed class IniSettingsStore : ISettingsStore
         document.Set(GenerativeAiSection, "Provider", settings.GenerativeAi.Provider);
         document.Set(GenerativeAiSection, "Endpoint", settings.GenerativeAi.Endpoint);
         document.Set(GenerativeAiSection, "Model", settings.GenerativeAi.Model);
+        document.Set(GenerativeAiSection, "OpenAiModel", settings.GenerativeAi.OpenAiModel);
         document.Set(GenerativeAiSection, "Persona", settings.GenerativeAi.Persona);
         document.Set(GenerativeAiSection, "LiveVoice", settings.GenerativeAi.LiveVoice);
         document.SetBoolean(GenerativeAiSection, "ContinuousListening", settings.GenerativeAi.ContinuousListening);

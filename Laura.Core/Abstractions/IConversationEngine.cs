@@ -16,6 +16,8 @@ public interface IConversationEngine
     /// Gets a value indicating whether the engine is configured and ready to answer.
     /// </summary>
     bool IsAvailable { get; }
+    /// <summary>Gets whether the selected reviewed model can receive explicitly authorized images.</summary>
+    bool SupportsImages => false;
 
     /// <summary>
     /// Requests an answer from the model.

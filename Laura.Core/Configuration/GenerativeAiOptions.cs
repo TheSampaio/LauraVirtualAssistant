@@ -1,7 +1,7 @@
 namespace Laura.Core.Configuration;
 
 /// <summary>
-/// Configuration for Google AI Studio conversation, native voice and explicit desktop tools.
+/// Configuration for Gemini Live, optional GPT chat and shared explicit desktop tools.
 /// </summary>
 public sealed record GenerativeAiOptions
 {
@@ -16,7 +16,7 @@ public sealed record GenerativeAiOptions
     public bool Enabled { get; init; } = true;
 
     /// <summary>
-    /// Gets the sole supported provider identifier, <c>gemini</c>.
+    /// Gets the selected chat provider: gemini (native voice) or openai (GPT text).
     /// </summary>
     public string Provider { get; init; } = "gemini";
 
@@ -29,6 +29,9 @@ public sealed record GenerativeAiOptions
     /// Gets an optional Gemini model override; empty selects the reviewed Live default.
     /// </summary>
     public string Model { get; init; } = string.Empty;
+
+    /// <summary>Gets the independent optional GPT Responses model; never overwrites the Gemini Live model.</summary>
+    public string OpenAiModel { get; init; } = "gpt-5.4-mini";
 
     /// <summary>Gets the native Gemini Live voice, shared with Mark-LV.</summary>
     public string LiveVoice { get; init; } = "Aoede";
@@ -66,7 +69,9 @@ public sealed record GenerativeAiOptions
     /// </summary>
     public GenerativeAiOptions Sanitized() => this with
     {
-        Provider = "gemini",
+        Provider = string.Equals(Provider, "openai", StringComparison.OrdinalIgnoreCase) ? "openai" : "gemini",
+        OpenAiModel = OpenAiModel?.Trim() is { Length: > 0 and <= 100 } gpt && gpt.StartsWith("gpt-", StringComparison.Ordinal)
+            && !gpt.Contains("..", StringComparison.Ordinal) && gpt.All(static c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.') ? gpt : Default.OpenAiModel,
         ContinuousListening = true,
         SilenceDurationMs = Math.Clamp(SilenceDurationMs, 300, 2000),
         Endpoint = string.IsNullOrWhiteSpace(Endpoint) ? Default.Endpoint : Endpoint.Trim(),

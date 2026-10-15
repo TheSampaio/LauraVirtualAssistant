@@ -5,9 +5,9 @@ using Laura.Core.Abstractions;
 namespace Laura.Platform.Windows.Conversation;
 
 /// <summary>Protects the AI Studio credential with Windows DPAPI for the current user.</summary>
-public sealed class ProtectedApiKeyStore(string directory) : IApiKeyStore
+public sealed class ProtectedApiKeyStore(string directory, bool openAi = false) : IApiKeyStore
 {
-    private readonly string _path = Path.Combine(directory, "google-key.dat");
+    private readonly string _path = Path.Combine(directory, openAi ? "openai-key.dat" : "google-key.dat");
     /// <inheritdoc />
     public string Read()
     {

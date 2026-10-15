@@ -18,6 +18,7 @@ TestResults/
 
 # Local assistant data and credentials (including interrupted writes/backups)
 google-key.dat*
+openai-key.dat*
 api_keys.json*
 settings.ini*
 memory.db*
