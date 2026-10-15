@@ -11,6 +11,26 @@ namespace Laura.Core.Tests.Engine;
 public sealed class AssistantEngineTests
 {
     [Fact]
+    public async Task ClearDuringAnUncooperativeTurnWaitsAndFencesOldResponsesAndQueuedCommands()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var executed = new List<string>(); var speech = new RecordingSpeechSynthesizer();
+        var dispatcher = new CallbackSkillDispatcher(async (request, _) =>
+        {
+            executed.Add(request.RawText);
+            if (request.RawText == "old") { entered.SetResult(); await release.Task; return SkillResponse.Speak("late old answer"); }
+            return SkillResponse.Silent();
+        });
+        await using var engine = CreateEngine(dispatcher, speech); await engine.StartAsync();
+        Task old = engine.SubmitCommandAsync("old"); await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Task queued = engine.SubmitCommandAsync("must never run"); Task clear = engine.ClearConversationAsync();
+        Assert.False(clear.IsCompleted); release.SetResult();
+        await Task.WhenAll(old, queued, clear).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Empty(engine.ConversationHistory); Assert.Empty(speech.SpokenTexts); Assert.Equal(["old"], executed);
+        await engine.SubmitCommandAsync("new"); Assert.Equal("new", Assert.Single(engine.ConversationHistory).Text);
+    }
+    [Fact]
     public async Task VisualTurnUsesTheExistingQueueWithFrozenPixelsAndTextOnlyHistory()
     {
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

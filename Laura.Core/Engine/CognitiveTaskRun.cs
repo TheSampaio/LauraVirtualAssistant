@@ -79,11 +79,11 @@ public sealed class CognitiveTaskRun(string objective, IReadOnlySet<string> regi
         if (name is not ("task_status" or "list_capabilities") && _state == "blocked")
         { return new("The current task is blocked after a denial, cancellation or exhausted budget. Report the recorded blocker; do not use an alternative effect path.") { Failed = true, Status = "blocked" }; }
         if (_calls >= maximumCalls || _elapsed.Elapsed > _duration)
-        { _state = "blocked"; return new("Task call or duration budget exhausted; retain partial results and report the remaining steps.") { Failed = true, Status = "blocked" }; }
+        { _state = "blocked"; Laura.Core.Diagnostics.LauraDiagnostics.Record("agent.limit", amount: _calls, outcome: _calls >= maximumCalls ? "calls" : "duration"); return new("Task call or duration budget exhausted; retain partial results and report the remaining steps.") { Failed = true, Status = "blocked" }; }
         string fingerprint = name + ":" + arguments.GetRawText();
         int attempts = _attempts.GetValueOrDefault(fingerprint);
         if (attempts >= 2 && name is not ("task_status" or "list_capabilities"))
-        { _state = "blocked"; return new("Repeated identical operation stopped to prevent a task loop. Use retained evidence and report remaining uncertainty.") { Failed = true, Status = "blocked" }; }
+        { _state = "blocked"; Laura.Core.Diagnostics.LauraDiagnostics.Record("agent.limit", amount: _calls, outcome: "repetition"); return new("Repeated identical operation stopped to prevent a task loop. Use retained evidence and report remaining uncertainty.") { Failed = true, Status = "blocked" }; }
         _attempts[fingerprint] = attempts + 1; _calls++;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromMilliseconds(Math.Max(1, (_duration - _elapsed.Elapsed).TotalMilliseconds)));
@@ -123,6 +123,7 @@ public sealed class CognitiveTaskRun(string objective, IReadOnlySet<string> regi
     private void Record(string name, AssistantToolResult result, string initiator = "model")
     {
         string status = result.Status == "success" && result.Failed ? "failed" : result.Status;
+        Laura.Core.Diagnostics.LauraDiagnostics.Record("agent.step." + name, amount: _calls, outcome: status);
         if (status is "blocked" or "cancelled") { _state = "blocked"; }
         int position = _steps.FindIndex(step => step.Tool == name && step.State == "pending");
         if (position >= 0) { _steps[position] = _steps[position] with { State = status == "success" ? "completed" : status }; }

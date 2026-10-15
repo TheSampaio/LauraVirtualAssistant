@@ -24,6 +24,8 @@ public interface IConversationMemory
     void AppendHistory(ConversationMessage message) => Append(message);
     /// <summary>Returns recent messages in chronological order.</summary>
     IReadOnlyList<ConversationMessage> ReadRecent(int limit);
+    /// <summary>Snapshots the complete retained transcript, independent of UI virtualization.</summary>
+    IReadOnlyList<ConversationMessage> ReadAllHistory() => ReadRecent(200);
     /// <summary>Searches explicit user memories using literal text.</summary>
     IReadOnlyList<MemoryFact> Search(string query);
     /// <summary>Stores an explicit user preference with a stable key.</summary>

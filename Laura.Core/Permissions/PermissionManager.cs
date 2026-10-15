@@ -142,6 +142,8 @@ public sealed class PermissionManager : IDisposable
         catch { outcome = ApprovalOutcome.Failed; reason = "Execution or permission storage failed."; throw; }
         finally
         {
+            Laura.Core.Diagnostics.LauraDiagnostics.Record("permission." + action.Operation, amount: (int)risk, outcome: outcome.ToString(),
+                interactionId: Laura.Core.Diagnostics.LauraDiagnostics.CurrentInteractionId == Guid.Empty ? id : Laura.Core.Diagnostics.LauraDiagnostics.CurrentInteractionId);
             lock (_gate)
             {
                 _pending.Remove(id);

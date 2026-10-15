@@ -68,6 +68,8 @@ public sealed class BrainConversationMemory(BrainService brain, BrainLearning le
     /// <inheritdoc />
     public IReadOnlyList<ConversationMessage> ReadRecent(int limit) => transcripts.ReadRecent(limit);
     /// <inheritdoc />
+    public IReadOnlyList<ConversationMessage> ReadAllHistory() => transcripts.ReadAllHistory();
+    /// <inheritdoc />
     public IReadOnlyList<MemoryFact> Search(string query)
     {
         Initialize(); return brain.SearchAsync(query, 100).GetAwaiter().GetResult().Select(hit => new MemoryFact(hit.Note.Key.Length > 0 ? hit.Note.Key : hit.Note.Id, hit.Note.Body, hit.Note.UpdatedAt)).ToArray();

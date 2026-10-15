@@ -88,4 +88,6 @@ public interface IAssistantEngine : IAsyncDisposable
     /// Immediately stops speech.
     /// </summary>
     void StopSpeaking();
+    /// <summary>Cancels the old generation, drains its work and clears only conversation history at the consumer barrier.</summary>
+    Task ClearConversationAsync(CancellationToken cancellationToken = default) => Task.FromException(new NotSupportedException());
 }

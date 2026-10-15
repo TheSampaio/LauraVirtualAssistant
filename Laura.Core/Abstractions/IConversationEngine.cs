@@ -30,4 +30,8 @@ public interface IConversationEngine
     ///     propagate exceptions: Laura must fall back to the default answer.
     /// </summary>
     Task<string?> AskAsync(ConversationTurn turn, CancellationToken cancellationToken = default);
+    /// <summary>Drains generation/tools and discards remote session state before a confirmed conversation reset.</summary>
+    Task ResetSessionAsync() => Task.FromException(new NotSupportedException("This provider does not implement safe session reset."));
+    /// <summary>Prevents new provider work while the confirmed local transcript barrier is committed.</summary>
+    async Task ResetSessionAsync(Func<Task> clearHistory) { await ResetSessionAsync().ConfigureAwait(false); await clearHistory().ConfigureAwait(false); }
 }

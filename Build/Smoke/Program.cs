@@ -35,13 +35,48 @@ if (args.Contains("--gemini", StringComparer.Ordinal))
     keys.Save(config.RootElement.GetProperty("gemini_api_key").GetString() ?? "");
     await using var live = new GeminiLiveClient(settings, keys, memory, Array.Empty<ISkill>(), new SmokeShell());
     live.StatusChanged += (_, status) => Console.WriteLine("Live state: " + status);
-    IReadOnlyList<string> selectedVoices = args.Contains("--quick", StringComparer.Ordinal) ? ["Charon"] : GeminiLiveOptions.Voices;
+    IReadOnlyList<string> selectedVoices = args.Contains("--session-reset-smoke", StringComparer.Ordinal) ? [] : args.Contains("--quick", StringComparer.Ordinal) ? ["Charon"] : GeminiLiveOptions.Voices;
     int selectedVoice = Array.IndexOf(args, "--voice");
     if (selectedVoice >= 0)
     {
         if (selectedVoice + 1 >= args.Length || !GeminiLiveOptions.Voices.Contains(args[selectedVoice + 1], StringComparer.Ordinal))
         { throw new InvalidOperationException("Select one of the configured native Gemini voices."); }
         selectedVoices = [args[selectedVoice + 1]];
+    }
+    if (args.Contains("--session-reset-smoke", StringComparer.Ordinal))
+    {
+        await settings.UpdateAsync(settings.Current with { GreetOnStartup = false, AnnounceHourly = false, RememberConversations = true, MicrophoneMuted = true,
+            Voice = settings.Current.Voice with { Volume = 0 }, GenerativeAi = settings.Current.GenerativeAi with { Enabled = true, Provider = "gemini", Model = GeminiLiveOptions.Model } }, timeout.Token);
+        await using var journal = new Laura.Core.Diagnostics.RuntimeJournal(Path.Combine(directory, "Diagnostics"));
+        const string marker = "vulpine amethyst lighthouse";
+        string? first = await live.AskAsync(new("For this synthetic dialogue, the exact three-word marker is '" + marker + "'. Say only those three words, without punctuation.", CultureInfo.GetCultureInfo("en-US"), "Synthetic Tester"), timeout.Token);
+        if (first is null || !first.Contains("amethyst", StringComparison.OrdinalIgnoreCase)) { throw new InvalidOperationException("Synthetic session marker was not established."); }
+        memory.Append(new(ConversationMessageSource.UserTyped, "Synthetic prior marker: " + marker, DateTimeOffset.UtcNow));
+        int updates = 0; var streamStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Stream(object? sender, ConversationStreamUpdate update) { Interlocked.Increment(ref updates); if (!update.Completed && update.Text.Length > 0) { streamStarted.TrySetResult(); } }
+        live.StreamUpdated += Stream;
+        try
+        {
+            Task<string?> running = live.AskAsync(new("Describe a synthetic garden in two hundred words. No tools.", CultureInfo.GetCultureInfo("en-US"), "Synthetic Tester"), timeout.Token);
+            await streamStarted.Task.WaitAsync(TimeSpan.FromSeconds(45), timeout.Token);
+            bool deniedDuringReset = false;
+            await live.ResetSessionAsync(async () =>
+            {
+                deniedDuringReset = !live.IsAvailable && await live.AskAsync(new("This must not open a session during reset.", CultureInfo.GetCultureInfo("en-US"), "Synthetic Tester"), timeout.Token) is null;
+                memory.ClearHistory();
+            });
+            bool canceled = false; try { await running; } catch (OperationCanceledException) { canceled = true; }
+            if (!canceled || !deniedDuringReset || memory.ReadAllHistory().Count != 0 || live.IsListening) { throw new InvalidOperationException("Streaming session did not reset safely."); }
+            int settled = Volatile.Read(ref updates); await Task.Delay(300, timeout.Token);
+            if (Volatile.Read(ref updates) != settled) { throw new InvalidOperationException("Old streaming survived session reset."); }
+            string? clean = await live.AskAsync(new("What exact three-word marker did I give you earlier in this conversation? If this conversation has no earlier marker, say only EMPTY. Do not guess.", CultureInfo.GetCultureInfo("en-US"), "Synthetic Tester") { History = memory.ReadRecent(8) }, timeout.Token);
+            if (clean is null || !clean.Contains("EMPTY", StringComparison.OrdinalIgnoreCase) || clean.Contains("amethyst", StringComparison.OrdinalIgnoreCase)) { throw new InvalidOperationException("A fresh provider session did not report empty prior context."); }
+            var snapshot = await journal.SnapshotAsync(timeout.Token);
+            await using (var output = File.Create(Path.Combine(directory, "diagnostic.zip"))) { await Laura.Core.Diagnostics.DiagnosticExport.WriteAsync(output, snapshot, "2.0.0", timeout.Token); }
+            await File.WriteAllTextAsync(Path.Combine(directory, "session-reset.txt"), "Real Gemini established a synthetic marker, emitted visible streaming deltas, canceled an in-progress turn, refused a request during reset, cleared persisted history, emitted no late deltas and answered EMPTY in the fresh session. Volume zero; no microphone or private dialogue used.", timeout.Token);
+            Console.WriteLine("Real streaming cancellation, clean provider session and technical diagnostic ZIP passed.");
+        }
+        finally { live.StreamUpdated -= Stream; }
     }
     foreach (string voice in selectedVoices)
     {
@@ -152,7 +187,7 @@ if (args.Contains("--gemini", StringComparer.Ordinal))
         Console.WriteLine("Automatic VAD answered Brazilian Portuguese synthetic speech after silence, without an explicit stop signal.");
     }
     keys.Save("");
-    Console.WriteLine("Selected reference voices passed; no microphone capture occurred.");
+    Console.WriteLine("Configured Live smoke checks passed; no microphone capture occurred.");
 }
 Console.WriteLine("Smoke verification completed.");
 return 0;

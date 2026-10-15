@@ -89,7 +89,7 @@ public sealed class SqliteConversationMemoryTests : IDisposable
         Assert.Equal(50, migrated.ReadSkillOutcomes(vault, skill).Count); Assert.Empty(migrated.ReadSkillOutcomes(new string('C', 64), skill));
         using (var connection = new SqliteConnection($"Data Source={Database};Pooling=False"))
         { connection.Open(); using var command = connection.CreateCommand(); command.CommandText = "SELECT count(*) FROM skill_outcomes"; Assert.Equal(1000L, command.ExecuteScalar()); }
-        migrated.ClearHistory(); Assert.Empty(migrated.ReadSkillOutcomes(vault, skill)); Assert.Single(migrated.Search("Preserved"));
+        migrated.ClearHistory(); Assert.Equal(50, migrated.ReadSkillOutcomes(vault, skill).Count); Assert.Empty(migrated.ReadRecent(10)); Assert.Single(migrated.Search("Preserved"));
     }
     [Fact]
     public void TranscriptRetentionAlsoRemovesReceiptsForExpiredMessages()

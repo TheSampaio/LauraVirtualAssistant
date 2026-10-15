@@ -7,6 +7,8 @@ public interface IAssistantTools
 {
     /// <summary>Gets the public function schemas for available adapters.</summary>
     object[] Declarations { get; }
+    /// <summary>Identifies fixed registered names for payload-free diagnostics; unknown remote strings must not become log labels.</summary>
+    bool IsRegisteredTool(string name) => false;
     /// <summary>Executes one structured action with native confirmation where required.</summary>
     Task<AssistantToolResult> ExecuteAsync(string name, JsonElement arguments, CancellationToken cancellationToken);
     /// <summary>Returns bounded native pending work for the same user objective after model turn completion, or null when no continuation is justified.</summary>

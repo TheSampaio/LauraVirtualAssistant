@@ -79,7 +79,7 @@ public sealed partial class SqliteConversationMemory : IConversationMemory
             DELETE FROM learning_events WHERE message_id NOT IN (SELECT id FROM messages);
             """;
         command.Parameters.AddWithValue("$source", (int)message.Source);
-        command.Parameters.AddWithValue("$text", message.Text.Length > 16000 ? message.Text[..16000] : message.Text);
+        command.Parameters.AddWithValue("$text", message.Text);
         command.Parameters.AddWithValue("$stamp", message.Timestamp.ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$vault", vaultIdentity);
         command.ExecuteNonQuery();
@@ -87,13 +87,16 @@ public sealed partial class SqliteConversationMemory : IConversationMemory
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<ConversationMessage> ReadRecent(int limit)
+    public IReadOnlyList<ConversationMessage> ReadRecent(int limit) => ReadMessages(Math.Clamp(limit, 0, 200));
+    /// <inheritdoc />
+    public IReadOnlyList<ConversationMessage> ReadAllHistory() => ReadMessages(2000);
+    private List<ConversationMessage> ReadMessages(int limit)
     {
         Initialize();
         using SqliteConnection connection = Open();
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "SELECT source,text,stamp FROM (SELECT * FROM messages ORDER BY id DESC LIMIT $limit) ORDER BY id";
-        command.Parameters.AddWithValue("$limit", Math.Clamp(limit, 0, 200));
+        command.Parameters.AddWithValue("$limit", limit);
         using SqliteDataReader reader = command.ExecuteReader();
         var messages = new List<ConversationMessage>();
         while (reader.Read())
@@ -165,7 +168,7 @@ public sealed partial class SqliteConversationMemory : IConversationMemory
         Initialize();
         using SqliteConnection connection = Open();
         using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = "BEGIN; DELETE FROM skill_outcomes; DELETE FROM execution_events; DELETE FROM learning_events; DELETE FROM messages; COMMIT; VACUUM;";
+        command.CommandText = "PRAGMA secure_delete=ON; BEGIN; DELETE FROM learning_events; DELETE FROM messages; COMMIT;";
         command.ExecuteNonQuery();
     }
 }

@@ -30,6 +30,10 @@ public sealed class AssistantEngine : IAssistantEngine
     private CancellationTokenSource? _startupCancellation;
     private int _startupScheduled;
     private bool _operational;
+    private readonly object _generationGate = new();
+    private CancellationTokenSource _conversationCancellation = new();
+    private long _conversationGeneration;
+    private readonly AsyncLocal<long?> _activeGeneration = new();
 
     private readonly Channel<EngineMessage> _messages = Channel.CreateUnbounded<EngineMessage>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
@@ -186,6 +190,18 @@ public sealed class AssistantEngine : IAssistantEngine
             completion => new CommandSubmitted(text) { Completion = completion, RequestCancellation = cancellationToken },
             cancellationToken);
     }
+    /// <inheritdoc />
+    public Task ClearConversationAsync(CancellationToken cancellationToken = default)
+    {
+        if (_worker is null || State == AssistantState.Stopped) { throw new InvalidOperationException("Start the assistant before resetting its conversation."); }
+        lock (_generationGate)
+        {
+            Interlocked.Increment(ref _conversationGeneration);
+            _conversationCancellation.Cancel(); _conversationCancellation.Dispose(); _conversationCancellation = new();
+            _synthesizer.CancelSpeech();
+            return EnqueueAndWaitAsync(completion => new ConversationCleared { Completion = completion }, cancellationToken);
+        }
+    }
 
     /// <inheritdoc />
     public Task SpeakAsync(string text, CancellationToken cancellationToken = default)
@@ -225,6 +241,7 @@ public sealed class AssistantEngine : IAssistantEngine
     {
         await StopAsync(CancellationToken.None).ConfigureAwait(false);
         _lifetime.Dispose();
+        _conversationCancellation.Dispose();
     }
 
     /// <summary>
@@ -261,10 +278,23 @@ public sealed class AssistantEngine : IAssistantEngine
     {
         try
         {
-            using var request = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, message.RequestCancellation);
+            CancellationTokenSource request;
+            lock (_generationGate)
+            {
+                if (message is CommandSubmitted or SpeechRequested or StartupRequested && message.Generation != _conversationGeneration) { return; }
+                request = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, message.RequestCancellation, _conversationCancellation.Token);
+                _activeGeneration.Value = message.Generation;
+            }
+            using var requestLifetime = request;
             request.Token.ThrowIfCancellationRequested();
             switch (message)
             {
+                case ConversationCleared:
+                    if (_memory is not null) { _memory.ClearHistory(); }
+                    lock (_conversationHistoryGate) { _conversationHistory.Clear(); }
+                    Laura.Core.Diagnostics.LauraDiagnostics.Record("conversation.cleared");
+                    SetState(AssistantState.Ready);
+                    break;
                 case CommandSubmitted submitted:
                     PublishConversation(ConversationMessageSource.UserTyped, submitted.DisplayText ?? submitted.Text);
                     await ExecuteCommandAsync(submitted.Text,
@@ -315,11 +345,13 @@ public sealed class AssistantEngine : IAssistantEngine
         }
         catch (Exception exception)
         {
+            if (message is ConversationCleared) { message.Completion?.TrySetException(exception); }
             _logger.LogError(exception, "Failed to handle {Message}.", message.GetType().Name);
             SetState(AssistantState.Ready);
         }
         finally
         {
+            _activeGeneration.Value = null;
             message.Completion?.TrySetResult();
         }
     }
@@ -349,6 +381,7 @@ public sealed class AssistantEngine : IAssistantEngine
         }
 
         SkillResponse response = await _dispatcher.DispatchAsync(request, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         string? spokenText = response.Handled
             ? response.SpokenText
             : _localizer.Get(LocalizationKeys.Assistant.NotUnderstood);
@@ -428,7 +461,9 @@ public sealed class AssistantEngine : IAssistantEngine
             return;
         }
 
-        var message = new ConversationMessage(source, text.Trim(), _clock.Now);
+        if (_activeGeneration.Value is { } active && active != Volatile.Read(ref _conversationGeneration)) { return; }
+        var message = new ConversationMessage(source, text, _clock.Now);
+        Laura.Core.Diagnostics.LauraDiagnostics.Record("conversation.message", amount: text.Length, outcome: source.ToString(), interactionId: _memory?.WorkingTurnId);
         if (_memory is not null && _settings.Current.RememberConversations)
         {
             try { _memory.Append(message); }
@@ -460,6 +495,7 @@ public sealed class AssistantEngine : IAssistantEngine
         }
 
         StateChanged?.Invoke(this, state);
+        Laura.Core.Diagnostics.LauraDiagnostics.Record("engine.state", outcome: state.ToString());
     }
 
     /// <summary>
@@ -468,9 +504,13 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <param name="message">Message to enqueue.</param>
     private void Enqueue(EngineMessage message)
     {
+        lock (_generationGate)
+        {
+        message.Generation = _conversationGeneration;
         if (!_messages.Writer.TryWrite(message))
         {
             message.Completion?.TrySetResult();
+        }
         }
     }
 
@@ -510,6 +550,7 @@ public sealed class AssistantEngine : IAssistantEngine
     /// </summary>
     private abstract record EngineMessage
     {
+        public long Generation { get; set; }
         /// <summary>
         /// Gets the signal completed after handling, when someone is waiting for
         /// the message. Fire-and-forget messages leave it null.
@@ -539,4 +580,5 @@ public sealed class AssistantEngine : IAssistantEngine
 
     /// <summary>Request to stop speech immediately.</summary>
     private sealed record StopRequested : EngineMessage;
+    private sealed record ConversationCleared : EngineMessage;
 }

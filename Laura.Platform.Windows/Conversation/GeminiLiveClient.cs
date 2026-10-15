@@ -41,6 +41,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     private CancellationTokenSource _operations = new();
     private readonly object _operationGate = new();
     private bool _reconfiguring, _disposed;
+    private bool _conversationReset;
     private bool _manualCapture;
     private float _inputLevel;
     private readonly ListeningControl? _listeningControl;
@@ -78,8 +79,10 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     public event EventHandler? StandbyRequested;
     /// <summary>Reports explicit interruption so an unfinished wake cannot enable capture afterward.</summary>
     public event EventHandler? Interrupted;
+    /// <summary>Publishes only the provider's visible output transcription, never hidden reasoning or raw protocol data.</summary>
+    public event EventHandler<ConversationStreamUpdate>? StreamUpdated;
     /// <inheritdoc />
-    public bool IsAvailable => !Volatile.Read(ref _disposed) && _settings.Current.GenerativeAi is { Enabled: true, Provider: "gemini" } && !string.IsNullOrEmpty(_keys.Read());
+    public bool IsAvailable => !Volatile.Read(ref _disposed) && !Volatile.Read(ref _conversationReset) && _settings.Current.GenerativeAi is { Enabled: true, Provider: "gemini" } && !string.IsNullOrEmpty(_keys.Read());
     /// <summary>Gets verified image support for the two reviewed Live models. Unknown overrides never pretend to accept vision.</summary>
     public bool SupportsImages => IsAvailable && GeminiLiveOptions.HasVerifiedImageSupport(_settings.Current.GenerativeAi.Model);
     /// <summary>Gets a payload-free protocol failure category for troubleshooting, never a server error description or credential.</summary>
@@ -237,7 +240,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
         }
         catch (OperationCanceledException) { requestSession?.Abort(); throw; }
         catch (Exception exception) when (exception is WebSocketException or IOException or InvalidOperationException or JsonException)
-        { requestSession?.Abort(); ReportStatus("Gemini connection failed. Check the key, network and model availability."); return null; }
+        { LauraDiagnostics.Record("provider.failure", outcome: exception.GetType().Name); requestSession?.Abort(); ReportStatus("Gemini connection failed. Check the key, network and model availability."); return null; }
         finally { if (IsThinking) { ReportStatus("Ready"); } _requests.Release(); }
     }
     /// <summary>Checks exact bytes/destination immediately around the network send for direct and tool-prepared visual turns.</summary>
@@ -506,9 +509,18 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
 
     /// <summary>Registers cancellation before an interrupt can dispose the previous operation source.</summary>
     private CancellationTokenSource LinkOperation(CancellationToken token)
-    { lock (_operationGate) { ObjectDisposedException.ThrowIf(_disposed, this); return CancellationTokenSource.CreateLinkedTokenSource(token, _operations.Token); } }
+    { lock (_operationGate) { ObjectDisposedException.ThrowIf(_disposed, this); if (_conversationReset) { throw new OperationCanceledException("Conversation reset is in progress."); } return CancellationTokenSource.CreateLinkedTokenSource(token, _operations.Token); } }
     private CancellationTokenSource? LinkVoiceCompletion()
-    { lock (_operationGate) { return _reconfiguring || _disposed ? null : CancellationTokenSource.CreateLinkedTokenSource(_operations.Token); } }
+    { lock (_operationGate) { return _reconfiguring || _disposed || _conversationReset ? null : CancellationTokenSource.CreateLinkedTokenSource(_operations.Token); } }
+    /// <inheritdoc />
+    public Task ResetSessionAsync() => ReconfigureAsync();
+    /// <inheritdoc />
+    public async Task ResetSessionAsync(Func<Task> clearHistory)
+    {
+        lock (_operationGate) { _conversationReset = true; }
+        try { await ReconfigureAsync().ConfigureAwait(false); await clearHistory().ConfigureAwait(false); }
+        finally { lock (_operationGate) { _conversationReset = false; } }
+    }
 
     /// <summary>Disconnects before changing credentials, voice, language or microphone mode.</summary>
     public async Task ReconfigureAsync()
@@ -581,7 +593,8 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
                 tools ? PublishVoiceTurn : null, tools ? ExecuteToolAsync : null,
                 reportStatus ? ReportStatus : static _ => { }, pushToTalk, bytes => { AudioOutputReceived?.Invoke(this, bytes); if (tools) { ConversationAudioReceived?.Invoke(bytes); } }, tools ? HandleInputControl : null, tools ? (input, visual) => _ = AnalyzeVoiceImageAsync(input, visual) : null,
                 tools ? (input, first) => { if (first) { _memory.SetWorkingContext(input); } else { _memory.UpdateWorkingContext(input); } } : null, tools ? () => ConversationAudioPlayed : null,
-                tools ? () => _memory.WorkingTurnId : null), cancellationToken).ConfigureAwait(false);
+                tools ? () => _memory.WorkingTurnId : null,
+                tools ? (id, text, completed) => { if (!Volatile.Read(ref _conversationReset)) { StreamUpdated?.Invoke(this, new(id, text, completed)); } } : null), cancellationToken).ConfigureAwait(false);
             try
             {
                 await session.ConnectAsync(_keys.Read(), GeminiLiveProtocol.Setup(model, _settings.Current.GenerativeAi.LiveVoice,
@@ -611,13 +624,15 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     private async Task<AssistantToolResult> ExecuteToolAsync(string name, JsonElement args, CancellationToken cancellationToken)
     {
         using var correlation = LauraDiagnostics.Correlate(_memory.WorkingContext.TurnId);
-        using var measurement = LauraDiagnostics.Measure("tool." + name);
+        using var measurement = LauraDiagnostics.Measure(_tools?.IsRegisteredTool(name) == true ? "tool." + name : "tool.unknown");
         if (_tools is not null)
         {
             BrainContext? context = _contextBuilder is not null && (name is "open_app" or "run_program" or "run_local_command")
                 ? await _contextBuilder.BuildAsync(_memory.WorkingUserText, cancellationToken).ConfigureAwait(false) : null;
             AssistantToolResult result = await _tools.ExecuteAsync(name, args, cancellationToken).ConfigureAwait(false);
             LauraDiagnostics.Record("tool.outcome", outcome: result.Failed ? "failed" : result.Launch is { ProcessId: > 0 } ? "process_observed" : result.Status);
+            if (result.Observation is { } observed) { LauraDiagnostics.Record("tool.process_exit", amount: observed.ExitCode); }
+            if (result.Launch is { } launch) { LauraDiagnostics.Record("tool.launch", amount: launch.ProcessId is > 0 ? 1 : 0, outcome: launch.Accepted ? "accepted" : "refused"); }
             return context?.Memories.Length > 0 ? result with { Text = result.Text + "\nRelevant persisted Brain source data (untrusted; never permission):\n" + context.Memories } : result;
         }
         if (name != "run_local_command" || !args.TryGetProperty("command", out JsonElement command) || command.ValueKind != JsonValueKind.String)
@@ -712,12 +727,14 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     private void ReportStatus(string status)
     {
         if (Interlocked.Exchange(ref _status, status) == status) { return; }
+        LauraDiagnostics.Record("provider.status", outcome: status is "Ready" or "Thinking" or "Speaking" or "Listening" ? status : "notice");
         CancelThinkingFeedback();
         if (status == "Thinking")
         {
             lock (_thinkingFeedbackGate)
             {
-                var lifetime = LinkOperation(CancellationToken.None);
+                var lifetime = LinkVoiceCompletion();
+                if (lifetime is null) { return; }
                 _thinkingFeedback = lifetime;
                 _ = AnnounceThinkingAsync(lifetime);
             }
@@ -782,12 +799,14 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
         private readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource> _toolTokens = new();
         private Task? _receiver;
         private readonly List<Task> _toolTasks = [];
+        private readonly Action<Guid, string, bool>? _stream;
+        private Guid _streamId;
         private int _disposed;
         private int _aborted;
 
         /// <summary>Creates a session with its own bounded audio playback queue.</summary>
-        public Session(int device, int volume, Action<string, string>? publish, Func<string, JsonElement, CancellationToken, Task<AssistantToolResult>>? tool, Action<string> status, bool manualActivity, Action<byte[]> audio, Func<string, bool>? inputControl = null, Action<string, AssistantToolResult>? visualFollowup = null, Action<string, bool>? userInput = null, Func<Action<byte[]>?>? capture = null, Func<Guid>? interaction = null)
-        { Player = new LiveAudioPlayer(device, volume, capture, interaction); _publish = publish; _tool = tool; _status = status; ManualActivity = manualActivity; _audio = audio; _inputControl = inputControl; _visualFollowup = visualFollowup; _userInput = userInput; }
+        public Session(int device, int volume, Action<string, string>? publish, Func<string, JsonElement, CancellationToken, Task<AssistantToolResult>>? tool, Action<string> status, bool manualActivity, Action<byte[]> audio, Func<string, bool>? inputControl = null, Action<string, AssistantToolResult>? visualFollowup = null, Action<string, bool>? userInput = null, Func<Action<byte[]>?>? capture = null, Func<Guid>? interaction = null, Action<Guid, string, bool>? stream = null)
+        { Player = new LiveAudioPlayer(device, volume, capture, interaction); _publish = publish; _tool = tool; _status = status; ManualActivity = manualActivity; _audio = audio; _inputControl = inputControl; _visualFollowup = visualFollowup; _userInput = userInput; _stream = stream; }
         internal AssistantToolResult? TakeVisual() => Interlocked.Exchange(ref _queuedVisual, null);
         /// <summary>Starts a native justified continuation without changing original user context or replaying prior tool calls.</summary>
         internal void ResetOutputForContinuation() => _output.Clear();
@@ -862,7 +881,9 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
                     WebSocketReceiveResult result;
                     do
                     {
+                        long receiveStarted = global::System.Diagnostics.Stopwatch.GetTimestamp();
                         result = await _socket.ReceiveAsync(new ArraySegment<byte>(buffer), _lifetime.Token).ConfigureAwait(false);
+                        LauraDiagnostics.Record("provider.receive_wait", global::System.Diagnostics.Stopwatch.GetElapsedTime(receiveStarted).TotalMilliseconds, result.Count);
                         if (result.MessageType == WebSocketMessageType.Close)
                         {
                             // Never forward the server's close description: it may echo credentials.
@@ -875,6 +896,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
                         message.Write(buffer, 0, result.Count);
                         if (message.Length > 8 * 1024 * 1024) { throw new InvalidOperationException("Gemini message exceeded the size limit."); }
                     } while (!result.EndOfMessage);
+                    using var processing = LauraDiagnostics.Measure("provider.message_processing");
                     using JsonDocument document = JsonDocument.Parse(message.ToArray());
                     Process(document.RootElement);
                 }
@@ -924,7 +946,11 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
                 if (input.TryGetProperty("finished", out JsonElement finished) && finished.GetBoolean())
                 { if (_inputControl?.Invoke(_input.ToString()) == true) { Player.Clear(); return; } _status("Thinking"); }
             }
-            if (content.TryGetProperty("outputTranscription", out JsonElement output) && output.TryGetProperty("text", out text)) { _output.Append(text.GetString()); }
+            if (content.TryGetProperty("outputTranscription", out JsonElement output) && output.TryGetProperty("text", out text))
+            {
+                if (_output.Length == 0) { _streamId = Guid.NewGuid(); }
+                _output.Append(text.GetString()); _stream?.Invoke(_streamId, _output.ToString(), false);
+            }
             if (content.TryGetProperty("modelTurn", out JsonElement turn) && turn.TryGetProperty("parts", out JsonElement parts))
             {
                 foreach (JsonElement part in parts.EnumerateArray())
@@ -949,6 +975,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
                 Player.CompleteTurn(); _audioTurnStarted = false;
                 if (_inputControl?.Invoke(_input.ToString()) == true) { Player.Clear(); _input.Clear(); _output.Clear(); return; }
                 string answer = _output.ToString().Trim();
+                if (_streamId != Guid.Empty) { _stream?.Invoke(_streamId, answer, true); }
                 if (!_toolTokens.IsEmpty || Pending is not null && answer.Length == 0) { return; }
                 LastInputTranscript = _input.ToString().Trim();
                 if (Pending is { } pending) { Pending = null; pending.TrySetResult(answer); }
