@@ -8,6 +8,17 @@ namespace Laura.Core.Tests.Screenshots;
 
 public sealed class ScreenshotDocumentTests
 {
+    [Fact]
+    public void OriginalPrintScreenDefaultsMigrateTogetherWithoutChangingCustomChords()
+    {
+        var defaults = new ScreenshotOptions();
+        var legacy = new ScreenshotOptions { RegionShortcut = "PrtSc", WindowShortcut = "Ctrl+PrtSc", FullScreenShortcut = "Shift+PrtSc", AllDisplays = false };
+        var migrated = legacy.Sanitized(); Assert.Equal(defaults.RegionShortcut, migrated.RegionShortcut); Assert.Equal(defaults.WindowShortcut, migrated.WindowShortcut); Assert.Equal(defaults.FullScreenShortcut, migrated.FullScreenShortcut); Assert.False(migrated.AllDisplays);
+        var custom = legacy with { RegionShortcut = "Ctrl+Alt+P" }; Assert.Equal(custom, custom.Sanitized());
+        foreach (string chord in new[] { defaults.RegionShortcut, defaults.WindowShortcut, defaults.FullScreenShortcut })
+        { Assert.True(ScreenshotOptions.TryParse(chord, out uint modifiers, out uint key)); Assert.NotEqual(0x2cu, key); Assert.Equal(0x4006u, modifiers); }
+        Assert.False(ScreenshotOptions.TryParse("F12", out _, out _));
+    }
     private static ScreenshotFrame Frame(int x = -100, int y = -50) => new(new(x, y, 10, 8), Enumerable.Range(0, 320).Select(index => (byte)(index % 256)).ToArray());
     private static ScreenshotAnnotation Annotation(ScreenshotTool tool = ScreenshotTool.Arrow) => new(Guid.NewGuid(), tool, [new(1, 1), new(8, 6)], 0xffff0000, 3);
     [Fact]
@@ -56,7 +67,7 @@ public sealed class ScreenshotDocumentTests
     }
     [Theory]
     [InlineData("PrtSc", true)] [InlineData("Ctrl+PrtSc", true)] [InlineData("Shift+PrtSc", true)] [InlineData("Ctrl+Alt+P", true)]
-    [InlineData("F12", true)] [InlineData("P", false)] [InlineData("Win+P", false)] [InlineData("Ctrl+Ctrl+P", false)] [InlineData("F13", false)]
+    [InlineData("F12", false)] [InlineData("P", false)] [InlineData("Win+P", false)] [InlineData("Ctrl+Ctrl+P", false)] [InlineData("F13", false)]
     public void ShortcutParserRejectsAmbiguousAndReservedChords(string chord, bool valid) => Assert.Equal(valid, ScreenshotOptions.TryParse(chord, out _, out _));
     [Fact]
     public async Task NativeGestureNeverAuthorizesCloudTransmissionOrProcessExecution()

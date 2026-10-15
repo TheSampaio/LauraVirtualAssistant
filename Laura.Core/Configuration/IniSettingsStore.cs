@@ -135,8 +135,8 @@ public sealed class IniSettingsStore : ISettingsStore
             Screenshots = new Laura.Core.Screenshots.ScreenshotOptions
             {
                 ShortcutsEnabled = document.GetBoolean("Screenshot", "ShortcutsEnabled", true), AllDisplays = document.GetBoolean("Screenshot", "AllDisplays", true),
-                RegionShortcut = document.GetString("Screenshot", "RegionShortcut", "PrtSc"), WindowShortcut = document.GetString("Screenshot", "WindowShortcut", "Ctrl+PrtSc"),
-                FullScreenShortcut = document.GetString("Screenshot", "FullScreenShortcut", "Shift+PrtSc")
+                RegionShortcut = document.GetString("Screenshot", "RegionShortcut", new Laura.Core.Screenshots.ScreenshotOptions().RegionShortcut), WindowShortcut = document.GetString("Screenshot", "WindowShortcut", new Laura.Core.Screenshots.ScreenshotOptions().WindowShortcut),
+                FullScreenShortcut = document.GetString("Screenshot", "FullScreenShortcut", new Laura.Core.Screenshots.ScreenshotOptions().FullScreenShortcut)
             },
             Brain = new Laura.Core.Brain.BrainOptions
             {

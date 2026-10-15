@@ -33,6 +33,7 @@ public sealed class ScreenshotCoordinator(PermissionManager permissions, ISettin
     {
         if (_disposed) { return false; }
         if (!Enum.IsDefined(mode)) { throw new ArgumentOutOfRangeException(nameof(mode)); }
+        using var measurement = Laura.Core.Diagnostics.LauraDiagnostics.Measure("screenshot.capture." + mode);
         if (!await _capture.WaitAsync(0, cancellationToken).ConfigureAwait(false)) { return false; }
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
         bool allDisplays = settings.Current.Screenshots.AllDisplays;

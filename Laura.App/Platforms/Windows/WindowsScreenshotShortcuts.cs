@@ -37,8 +37,12 @@ public sealed class WindowsScreenshotShortcuts : IDisposable
             var seen = new HashSet<(uint Modifiers, uint Key)>();
             for (int index = 0; index < chords.Length; index++)
             {
-                if (!ScreenshotOptions.TryParse(chords[index], out uint modifiers, out uint key) || !seen.Add((modifiers, key)) || !RegisterHotKey(_handle, 100 + index, modifiers, key))
-                { errors.Add(_ui.Get("ui.screenshot.shortcutConflict") + ": " + chords[index]); }
+                bool parsed = ScreenshotOptions.TryParse(chords[index], out uint modifiers, out uint key);
+                bool unique = parsed && seen.Add((modifiers, key));
+                bool registered = unique && RegisterHotKey(_handle, 100 + index, modifiers, key);
+                int error = unique && !registered ? Marshal.GetLastWin32Error() : 0;
+                Laura.Core.Diagnostics.LauraDiagnostics.Record("screenshot.shortcut." + (ScreenshotMode)index, amount: error, outcome: registered ? "registered" : unique ? "unavailable" : "invalid_or_duplicate");
+                if (!registered) { errors.Add(_ui.Get("ui.screenshot.shortcutConflict") + ": " + chords[index] + (error == 0 ? "" : " (" + error + ")")); }
                 else { _registered.Add(100 + index); }
             }
         }
