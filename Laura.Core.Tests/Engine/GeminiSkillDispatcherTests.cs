@@ -8,7 +8,7 @@ using Laura.Core.Tests.TestDoubles;
 
 namespace Laura.Core.Tests.Engine;
 
-/// <summary>Checks natural app routing and privacy boundaries in Google-only dispatch.</summary>
+/// <summary>Checks natural app routing and privacy boundaries through the selected provider.</summary>
 public sealed class GeminiSkillDispatcherTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "laura-dispatch-" + Guid.NewGuid().ToString("N"));
@@ -35,12 +35,12 @@ public sealed class GeminiSkillDispatcherTests : IDisposable
         Assert.Equal(expectedHistory, conversation.LastTurn.History.Count);
     }
     [Fact]
-    public async Task Dispatch_UnconfiguredGoogleRequestsKeyInsteadOfCallingAProvider()
+    public async Task Dispatch_UnconfiguredSelectedProviderRequestsKeyInsteadOfCallingAProvider()
     {
         var conversation = new RecordingConversationEngine(false, null);
         var dispatcher = new GeminiSkillDispatcher(conversation, new StubSettingsService(LauraSettings.Default), new StubUserContext(), CreateMemory(), new StubLocalizer());
         var response = await dispatcher.DispatchAsync(SkillRequest.Create("Open Steam", CultureInfo.GetCultureInfo("en-US"), DateTimeOffset.Now, SkillRequestSource.Text));
-        Assert.Equal("ui.maui.configureGoogle", response.SpokenText); Assert.Equal(0, conversation.CallCount);
+        Assert.Equal("ui.ai.configureProvider", response.SpokenText); Assert.Equal(0, conversation.CallCount);
     }
     /// <inheritdoc />
     public void Dispose() { if (Directory.Exists(_directory)) { Directory.Delete(_directory, true); } }

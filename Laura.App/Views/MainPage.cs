@@ -166,6 +166,8 @@ public sealed partial class MainPage : ContentPage, IDisposable
         engine.StateChanged += (_, state) => MainThread.BeginInvokeOnMainThread(() => SetState(state.ToString()));
         live.MessageReceived += ReceiveMessage;
         live.StreamUpdated += ReceiveStream;
+        services.GetRequiredService<OpenAiConversationEngine>().StreamUpdated += ReceiveStream;
+        services.GetRequiredService<OpenAiConversationEngine>().Interrupted += StreamInterrupted;
         live.Interrupted += StreamInterrupted;
         live.StatusChanged += (_, state) => MainThread.BeginInvokeOnMainThread(() => SetState(state));
         settings.Changed += (_, _) => MainThread.BeginInvokeOnMainThread(Reload);
@@ -209,9 +211,10 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _deviceTitle.Text = _ui.Get("ui.hud.devices").ToUpperInvariant();
         _platform.Text = $"Windows · {Environment.OSVersion.Version.Build}";
         _devices.Text = DeviceSummary();
-        _provider.Text = "GEMINI LIVE · " + _settings.Current.GenerativeAi.LiveVoice;
+        _provider.Text = _settings.Current.GenerativeAi.Provider == "openai" ? "GPT · " + _settings.Current.GenerativeAi.OpenAiModel : "GEMINI LIVE · " + _settings.Current.GenerativeAi.LiveVoice;
         _emptyTitle.Text = _ui.Get("ui.hud.ready"); _emptyHint.Text = _ui.Get("ui.hud.prompt");
-        _shortcutHint.Text = _ui.Get("ui.hud.talkHint"); ToolTipProperties.SetText(_shortcutHint, _ui.Get("ui.maui.shortcutHelp") + "\n" + _ui.Get("ui.hud.hotkey"));
+        _shortcutHint.Text = _ui.Get(_settings.Current.GenerativeAi.Provider == "openai" ? "ui.ai.textHint" : "ui.hud.talkHint");
+        ToolTipProperties.SetText(_shortcutHint, _settings.Current.GenerativeAi.Provider == "openai" ? _shortcutHint.Text : _ui.Get("ui.maui.shortcutHelp") + "\n" + _ui.Get("ui.hud.hotkey"));
         ToolTipProperties.SetText(_networkMeter, _ui.Get("ui.maui.networkHint"));
         _diskUnavailable.Text = _ui.Get("ui.hud.disksUnavailable");
         RefreshFeedback(); UpdateSendAction(); _nextMetrics = 0;
@@ -230,6 +233,8 @@ public sealed partial class MainPage : ContentPage, IDisposable
     private void RefreshFeedback()
     {
         bool muted = _settings.Current.MicrophoneMuted, listening = _live.IsListening;
+        bool voiceSupported = _settings.Current.GenerativeAi.Provider == "gemini";
+        _listen.IsEnabled = voiceSupported; _microphoneButton.IsEnabled = voiceSupported;
         string micAction = _ui.Get(muted ? "ui.hud.unmute" : "ui.hud.mute");
         _microphoneButton.Source = Theme.IconSource(muted ? "mic_off" : "mic"); _micIcon.Source = _microphoneButton.Source;
         _microphoneButton.BackgroundColor = muted ? Theme.Field : Theme.AssistantSurface;
@@ -239,6 +244,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _micStatus.Text = _ui.Get(muted ? "ui.maui.muted" : listening && _live.IsSpeaking ? "ui.hud.capturePaused" : listening ? "ui.maui.streaming" : _clapListener.IsCapturing ? "ui.hud.clapLocal" : "ui.maui.micReady");
         _voiceHint.Text = _ui.Get(muted ? "ui.hud.micMuted" : listening ? "ui.maui.listening" : _clapListener.IsCapturing ? "ui.hud.clapArmed" : "ui.hud.micReady");
         _voiceHint.TextColor = listening ? Theme.Accent : Theme.Muted;
+        if (!voiceSupported) { _micStatus.Text = _ui.Get("ui.ai.gptTextOnly"); _voiceHint.Text = _ui.Get("ui.ai.gptTextOnly"); }
         string state = _visualMode switch { ReactorMode.Speaking => "Speaking", ReactorMode.Thinking => "Thinking", ReactorMode.Listening => "Listening", ReactorMode.Working => "Working", _ => _reportedStatus };
         _status.Text = state switch { "Ready" => _ui.Get("ui.state.ready"), "Speaking" => _ui.Get("ui.state.speaking"), "Thinking" => _ui.Get("ui.state.thinking"), "Connecting" => _ui.Get("ui.state.connecting"), "Working" => _ui.Get("ui.state.working"), "Listening" => _ui.Get("ui.maui.listening"), "Stopped" => _ui.Get("ui.hud.stopped"), _ => state };
         _status.TextColor = _visualMode == ReactorMode.Speaking ? Theme.Speaking : Theme.Accent;
@@ -407,6 +413,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     /// <summary>Toggles automatic turn detection; a natural speech pause triggers a response without another click.</summary>
     private async Task ToggleListeningAsync()
     {
+        if (_settings.Current.GenerativeAi.Provider != "gemini") { Notice(_ui.Get("ui.ai.gptTextOnly")); return; }
         if (_settings.Current.MicrophoneMuted) { await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync("Laura", _ui.Get("ui.maui.unmuteFirst"), "OK").ConfigureAwait(true); return; }
         if (_live.IsListening) { await _live.StopListeningAsync().ConfigureAwait(true); }
         else { await _live.StartListeningAsync().ConfigureAwait(true); }
@@ -426,6 +433,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     /// <summary>Captures only while the global Ctrl+Space chord is held, including connection cancellation on release.</summary>
     public async Task SetPushToTalkAsync(bool held)
     {
+        if (held && _settings.Current.GenerativeAi.Provider != "gemini") { Notice(_ui.Get("ui.ai.gptTextOnly")); return; }
         if (!held)
         { var lifetime = _holdLifetime; _holdLifetime = null; lifetime?.Cancel(); await _live.StopListeningAsync().ConfigureAwait(true); lifetime?.Dispose(); Reload(); return; }
         if (_settings.Current.MicrophoneMuted) { _micStatus.Text = _ui.Get("ui.maui.unmuteFirst"); return; }
@@ -513,5 +521,5 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _approvalsButton.BackgroundColor = count > 0 ? Theme.Primary : Theme.Field;
     }
     /// <inheritdoc />
-    public void Dispose() { _engine.ConversationMessageReceived -= ReceiveMessage; _live.MessageReceived -= ReceiveMessage; _live.StreamUpdated -= ReceiveStream; _live.Interrupted -= StreamInterrupted; _conversationScroll.Dispose(); _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed -= OnApprovalsChanged; _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this); }
+    public void Dispose() { _services.GetRequiredService<OpenAiConversationEngine>().StreamUpdated -= ReceiveStream; _services.GetRequiredService<OpenAiConversationEngine>().Interrupted -= StreamInterrupted; _engine.ConversationMessageReceived -= ReceiveMessage; _live.MessageReceived -= ReceiveMessage; _live.StreamUpdated -= ReceiveStream; _live.Interrupted -= StreamInterrupted; _conversationScroll.Dispose(); _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed -= OnApprovalsChanged; _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this); }
 }

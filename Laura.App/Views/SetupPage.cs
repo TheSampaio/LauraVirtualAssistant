@@ -3,6 +3,7 @@ using Laura.App.Infrastructure;
 using Laura.App.Theming;
 using Laura.Core.Abstractions;
 using Laura.Core.Configuration;
+using Laura.Core.Conversation;
 using Laura.Core.Speech;
 using Laura.Platform.Windows.Conversation;
 using Laura.Platform.Windows.System;
@@ -16,6 +17,11 @@ public sealed class SetupPage : ContentPage
     private readonly ISettingsService _settings;
     private readonly IApiKeyStore _keys;
     private readonly GeminiLiveClient _live;
+    private readonly OpenAiConversationEngine _gpt;
+    private readonly OpenAiApiKeyStore _openAiKeys;
+    private readonly ConversationProviderRouter _router;
+    private readonly Picker _chatProvider;
+    private readonly Entry _openAiKey = Theme.Entry(), _openAiModel = Theme.Entry();
     private readonly IUiLocalizer _ui;
     private readonly IStartupRegistration _startup;
     private readonly ISpeechSynthesizer _speech;
@@ -51,12 +57,16 @@ public sealed class SetupPage : ContentPage
     /// <summary>Creates independent tabs with a fixed save footer and no offline provider controls.</summary>
     public SetupPage(ISettingsService settings, IApiKeyStore keys, GeminiLiveClient live, IUiLocalizer ui,
         IStartupRegistration startup, ISpeechSynthesizer speech, WindowsApplicationCatalog applications, ILocalizer conversation, Laura.App.Platforms.Windows.WindowsApprovalCenter approvals, ScreenshotCoordinator screenshots,
-        Laura.Core.Mcp.McpServerStore mcpStore, Laura.Core.Mcp.McpRuntime mcp)
+        Laura.Core.Mcp.McpServerStore mcpStore, Laura.Core.Mcp.McpRuntime mcp, OpenAiConversationEngine gpt, OpenAiApiKeyStore openAiKeys, ConversationProviderRouter router)
     {
         using var performance = PerformanceTrace.Measure("settings.construct");
         _settings = settings; _keys = keys; _live = live; _ui = ui; _startup = startup; _speech = speech; _applications = applications; _conversation = conversation;
+        _gpt = gpt; _openAiKeys = openAiKeys; _router = router;
         _createdCulture = ui.Culture.Name;
         LauraSettings current = settings.Current;
+        _chatProvider = Theme.Picker(["Gemini Live", "GPT · OpenAI"], current.GenerativeAi.Provider == "openai" ? "GPT · OpenAI" : "Gemini Live");
+        _openAiKey.IsPassword = true; _openAiKey.Placeholder = string.IsNullOrWhiteSpace(openAiKeys.Read()) ? "OpenAI API key" : "••••••••••••••••";
+        _openAiModel.Text = current.GenerativeAi.OpenAiModel;
         Title = ui.Get("ui.maui.setup"); BackgroundColor = Theme.Background; NavigationPage.SetHasNavigationBar(this, false);
         _voice = Theme.Picker(GeminiLiveOptions.Voices, current.GenerativeAi.LiveVoice);
         _culture = Theme.Picker(["pt-BR", "en-US"], current.Culture); _uiCulture = Theme.Picker(["pt-BR", "en-US"], current.UiCulture);
@@ -121,6 +131,9 @@ public sealed class SetupPage : ContentPage
     public void ReloadFromSettings()
     {
         var current = _settings.Current;
+        _openAiKey.Text = ""; _openAiModel.Text = current.GenerativeAi.OpenAiModel;
+        _chatProvider.SelectedIndex = current.GenerativeAi.Provider == "openai" ? 1 : 0;
+        _openAiKey.Placeholder = string.IsNullOrWhiteSpace(_openAiKeys.Read()) ? "OpenAI API key" : "••••••••••••••••";
         _key.Text = ""; _key.IsPassword = true; _revealKey.Source = Theme.IconSource("eye");
         Theme.DescribeAction(_revealKey, _ui.Get("ui.settings.revealKey")); _result.Text = "";
         _nickname.Text = current.UserNickname; _persona.Text = current.GenerativeAi.Persona;
@@ -230,8 +243,15 @@ public sealed class SetupPage : ContentPage
         var actions = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Star)], ColumnSpacing = 12 };
         actions.Add(ActionButton("ui.maui.importMark", "upload", ImportMarkAsync));
         var remove = ActionButton("ui.maui.removeKey", "trash", RemoveKeyAsync); remove.BackgroundColor = Theme.AssistantSurface; actions.Add(remove, 1);
-        return Panel(provider, Theme.Caption(_ui.Get("ui.maui.key")), keyField, protectedState, actions,
-            Row("ui.ai.model", "box", _model), Notice("ui.maui.cloudPrivacy"));
+        return Panel(Row("ui.ai.provider", "brain", _chatProvider), Notice("ui.ai.providerHelp"),
+            provider, Theme.Caption(_ui.Get("ui.maui.key")), keyField, protectedState, actions,
+            Row("ui.ai.model", "box", _model), Notice("ui.maui.cloudPrivacy"),
+            Theme.Label("GPT · OpenAI", 22), _openAiKey, Row("ui.ai.model", "box", _openAiModel),
+            ActionButton("ui.ai.removeOpenAiKey", "trash", async () =>
+            {
+                await _router.ResetSessionAsync(() => { _openAiKeys.Save(""); return Task.CompletedTask; }).ConfigureAwait(true);
+                _openAiKey.Text = ""; _openAiKey.Placeholder = "OpenAI API key";
+            }), Notice("ui.ai.openAiPrivacy"));
     }
     /// <summary>Builds voice and local wake controls with their actual units and privacy states.</summary>
     private View VoicePanel() => Panel(
@@ -343,6 +363,32 @@ public sealed class SetupPage : ContentPage
     }
     /// <summary>Gets the actual number of settings tabs, including native MCP configuration.</summary>
     public int TabCount => _pages.Length;
+    /// <summary>Checks independent protected keys and provider switching using only synthetic credentials in isolated UI diagnostics.</summary>
+    internal async Task VerifyProvidersForSmokeAsync()
+    {
+        if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Isolated UI diagnostics only."); }
+        var original = _settings.Current; string google = _keys.Read(), openai = _openAiKeys.Read();
+        try
+        {
+            _keys.Save("synthetic-google-credential"); _openAiKeys.Save("synthetic-openai-credential");
+            ReloadFromSettings(); _chatProvider.SelectedIndex = 1;
+            if (!await SaveAsync().ConfigureAwait(true) || _settings.Current.GenerativeAi.Provider != "openai" || !_router.IsAvailable || !_gpt.IsAvailable || _live.IsAvailable)
+            { throw new InvalidOperationException("Optional GPT provider selection did not route availability correctly."); }
+            if (_openAiKey.Text?.Length > 0 || !_openAiKey.IsPassword || _openAiKey.Placeholder != "••••••••••••••••")
+            { throw new InvalidOperationException("Protected GPT credential leaked into editable text."); }
+            _chatProvider.SelectedIndex = 0;
+            if (!await SaveAsync().ConfigureAwait(true) || !_live.IsAvailable || _gpt.IsAvailable || _keys.Read() != "synthetic-google-credential" || _openAiKeys.Read() != "synthetic-openai-credential")
+            { throw new InvalidOperationException("Switching back lost independent credentials or provider state."); }
+            _openAiKeys.Save(""); _chatProvider.SelectedIndex = 1;
+            if (!await SaveAsync().ConfigureAwait(true) || _router.IsAvailable || _live.IsAvailable)
+            { throw new InvalidOperationException("Missing optional GPT key silently selected another provider."); }
+        }
+        finally
+        {
+            await _router.ResetSessionAsync(async () => { _keys.Save(google); _openAiKeys.Save(openai); await _settings.UpdateAsync(original).ConfigureAwait(false); }).ConfigureAwait(true);
+            ReloadFromSettings();
+        }
+    }
     /// <summary>Verifies native tab geometry and draft preservation without cloud or microphone access.</summary>
     public void VerifySettingsForSmoke()
     {
@@ -398,12 +444,23 @@ public sealed class SetupPage : ContentPage
         _result.Text = _ui.Get("ui.maui.imported");
     }
     /// <summary>Removes the credential and closes the previous connection.</summary>
-    private async Task RemoveKeyAsync() { await _live.ReconfigureAsync().ConfigureAwait(true); _keys.Save(""); _key.Text = ""; RefreshKeyState(); }
+    private async Task RemoveKeyAsync() { await _router.ResetSessionAsync(() => { _keys.Save(""); return Task.CompletedTask; }).ConfigureAwait(true); _key.Text = ""; RefreshKeyState(); }
     /// <summary>Saves all tabs through the existing settings service.</summary>
     private async Task<bool> SaveAsync()
     {
         string? candidate = string.IsNullOrWhiteSpace(_key.Text) ? null : _key.Text.Trim();
-        bool configured = candidate is not null || !string.IsNullOrWhiteSpace(_keys.Read());
+        string? gptCandidate = string.IsNullOrWhiteSpace(_openAiKey.Text) ? null : _openAiKey.Text.Trim();
+        string selectedProvider = _chatProvider.SelectedIndex == 1 ? "openai" : "gemini";
+        bool configured = selectedProvider == "openai" ? gptCandidate is not null || !string.IsNullOrWhiteSpace(_openAiKeys.Read()) : candidate is not null || !string.IsNullOrWhiteSpace(_keys.Read());
+        string gptModel = (_settings.Current.GenerativeAi with { OpenAiModel = _openAiModel.Text ?? "" }).Sanitized().OpenAiModel;
+        if (gptCandidate is not null)
+        {
+            _result.Text = _ui.Get("ui.maui.validatingKey");
+            using var validation = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            try { await _gpt.ValidateCredentialAsync(gptCandidate, gptModel, validation.Token).ConfigureAwait(true); }
+            catch (Exception error) when (error is InvalidOperationException or System.Net.Http.HttpRequestException or IOException or OperationCanceledException)
+            { _result.Text = _ui.Get("ui.maui.invalidKey"); return false; }
+        }
         if (candidate is not null)
         {
             _result.Text = _ui.Get("ui.maui.validatingKey");
@@ -417,8 +474,6 @@ public sealed class SetupPage : ContentPage
             catch (Exception error) when (error is InvalidOperationException or System.Net.WebSockets.WebSocketException or IOException or OperationCanceledException)
             { _result.Text = _ui.Get("ui.maui.invalidKey"); return false; }
         }
-        await _live.ReconfigureAsync().ConfigureAwait(true);
-        if (candidate is not null) { _keys.Save(candidate); if (_key.Text?.Trim() == candidate) { _key.Text = ""; } }
         LauraSettings updated = _settings.Current with
         {
             Culture = _culture.SelectedItem as string ?? "pt-BR", UiCulture = _uiCulture.SelectedItem as string ?? "pt-BR",
@@ -428,9 +483,18 @@ public sealed class SetupPage : ContentPage
             GreetOnStartup = _greeting.IsToggled, AnnounceHourly = _hourly.IsToggled, StartWithWindows = _autoStart.IsToggled,
             Permissions = _permissions.Options, Screenshots = _screenshots.Options,
             Voice = _settings.Current.Voice with { VoiceName = null, Volume = (int)_volume.Value },
-            GenerativeAi = _settings.Current.GenerativeAi with { Enabled = configured, Provider = "gemini", Model = _model.Text ?? "", Persona = (_persona.Text ?? "").ReplaceLineEndings(" "), LiveVoice = _voice.SelectedItem as string ?? "Aoede", ContinuousListening = true, SilenceDurationMs = (int)_silence.Value }
+            GenerativeAi = _settings.Current.GenerativeAi with { Enabled = configured, Provider = selectedProvider, Model = _model.Text ?? "", OpenAiModel = gptModel, Persona = (_persona.Text ?? "").ReplaceLineEndings(" "), LiveVoice = _voice.SelectedItem as string ?? "Aoede", ContinuousListening = true, SilenceDurationMs = (int)_silence.Value }
         };
-        await _settings.UpdateAsync(updated).ConfigureAwait(true); _ui.SetCulture(updated.ResolveUiCulture());
+        await _router.ResetSessionAsync(async () =>
+        {
+            if (candidate is not null) { _keys.Save(candidate); }
+            if (gptCandidate is not null) { _openAiKeys.Save(gptCandidate); }
+            await _settings.UpdateAsync(updated).ConfigureAwait(false);
+        }).ConfigureAwait(true);
+        if (candidate is not null && _key.Text?.Trim() == candidate) { _key.Text = ""; }
+        if (gptCandidate is not null && _openAiKey.Text?.Trim() == gptCandidate) { _openAiKey.Text = ""; }
+        _openAiKey.Placeholder = string.IsNullOrWhiteSpace(_openAiKeys.Read()) ? "OpenAI API key" : "••••••••••••••••";
+        _ui.SetCulture(updated.ResolveUiCulture());
         if (_startup.IsEnabled() != updated.StartWithWindows) { _startup.SetEnabled(updated.StartWithWindows); }
         RefreshKeyState(); _result.Text = _ui.Get("ui.maui.saved"); return true;
     }

@@ -865,5 +865,12 @@
   "ui.evidence.openRevision": "Open archived revision",
   "ui.evidence.learning": "Learning activity",
   "ui.evidence.learningSummary": "This session:\n{0} pending events\n{1} processed events\n{2} failures\n{3} events excluded by settings or privacy\n{4} queue-full refusals",
-  "ui.evidence.learningHelp": "Processed events may create no memories. These are content-free queue counters, not verified facts."
+  "ui.evidence.learningHelp": "Processed events may create no memories. These are content-free queue counters, not verified facts.",
+  "ui.ai.gptTextOnly": "GPT · text chat",
+  "ui.ai.openAiPrivacy": "Optional. With GPT selected, text and relevant context are sent to OpenAI. Images require authorization for api.openai.com. Windows protects the key. Select Gemini Live for voice and microphone.",
+  "ui.ai.configureProvider": "Configure the selected provider key in settings.",
+  "ui.ai.providerHelp": "Gemini Live: conversation and voice. GPT: text chat with Brain and local tools. Switching cancels pending requests and retains history according to your preference.",
+  "ui.ai.removeOpenAiKey": "Remove OpenAI key",
+  "ui.ai.providerFailed": "The selected provider could not complete the operation. Check the connection, key, model and account quota.",
+  "ui.ai.textHint": "Enter to send · Shift + Enter for a new line"
 }

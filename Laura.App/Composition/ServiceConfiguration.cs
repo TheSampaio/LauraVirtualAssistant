@@ -109,6 +109,11 @@ public static class ServiceConfiguration
         string credentialDirectory = storageDirectory is not null && (Environment.GetCommandLineArgs().Contains("--permissions-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--screenshot-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--brain-live-smoke", StringComparer.Ordinal))
             ? Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())! : Path.GetDirectoryName(settingsPath)!;
         services.AddSingleton<IApiKeyStore>(_ => new ProtectedApiKeyStore(credentialDirectory));
+        services.AddSingleton(_ => new OpenAiApiKeyStore(Path.GetDirectoryName(settingsPath)!));
+        services.AddKeyedSingleton<HttpClient>("openai", (_, _) => new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan });
+        services.AddSingleton(provider => new OpenAiConversationEngine(provider.GetRequiredKeyedService<HttpClient>("openai"),
+            provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<OpenAiApiKeyStore>(), provider.GetRequiredService<IConversationMemory>(),
+            provider.GetRequiredService<IAssistantTools>(), provider.GetRequiredService<BrainContextBuilder>(), provider.GetRequiredService<PermissionManager>()));
         services.AddSingleton(_ => new UserFileWorkspace(Path.Combine(Path.GetDirectoryName(settingsPath)!, "Workspace")));
 
         services.AddSingleton<ILocalizer>(provider => new JsonLocalizer(
@@ -132,7 +137,8 @@ public static class ServiceConfiguration
         services.AddSingleton<IBriefingContributor, ReminderBriefingContributor>();
         services.AddSingleton<ClapWakeCoordinator>();
         services.AddSingleton<MarkLvConfigurationImporter>();
-        services.AddSingleton<IConversationEngine>(provider => provider.GetRequiredService<GeminiLiveClient>());
+        services.AddSingleton(provider => new ConversationProviderRouter(provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<GeminiLiveClient>(), provider.GetRequiredService<OpenAiConversationEngine>()));
+        services.AddSingleton<IConversationEngine>(provider => provider.GetRequiredService<ConversationProviderRouter>());
         services.AddSingleton<WindowsApplicationCatalog>();
         services.AddSingleton<WindowsResourceMonitor>();
         services.AddSingleton<WindowsDiskMonitor>();

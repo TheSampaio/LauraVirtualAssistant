@@ -4,7 +4,7 @@ using Laura.Core.Skills;
 
 namespace Laura.Core.Engine;
 
-/// <summary>Routes natural-language requests through Gemini, whose structured tools perform local actions.</summary>
+/// <summary>Routes natural-language requests through the selected provider and its shared native tools.</summary>
 public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISettingsService settings, IUserContext user,
     IConversationMemory memory, ILocalizer localizer) : ISkillDispatcher
 {
@@ -13,7 +13,7 @@ public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISet
     /// <inheritdoc />
     public async Task<SkillResponse> DispatchAsync(SkillRequest request, CancellationToken cancellationToken = default)
     {
-        if (!conversation.IsAvailable) { return SkillResponse.Speak(localizer.Get("ui.maui.configureGoogle")); }
+        if (!conversation.IsAvailable) { return SkillResponse.Speak(localizer.Get("ui.ai.configureProvider")); }
         IReadOnlyList<ConversationMessage> history = [];
         if (settings.Current.RememberConversations)
         {
@@ -21,6 +21,6 @@ public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISet
             catch (Exception error) when (error is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException) { }
         }
         string? answer = await conversation.AskAsync(new ConversationTurn(request.RawText, request.Culture, user.DisplayName) { History = history, Image = request.Image }, cancellationToken).ConfigureAwait(false);
-        return SkillResponse.Speak(string.IsNullOrWhiteSpace(answer) ? localizer.Get("ui.maui.liveFailed") : answer);
+        return SkillResponse.Speak(string.IsNullOrWhiteSpace(answer) ? localizer.Get("ui.ai.providerFailed") : answer);
     }
 }

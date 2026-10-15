@@ -23,9 +23,10 @@ public sealed class RuntimeDiagnosticContext : IDisposable
         _journal.Record("config.brain_learning", outcome: value.Brain.AutoLearn ? "enabled" : "disabled");
         _journal.Record("config.semantic_configured", outcome: value.Brain.EmbeddingModel.Length > 0 ? "yes" : "no");
         _journal.Record("config.context_budget", amount: value.Brain.ContextCharacters);
-        _journal.Record("config.provider", outcome: value.GenerativeAi.Enabled ? "gemini" : "disabled");
-        _journal.Record("config.model", outcome: value.GenerativeAi.Model.Length == 0 ? "default" : GeminiLiveOptions.HasVerifiedImageSupport(value.GenerativeAi.Model) ? "reviewed" : "custom");
-        _journal.Record("config.voice", outcome: value.GenerativeAi.LiveVoice);
+        _journal.Record("config.provider", outcome: value.GenerativeAi.Enabled ? value.GenerativeAi.Provider == "openai" ? "openai" : "gemini" : "disabled");
+        _journal.Record("config.model", outcome: value.GenerativeAi.Provider == "openai" ? value.GenerativeAi.OpenAiModel == GenerativeAiOptions.Default.OpenAiModel ? "default" : "custom"
+            : value.GenerativeAi.Model.Length == 0 ? "default" : GeminiLiveOptions.HasVerifiedImageSupport(value.GenerativeAi.Model) ? "reviewed" : "custom");
+        _journal.Record("config.voice", outcome: value.GenerativeAi.Provider == "openai" ? "text_only" : value.GenerativeAi.LiveVoice);
         _journal.Record("config.request_timeout_seconds", amount: (long)value.GenerativeAi.Timeout.TotalSeconds);
         _journal.Record("config.microphone_muted", outcome: value.MicrophoneMuted ? "yes" : "no");
         _journal.Record("config.clap_wake", outcome: value.ClapWakeEnabled ? "enabled" : "disabled");

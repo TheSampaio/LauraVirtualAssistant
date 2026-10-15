@@ -818,5 +818,12 @@
   "ui.evidence.openRevision": "Abrir revisão arquivada",
   "ui.evidence.learning": "Atividade do aprendizado",
   "ui.evidence.learningSummary": "Nesta sessão:\n{0} eventos aguardando\n{1} eventos processados\n{2} falhas\n{3} eventos excluídos por configuração ou privacidade\n{4} recusas por fila cheia",
-  "ui.evidence.learningHelp": "Eventos processados podem não criar memórias. São contadores da fila, sem conteúdo privado; não representam fatos confirmados."
+  "ui.evidence.learningHelp": "Eventos processados podem não criar memórias. São contadores da fila, sem conteúdo privado; não representam fatos confirmados.",
+  "ui.ai.gptTextOnly": "GPT · chat por texto",
+  "ui.ai.openAiPrivacy": "Opcional. Com GPT selecionado, o texto e o contexto relevante são enviados à OpenAI. Imagens exigem autorização para api.openai.com. A chave fica protegida pelo Windows. Voz e microfone ficam disponíveis ao selecionar Gemini Live.",
+  "ui.ai.configureProvider": "Configure a chave do provedor selecionado nas configurações.",
+  "ui.ai.providerHelp": "Gemini Live: conversa e voz. GPT: chat por texto, com Brain e ferramentas locais. A troca cancela pedidos pendentes e mantém o histórico conforme sua preferência.",
+  "ui.ai.removeOpenAiKey": "Remover chave OpenAI",
+  "ui.ai.providerFailed": "O provedor selecionado não conseguiu concluir a operação. Verifique a conexão, a chave, o modelo e a cota da conta.",
+  "ui.ai.textHint": "Enter envia · Shift + Enter quebra a linha"
 }

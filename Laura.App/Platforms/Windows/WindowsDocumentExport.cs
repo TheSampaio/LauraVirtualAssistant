@@ -12,16 +12,16 @@ public static class WindowsDocumentExport
 {
     private static readonly string[] Markdown = [".md"], Text = [".txt"], Json = [".json"], Zip = [".zip"];
     /// <summary>Exports the whole retained transcript from a stable snapshot, never the virtualized UI collection.</summary>
-    public static async Task<bool> ConversationAsync(nint owner, ConversationActions actions, IApiKeyStore keys, CancellationToken token = default)
+    public static async Task<bool> ConversationAsync(nint owner, ConversationActions actions, IApiKeyStore keys, IApiKeyStore openAiKeys, CancellationToken token = default)
     {
         var picker = Picker(owner, "Laura-conversa", new Dictionary<string, IList<string>> { ["Markdown"] = Markdown, ["Texto"] = Text, ["JSON"] = Json });
         var selected = await picker.PickSaveFileAsync().AsTask(token).ConfigureAwait(true);
         if (selected is null) { return false; }
         var snapshot = await actions.SnapshotAsync(token).ConfigureAwait(false);
-        string? key = keys.Read();
+        string[] secrets = [keys.Read(), openAiKeys.Read()];
         await Task.Run(async () =>
         {
-            string text = ConversationExport.Render(snapshot, Path.GetExtension(selected.Name).TrimStart('.').ToLowerInvariant(), key is null ? [] : [key]);
+            string text = ConversationExport.Render(snapshot, Path.GetExtension(selected.Name).TrimStart('.').ToLowerInvariant(), secrets);
             await WriteAtomicallyAsync(selected.Path, stream => stream.WriteAsync(Encoding.UTF8.GetBytes(text), token).AsTask(), token).ConfigureAwait(false);
         }, token).ConfigureAwait(false);
         LauraDiagnostics.Record("conversation.exported", amount: snapshot.Count); return true;

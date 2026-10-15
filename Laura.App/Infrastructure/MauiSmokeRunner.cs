@@ -21,6 +21,27 @@ public static class MauiSmokeRunner
         {
             if (Environment.GetCommandLineArgs().Contains("--chat-diagnostics-smoke", StringComparer.Ordinal))
             { await ChatDiagnosticsSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--gpt-settings-smoke", StringComparer.Ordinal))
+            {
+                await Task.Delay(500).ConfigureAwait(true);
+                var setup = services.GetRequiredService<SetupPage>(); var gptNavigation = (NavigationPage)window.Page!;
+                await gptNavigation.PushAsync(setup, false).ConfigureAwait(true);
+                await setup.VerifyProvidersForSmokeAsync().ConfigureAwait(true);
+                foreach (var culture in new[] { "pt-BR", "en-US" })
+                {
+                    services.GetRequiredService<IUiLocalizer>().SetCulture(System.Globalization.CultureInfo.GetCultureInfo(culture));
+                    await gptNavigation.PopAsync(false).ConfigureAwait(true); setup = services.GetRequiredService<SetupPage>(); await gptNavigation.PushAsync(setup, false).ConfigureAwait(true);
+                    foreach (double width in new[] { 1440d, 720d })
+                    {
+                        window.Width = width; window.Height = width == 720 ? 600 : 900; await Task.Delay(300).ConfigureAwait(true); setup.VerifySettingsForSmoke();
+                        await CaptureAsync(window, Path.Combine(directory, "gpt-settings-top-" + culture + "-" + width + ".png")).ConfigureAwait(true);
+                        await setup.VerifySettingsScrollForSmokeAsync(true).ConfigureAwait(true);
+                        await CaptureAsync(window, Path.Combine(directory, "gpt-settings-bottom-" + culture + "-" + width + ".png")).ConfigureAwait(true);
+                        await setup.VerifySettingsScrollForSmokeAsync(false).ConfigureAwait(true);
+                    }
+                }
+                await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "Optional GPT and Gemini selection, independent DPAPI credential masking/preservation/removal, missing-key behavior and native EN/PT settings at 1440/720 verified with synthetic keys. No cloud, microphone or clipboard access.").ConfigureAwait(true); return;
+            }
             if (Environment.GetCommandLineArgs().Contains("--voice-cancellation-smoke", StringComparer.Ordinal))
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));

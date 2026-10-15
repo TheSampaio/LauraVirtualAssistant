@@ -106,7 +106,7 @@ public sealed class ScreenshotCoordinator(PermissionManager permissions, ISettin
                     }
                     else if (action == "analyze")
                     {
-                        var live = services.GetRequiredService<GeminiLiveClient>(); if (!live.SupportsImages) { editor.SetStatus(T("unsupported")); return false; }
+                        var live = services.GetRequiredService<IConversationEngine>(); if (!live.SupportsImages) { editor.SetStatus(T("unsupported")); return false; }
                         string? question = await WindowsDialogs.PromptAsync(T("analyze"), T("question"), T("defaultQuestion"), token: token).ConfigureAwait(true); if (string.IsNullOrWhiteSpace(question)) { return false; }
                         services.GetRequiredService<Laura.App.Shell.MauiShellController>().RevealForConfirmation();
                         await services.GetRequiredService<IAssistantEngine>().SubmitVisualCommandAsync(question, png, token).ConfigureAwait(true); editor.SetStatus(T("conversation"));

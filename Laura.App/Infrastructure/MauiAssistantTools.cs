@@ -321,10 +321,11 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                     return new(JsonSerializer.Serialize((query.Length == 0 ? applications.Applications : applications.Find(query)).Take(100)));
                 case "system_status": return new(JsonSerializer.Serialize(resources.Sample(storage.Directory)));
                 case "stop_listening":
+                    if (settings.Current.GenerativeAi.Provider == "openai") { return new("GPT text chat has no microphone session or spoken farewell. Laura remains running in standby."); }
                     await services.GetRequiredService<GeminiLiveClient>().RestAsync(sayGoodbye: true).ConfigureAwait(false);
                     return new("Listening ended and the native farewell was spoken. Laura remains running in standby. Do not repeat the farewell.");
                 case "screen_process":
-                    if (!services.GetRequiredService<GeminiLiveClient>().SupportsImages) { return new("The current model has no verified image support. Select a reviewed Gemini Live model before requesting vision."); }
+                    if (!services.GetRequiredService<IConversationEngine>().SupportsImages) { return new("The current model has no verified image support. Select a reviewed model before requesting vision."); }
                     bool camera = Value(arguments, "source") == "camera";
                     byte[] image = camera ? await MainThread.InvokeOnMainThreadAsync(() => WindowsCameraCapture.CaptureAsync(cancellationToken)).ConfigureAwait(false)
                         : await WindowsScreenCapture.CaptureAsync(cancellationToken, jpeg: true).ConfigureAwait(false);
@@ -339,7 +340,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                     }
                     if (action == "analyze")
                     {
-                        if (!services.GetRequiredService<GeminiLiveClient>().SupportsImages) { return new("The configured model has no verified image support."); }
+                        if (!services.GetRequiredService<IConversationEngine>().SupportsImages) { return new("The configured model has no verified image support."); }
                         var snapshot = await screenshot.CurrentSnapshotAsync(cancellationToken).ConfigureAwait(false);
                         byte[] png = snapshot.Png;
                         snapshot.Lifetime.ThrowIfCancellationRequested();
@@ -350,7 +351,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                 case "read_brain_image":
                     string asset = Value(arguments, "path");
                     if (!System.Text.RegularExpressions.Regex.IsMatch(asset, "^Assets/Screenshots/[a-f0-9]{64}\\.png$", System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))) { return new("Choose an actual content-addressed PNG reference from Brain Markdown."); }
-                    if (!services.GetRequiredService<GeminiLiveClient>().SupportsImages) { return new("The configured model has no verified image support."); }
+                    if (!services.GetRequiredService<IConversationEngine>().SupportsImages) { return new("The configured model has no verified image support."); }
                     byte[] reference = await services.GetRequiredService<BrainService>().ReadAttachmentAsync(asset, cancellationToken).ConfigureAwait(false);
                     if (!Convert.ToHexString(SHA256.HashData(reference)).Equals(Path.GetFileNameWithoutExtension(asset), StringComparison.OrdinalIgnoreCase)) { return new("The referenced image changed or is corrupt. No image was sent."); }
                     return new("Brain visual reference recovered locally and hash verified. Cloud transmission still requires authorization.", reference, "image/png");
@@ -451,7 +452,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
     {
         if (name is "study_github_repository" or "recall_memory" && !settings.Current.RememberConversations) { return "disabled_memory"; }
         if (name == "learn_memory" && (!settings.Current.RememberConversations || !settings.Current.Brain.AutoLearn)) { return "disabled_learning"; }
-        if (name is "screen_process" or "read_brain_image" && !services.GetRequiredService<GeminiLiveClient>().SupportsImages) { return "unavailable_model_vision"; }
+        if (name is "screen_process" or "read_brain_image" && !services.GetRequiredService<IConversationEngine>().SupportsImages) { return "unavailable_model_vision"; }
         if (name == "connect_mcp_server" && services.GetRequiredService<McpRuntime>().States().Count == 0) { return "no_configured_server"; }
         if (name is "call_mcp_tool" or "list_mcp_tools" && !services.GetRequiredService<McpRuntime>().States().Any(server => server.State == "connected")) { return "requires_connected_server"; }
         return "registered_adapter";
