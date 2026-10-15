@@ -50,6 +50,7 @@ brain-backup*.zip
 *.suo
 *.cache
 *.log
+runtime-*.jsonl
 *.tmp
 *.bak
 *.dmp

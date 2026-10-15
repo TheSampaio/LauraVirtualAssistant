@@ -12,6 +12,10 @@ public static class LauraDiagnostics
     private static readonly AsyncLocal<Guid> Interaction = new();
     private static readonly ConcurrentQueue<LauraDiagnosticSample> Samples = new();
     private static int _captures;
+    /// <summary>Gets the current interaction identity, without text or path data.</summary>
+    public static Guid CurrentInteractionId => Interaction.Value;
+    /// <summary>Payload-free measurements for the bounded local journal; subscribers must remain nonblocking.</summary>
+    public static event Action<LauraDiagnosticSample>? Published;
     /// <summary>Measures a named operation without recording its content.</summary>
     public static IDisposable Measure(string operation) => new Measurement(operation);
     /// <summary>Associates nested operations with an existing real interaction, preserving outer scopes.</summary>
@@ -24,8 +28,11 @@ public static class LauraDiagnostics
     public static void Record(string operation, double milliseconds = 0, long amount = 0, string outcome = "", IReadOnlyList<string>? ids = null, IReadOnlyList<double>? scores = null, Guid? interactionId = null)
     {
         Duration.Record(milliseconds, new KeyValuePair<string, object?>("operation", operation));
+        if (Volatile.Read(ref _captures) == 0 && Published is null) { return; }
+        var sample = new LauraDiagnosticSample(interactionId ?? Interaction.Value, DateTimeOffset.UtcNow, operation, milliseconds, amount, outcome, ids?.Take(16).ToArray() ?? [], scores?.Take(16).ToArray() ?? []);
+        Published?.Invoke(sample);
         if (Volatile.Read(ref _captures) == 0) { return; }
-        Samples.Enqueue(new(interactionId ?? Interaction.Value, DateTimeOffset.UtcNow, operation, milliseconds, amount, outcome, ids?.Take(16).ToArray() ?? [], scores?.Take(16).ToArray() ?? []));
+        Samples.Enqueue(sample);
         while (Samples.Count > 4096) { Samples.TryDequeue(out _); }
     }
     private sealed class Measurement(string operation) : IDisposable
