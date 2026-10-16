@@ -177,6 +177,36 @@ public static class LocalizationKeys
         public const string NoProvider = "ui.models.noProvider";
         /// <summary>Reports a provider failure without inventing a cause.</summary>
         public const string ProviderFailed = "ui.ai.providerFailed";
+        /// <summary>Identifies a rejected credential.</summary>
+        public const string AuthenticationFailed = "ui.ai.failure.authentication";
+        /// <summary>Identifies denied provider access.</summary>
+        public const string AccessDenied = "ui.ai.failure.access";
+        /// <summary>Identifies a reported billing or account limit.</summary>
+        public const string UsageLimit = "ui.ai.failure.usage";
+        /// <summary>Identifies throttling or an undifferentiated quota limit.</summary>
+        public const string CapacityLimit = "ui.ai.failure.capacity";
+        /// <summary>Identifies an unavailable configured model.</summary>
+        public const string ModelUnavailable = "ui.ai.failure.model";
+        /// <summary>Identifies excessive current context.</summary>
+        public const string ContextExceeded = "ui.ai.failure.context";
+        /// <summary>Identifies an elapsed generation deadline.</summary>
+        public const string Timeout = "ui.ai.failure.timeout";
+        /// <summary>Identifies a failed transport.</summary>
+        public const string NetworkFailed = "ui.ai.failure.network";
+        /// <summary>Identifies incomplete or malformed provider output.</summary>
+        public const string InvalidResponse = "ui.ai.failure.response";
+        /// <summary>Identifies unavailable provider service.</summary>
+        public const string ServiceUnavailable = "ui.ai.failure.unavailable";
+        /// <summary>Identifies failed local weight verification.</summary>
+        public const string LocalIntegrity = "ui.ai.failure.integrity";
+        /// <summary>Identifies insufficient currently available RAM.</summary>
+        public const string InsufficientMemory = "ui.ai.failure.memory";
+        /// <summary>Identifies a provider request rejection.</summary>
+        public const string RequestRejected = "ui.ai.failure.request";
+        /// <summary>Identifies exhausted operation budgets.</summary>
+        public const string OperationLimit = "ui.ai.failure.limit";
+        /// <summary>Explains that previous tool effects require inspection before retry.</summary>
+        public const string PriorEffects = "ui.ai.failure.priorEffects";
         /// <summary>Refuses an unsupported image before dispatch.</summary>
         public const string ImagesUnsupported = "ui.models.imagesUnsupported";
         /// <summary>Notice that the generative model did not answer.</summary>

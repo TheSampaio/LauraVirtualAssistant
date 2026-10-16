@@ -9,6 +9,7 @@ public sealed class ConversationProviderRouter(ISettingsService settings, IConve
     private readonly object _gate = new();
     private CancellationTokenSource _lifetime = new();
     private bool _resetting, _disposed;
+    private volatile IConversationEngine? _active;
     private IConversationEngine? Selected => settings.Current.GenerativeAi.Provider switch
     {
         "openai" => openai,
@@ -21,9 +22,14 @@ public sealed class ConversationProviderRouter(ISettingsService settings, IConve
     /// <inheritdoc />
     public bool IsAvailable { get { lock (_gate) { return !_resetting && !_disposed && Selected?.IsAvailable == true; } } }
     /// <inheritdoc />
-    public bool SupportsImages => IsAvailable && Selected?.SupportsImages == true;
+    public bool SupportsImages => IsAvailable && (_active is { } active ? active.SupportsImages
+        : Selected?.SupportsImages == true || CanRouteImages);
+    private bool CanRouteImages => settings.Current.GenerativeAi is { Provider: "auto", AllowCloudFallback: true }
+        && gemini.IsAvailable && gemini.SupportsImages;
+    /// <inheritdoc />
+    public ConversationFailure? LastFailure { get; private set; }
     /// <summary>Gets the actual selected runtime location; automatic mode never silently authorizes paid GPT usage.</summary>
-    public string ActiveProvider => ReferenceEquals(Selected, local) && local is not null ? "local" : ReferenceEquals(Selected, openai) ? "openai" : ReferenceEquals(Selected, gemini) ? "gemini" : "unavailable";
+    public string ActiveProvider => ReferenceEquals(_active ?? Selected, local) && local is not null ? "local" : ReferenceEquals(_active ?? Selected, openai) ? "openai" : ReferenceEquals(_active ?? Selected, gemini) ? "gemini" : "unavailable";
     /// <inheritdoc />
     public async Task<string?> AskAsync(ConversationTurn turn, CancellationToken cancellationToken = default)
     {
@@ -36,8 +42,28 @@ public sealed class ConversationProviderRouter(ISettingsService settings, IConve
         using (operation)
         {
             await _requests.WaitAsync(operation.Token).ConfigureAwait(false);
-            try { operation.Token.ThrowIfCancellationRequested(); return Selected is { } selected ? await selected.AskAsync(turn, operation.Token).ConfigureAwait(false) : null; }
-            finally { _requests.Release(); }
+            try
+            {
+                operation.Token.ThrowIfCancellationRequested(); LastFailure = null;
+                IConversationEngine? selected = Selected;
+                if (turn.Image is not null && selected?.SupportsImages != true)
+                {
+                    if (CanRouteImages) { selected = gemini; }
+                    else { LastFailure = new(ConversationFailureKind.UnsupportedInput); return null; }
+                }
+                if (selected?.IsAvailable != true) { LastFailure = new(ConversationFailureKind.Unavailable); return null; }
+                _active = selected;
+                try
+                {
+                    string? answer = await selected.AskAsync(turn, operation.Token).ConfigureAwait(false);
+                    LastFailure = string.IsNullOrWhiteSpace(answer) ? selected.LastFailure ?? new(ConversationFailureKind.Unknown) : null;
+                    return answer;
+                }
+                catch (ConversationProviderException error) { LastFailure = error.Failure; return null; }
+                catch (Exception error) when (ReferenceEquals(selected, local) && error is IOException or InvalidOperationException)
+                { LastFailure = selected.LastFailure ?? new(ConversationFailureKind.Unavailable); return null; }
+            }
+            finally { _active = null; _requests.Release(); }
         }
     }
     /// <inheritdoc />

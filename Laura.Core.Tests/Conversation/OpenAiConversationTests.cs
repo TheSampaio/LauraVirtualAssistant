@@ -101,6 +101,39 @@ public sealed class OpenAiConversationTests
         using var fixture = new Fixture(); fixture.Transport.Replies.Enqueue(_ => new((HttpStatusCode)code) { Content = new StringContent("private-error") });
         var other = new ProviderStub(); using var router = new ConversationProviderRouter(fixture.Settings, other, fixture.Provider);
         Assert.Null(await router.AskAsync(Turn)); Assert.Equal(0, other.Asked); Assert.Single(fixture.Transport.Requests);
+        Assert.Equal(ConversationFailure.FromHttp(code), router.LastFailure);
+    }
+    [Theory]
+    [InlineData(429, "insufficient_quota", ConversationFailureKind.UsageLimit)]
+    [InlineData(429, "rate_limit_exceeded", ConversationFailureKind.CapacityLimit)]
+    [InlineData(400, "context_length_exceeded", ConversationFailureKind.ContextExceeded)]
+    public async Task StructuredHttpErrorsPreserveSafeCategoriesAndClearOnTheNextSuccessfulTurn(int status, string code, ConversationFailureKind expected)
+    {
+        using var fixture = new Fixture();
+        fixture.Transport.Replies.Enqueue(_ => new((HttpStatusCode)status) { Content = new StringContent(JsonSerializer.Serialize(new { error = new { code, message = "private-secret-prompt" } })) });
+        Assert.Null(await fixture.Provider.AskAsync(Turn)); Assert.Equal(expected, fixture.Provider.LastFailure!.Kind);
+        Assert.False(fixture.Provider.LastFailure.EffectsMayHaveRun); Assert.DoesNotContain("private", fixture.Provider.LastFailure.ToString(), StringComparison.Ordinal);
+        fixture.Transport.Replies.Enqueue(_ => Reply([], "Recovered")); Assert.Equal("Recovered", await fixture.Provider.AskAsync(Turn)); Assert.Null(fixture.Provider.LastFailure);
+    }
+    [Fact]
+    public async Task FailureAfterDispatchRetainsTheUncertainEffectMarkerAndDoesNotRetry()
+    {
+        using var fixture = new Fixture(); fixture.Transport.Replies.Enqueue(_ => Reply([Call("one")]));
+        fixture.Transport.Replies.Enqueue(_ => new(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("private-error") });
+        Assert.Null(await fixture.Provider.AskAsync(Turn)); Assert.Equal(1, fixture.Tools.Executed);
+        Assert.Equal(ConversationFailureKind.Unavailable, fixture.Provider.LastFailure!.Kind); Assert.True(fixture.Provider.LastFailure.EffectsMayHaveRun);
+        Assert.Equal(2, fixture.Transport.Requests.Count);
+    }
+    [Fact]
+    public async Task ProviderDeadlineReturnsTimeoutWhileExplicitCancellationStillPropagates()
+    {
+        using var fixture = new Fixture(); await fixture.Settings.UpdateAsync(fixture.Settings.Current with { GenerativeAi = fixture.Settings.Current.GenerativeAi with { Timeout = TimeSpan.FromMilliseconds(150) } });
+        fixture.Transport.Replies.Enqueue(_ => new(HttpStatusCode.OK) { Content = new StreamContent(new HangingStream()) });
+        Assert.Null(await fixture.Provider.AskAsync(Turn)); Assert.Equal(ConversationFailureKind.Timeout, fixture.Provider.LastFailure!.Kind);
+        await fixture.Settings.UpdateAsync(fixture.Settings.Current with { GenerativeAi = fixture.Settings.Current.GenerativeAi with { Timeout = TimeSpan.FromSeconds(10) } });
+        fixture.Transport.Replies.Enqueue(_ => new(HttpStatusCode.OK) { Content = new StreamContent(new HangingStream()) });
+        using var cancel = new CancellationTokenSource(150);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.Provider.AskAsync(Turn, cancel.Token)); Assert.Null(fixture.Provider.LastFailure);
     }
     [Theory]
     [InlineData("data: {\"type\":\"response.output_text.delta\",\"delta\":\"unfinished\"}\n\n")]
@@ -169,7 +202,11 @@ public sealed class OpenAiConversationTests
     {
         using var fixture = new Fixture(); await fixture.Settings.UpdateAsync(fixture.Settings.Current with { GenerativeAi = fixture.Settings.Current.GenerativeAi with { Timeout = TimeSpan.FromMilliseconds(100) } });
         fixture.Transport.Replies.Enqueue(_ => new(HttpStatusCode.OK) { Content = new StreamContent(new HangingStream()) });
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.Provider.AskAsync(Turn)); Assert.Single(fixture.Transport.Requests);
+        int completed = 0, interrupted = 0;
+        fixture.Provider.StreamUpdated += (_, update) => { if (update.Completed) { completed++; } };
+        fixture.Provider.Interrupted += (_, _) => interrupted++;
+        Assert.Null(await fixture.Provider.AskAsync(Turn)); Assert.Equal(ConversationFailureKind.Timeout, fixture.Provider.LastFailure!.Kind);
+        Assert.Single(fixture.Transport.Requests); Assert.Equal(0, completed); Assert.Equal(1, interrupted); Assert.Empty(fixture.Memory.ReadAllHistory());
     }
     [Fact]
     public async Task ResetWaitsForAnUncooperativeToolAndDiscardsItsLateResult()

@@ -48,6 +48,15 @@ internal static class LocalModelSmoke
         try { await inference.AskAsync(new(string.Concat(Enumerable.Repeat(" oversized", 10000)), CultureInfo.GetCultureInfo("en-US"), "Synthetic tester"), cancellationToken); }
         catch (InvalidOperationException) when (inference.Status == "context_exceeded") { contextRejected = true; }
         if (!contextRejected) { throw new InvalidOperationException("Oversized current input was not rejected with its actual context category."); }
+        if (inference.LastFailure?.Kind != ConversationFailureKind.ContextExceeded) { throw new InvalidOperationException("Local context failure lost its safe category."); }
+        var originalOptions = settings.Current.GenerativeAi;
+        await settings.UpdateAsync(settings.Current with { GenerativeAi = originalOptions with { Timeout = TimeSpan.FromMilliseconds(30) } }, cancellationToken);
+        watch.Restart();
+        string? timedOut = await inference.AskAsync(new("Write a long synthetic story.", CultureInfo.GetCultureInfo("en-US"), "Synthetic tester"), cancellationToken);
+        double deadlineCancellationMs = watch.Elapsed.TotalMilliseconds;
+        if (timedOut is not null || inference.LastFailure?.Kind != ConversationFailureKind.Timeout || inference.Status != "timeout")
+        { throw new InvalidOperationException("A real native deadline did not return the safe timeout category."); }
+        await settings.UpdateAsync(settings.Current with { GenerativeAi = originalOptions }, cancellationToken);
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); cancel.CancelAfter(300);
         bool cancellationObserved = false;
         try { await inference.AskAsync(new("Write a very long story about a synthetic red reactor.", CultureInfo.GetCultureInfo("en-US"), "Synthetic tester"), cancel.Token); }
@@ -56,7 +65,8 @@ internal static class LocalModelSmoke
         using var process = Process.GetCurrentProcess(); process.Refresh();
         var benchmark = new { artifact = SupportedModels.Intelligence, hardware, loadMs, generateMs, firstTokenMs, streamedChunks = answerChunks,
             answerCharacters = answer.Length, privateBytes = process.PrivateMemorySize64, peakWorkingSetBytes = process.PeakWorkingSet64,
-            cpuOnly = true, gpuMeasurements = "not available: no GPU backend tested", cancellationObserved, wholeHistoryTrimmingVerified = true, oversizedInputRejected = contextRejected };
+            cpuOnly = true, gpuMeasurements = "not available: no GPU backend tested", cancellationObserved, wholeHistoryTrimmingVerified = true, oversizedInputRejected = contextRejected,
+            deadlineCancellationVerified = true, deadlineCancellationMs };
         await File.WriteAllTextAsync(Path.Combine(directory, "local-benchmark.json"), JsonSerializer.Serialize(benchmark, new JsonSerializerOptions { WriteIndented = true }), cancellationToken);
         await inference.UnloadAsync(cancellationToken);
         if (inference.LoadedModel is not null || inference.Status != "unloaded") { throw new InvalidOperationException("Native model did not unload."); }

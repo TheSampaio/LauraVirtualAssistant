@@ -62,6 +62,8 @@ public sealed class LlamaLocalInferenceEngine : ILocalInferenceEngine, IAsyncDis
     public event EventHandler? Interrupted;
     /// <summary>Reports native model loading fraction; no model is loaded on the UI thread.</summary>
     public event EventHandler<float>? LoadingProgress;
+    /// <inheritdoc />
+    public ConversationFailure? LastFailure { get; private set; }
 
     /// <inheritdoc />
     public Task LoadAsync(string id, CancellationToken cancellationToken) => Task.Run(async () =>
@@ -106,13 +108,16 @@ public sealed class LlamaLocalInferenceEngine : ILocalInferenceEngine, IAsyncDis
     /// <inheritdoc />
     public Task<string?> AskAsync(ConversationTurn turn, CancellationToken cancellationToken = default) => Task.Run(async () =>
     {
-        if (turn.Image is not null) { throw new InvalidOperationException("The installed local text backend does not support images."); }
-        using var generation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var deadline = new CancellationTokenSource();
+        using var generation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
         ObjectDisposedException.ThrowIf(_disposed, this);
         await _native.WaitAsync(generation.Token).ConfigureAwait(false);
+        deadline.CancelAfter(_settings.Current.GenerativeAi.Timeout);
         try
         {
+            LastFailure = null;
             lock (_gate) { ObjectDisposedException.ThrowIf(_disposed, this); _generation = generation; }
+            if (turn.Image is not null) { LastFailure = new(ConversationFailureKind.UnsupportedInput); throw new InvalidOperationException("The installed local text backend does not support images."); }
             using var provider = new ProviderExecutionScope("local");
             if (turn.ContinuingTaskTurnId == Guid.Empty) { _memory?.SetWorkingContext(new ConversationWorkingContext(turn.TurnId, turn.Prompt)); }
             else if (_memory?.WorkingContext.TurnId != turn.ContinuingTaskTurnId) { throw new OperationCanceledException("Original task was superseded by a new user turn.", cancellationToken); }
@@ -153,8 +158,19 @@ public sealed class LlamaLocalInferenceEngine : ILocalInferenceEngine, IAsyncDis
             LauraDiagnostics.Record("local.generate", Stopwatch.GetElapsedTime(began).TotalMilliseconds, amount: answer.Length, outcome: "completed");
             return (string?)answer.ToString();
         }
-        catch
+        catch (Exception error)
         {
+            if (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            { LastFailure = new(ConversationFailureKind.Timeout); _status = "timeout"; Interrupted?.Invoke(this, EventArgs.Empty); return null; }
+            LastFailure ??= error is OperationCanceledException ? null : new(_status switch
+            {
+                "context_exceeded" => ConversationFailureKind.ContextExceeded,
+                "integrity_failed" => ConversationFailureKind.LocalIntegrity,
+                "memory_pressure" => ConversationFailureKind.InsufficientMemory,
+                "missing" => ConversationFailureKind.ModelUnavailable,
+                "loading" or "load_failed" => ConversationFailureKind.Unavailable,
+                _ => ConversationFailureKind.InvalidResponse,
+            });
             if (generation.IsCancellationRequested) { _status = "cancelled"; }
             else if (_status is "ready" or "generating") { _status = "generation_failed"; }
             Interrupted?.Invoke(this, EventArgs.Empty); throw;

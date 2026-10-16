@@ -11,6 +11,19 @@ namespace Laura.Core.Tests.Engine;
 /// <summary>Checks natural app routing and privacy boundaries through the selected provider.</summary>
 public sealed class GeminiSkillDispatcherTests : IDisposable
 {
+    [Theory]
+    [InlineData("gemini")]
+    [InlineData("local")]
+    public async Task BothDispatchPathsPreserveTheFailureCauseAndUncertainEffects(string selected)
+    {
+        var conversation = new RecordingConversationEngine(true, null) { LastFailure = new(ConversationFailureKind.UsageLimit, true) };
+        var settings = new StubSettingsService(LauraSettings.Default with { GenerativeAi = new() { Provider = selected } });
+        var localizer = new StubLocalizer(); var user = new StubUserContext(); var memory = CreateMemory();
+        var local = new SkillDispatcher([], localizer, conversation, settings, user, Microsoft.Extensions.Logging.Abstractions.NullLogger<SkillDispatcher>.Instance, memory);
+        var dispatcher = new GeminiSkillDispatcher(conversation, settings, user, memory, localizer, local);
+        var answer = await dispatcher.DispatchAsync(SkillRequest.Create("Synthetic unrecognized request", CultureInfo.GetCultureInfo("pt-BR"), DateTimeOffset.UtcNow, SkillRequestSource.Text));
+        Assert.Equal("ui.ai.failure.usage ui.ai.failure.priorEffects", answer.SpokenText); Assert.Equal(1, conversation.CallCount);
+    }
     [Fact]
     public async Task LocalNativeCommandsWorkWithoutAnyModelOrCloudAndDoNotEnterGenerativeFallback()
     {

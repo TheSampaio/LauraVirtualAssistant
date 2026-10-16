@@ -81,6 +81,9 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
         && _settings.Current.GenerativeAi is { Enabled: true } options && (options.Provider == "gemini" || options is { Provider: "auto", AllowCloudFallback: true }) && !string.IsNullOrEmpty(_keys.Read());
     /// <summary>Gets verified image support for the two reviewed Live models. Unknown overrides never pretend to accept vision.</summary>
     public bool SupportsImages => IsAvailable && GeminiLiveOptions.HasVerifiedImageSupport(_settings.Current.GenerativeAi.Model);
+    /// <inheritdoc />
+    public ConversationFailure? LastFailure { get; private set; }
+    private long _toolDispatches;
     /// <summary>Gets a payload-free protocol failure category for troubleshooting, never a server error description or credential.</summary>
     public string LastFailureCategory => _session?.FailureCategory ?? "unavailable";
     /// <summary>Gets whether microphone audio is currently being sent to Google.</summary>
@@ -179,6 +182,9 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
         cancellationToken = operation.Token;
         await _requests.WaitAsync(cancellationToken).ConfigureAwait(false);
         Session? requestSession = null;
+        LastFailure = null;
+        long initialDispatches = Interlocked.Read(ref _toolDispatches);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         try
         {
             using var provider = new ProviderExecutionScope("gemini");
@@ -205,7 +211,6 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
             ReportStatus("Thinking");
             if (turn.Image is null) { await session.SendAsync(GeminiLiveProtocol.Text(turn, !session.HasHistory), cancellationToken).ConfigureAwait(false); }
             session.HasHistory = true;
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(_settings.Current.GenerativeAi.Timeout);
             string answer = await completion.Task.WaitAsync(timeout.Token).ConfigureAwait(false);
             for (int continuations = 0; _tools is not null && continuations < 4; continuations++)
@@ -235,9 +240,16 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
             _spokenAnswer = answer;
             return answer;
         }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeout.IsCancellationRequested)
+        { LastFailure = new(ConversationFailureKind.Timeout, Interlocked.Read(ref _toolDispatches) != initialDispatches); requestSession?.Abort(); return null; }
         catch (OperationCanceledException) { requestSession?.Abort(); throw; }
         catch (Exception exception) when (exception is WebSocketException or IOException or InvalidOperationException or JsonException)
-        { LauraDiagnostics.Record("provider.failure", outcome: exception.GetType().Name); requestSession?.Abort(); ReportStatus("Gemini connection failed. Check the key, network and model availability."); return null; }
+        {
+            LastFailure = (exception is GeminiConnectionException connection ? connection.Failure
+                : new ConversationFailure(exception is WebSocketException or IOException ? ConversationFailureKind.Network : ConversationFailureKind.InvalidResponse))
+                with { EffectsMayHaveRun = Interlocked.Read(ref _toolDispatches) != initialDispatches };
+            LauraDiagnostics.Record("provider.failure", outcome: LastFailure.Kind.ToString()); requestSession?.Abort(); ReportStatus("Ready"); return null;
+        }
         finally { if (IsThinking) { ReportStatus("Ready"); } _requests.Release(); }
     }
     /// <summary>Checks exact bytes/destination immediately around the network send for direct and tool-prepared visual turns.</summary>
@@ -611,6 +623,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     /// <summary>Runs one recognized skill directly so a tool cannot recursively invoke Gemini.</summary>
     private async Task<AssistantToolResult> ExecuteToolAsync(string name, JsonElement args, CancellationToken cancellationToken)
     {
+        Interlocked.Increment(ref _toolDispatches);
         using var provider = new ProviderExecutionScope("gemini");
         using var correlation = LauraDiagnostics.Correlate(_memory.WorkingContext.TurnId);
         using var measurement = LauraDiagnostics.Measure(_tools?.IsRegisteredTool(name) == true ? "tool." + name : "tool.unknown");
@@ -850,7 +863,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
             {
                 if (FailureCategory.Length == 0) { FailureCategory = exception.GetType().Name; }
                 _setup.TrySetException(exception is GeminiConnectionException ? exception : new InvalidOperationException("Gemini setup failed."));
-                Pending?.TrySetException(new InvalidOperationException("Gemini connection ended."));
+                Pending?.TrySetException(exception is GeminiConnectionException ? exception : new InvalidOperationException("Gemini connection ended."));
                 _status(_lifetime.IsCancellationRequested ? "Ready" : "Gemini disconnected. Send a message or start listening to reconnect.");
             }
             finally { _lifetime.Cancel(); }
@@ -864,7 +877,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
             {
                 int code = error.TryGetProperty("code", out JsonElement value) ? value.GetInt32() : 0;
                 FailureCategory = "remote_" + code.ToString(CultureInfo.InvariantCulture);
-                throw new GeminiConnectionException("Gemini rejected the session (" + code.ToString(CultureInfo.InvariantCulture) + ").", code is 404 or 429 or 503 or 504);
+                throw new GeminiConnectionException("Gemini rejected the session (" + code.ToString(CultureInfo.InvariantCulture) + ").", code is 404 or 429 or 503 or 504, ConversationFailure.FromHttp(code));
             }
             if (root.TryGetProperty("setupComplete", out _)) { _setup.TrySetResult(); }
             if (root.TryGetProperty("sessionResumptionUpdate", out JsonElement resume))
@@ -976,9 +989,11 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     }
 
     /// <summary>Identifies model availability errors without retaining server payloads.</summary>
-    private sealed class GeminiConnectionException(string message, bool retryable) : InvalidOperationException(message)
+    private sealed class GeminiConnectionException(string message, bool retryable, ConversationFailure? failure = null) : InvalidOperationException(message)
     {
         /// <summary>Gets whether trying the reviewed fallback is useful.</summary>
         public bool Retryable { get; } = retryable;
+        /// <summary>Gets metadata derived from a structured status, never from a remote free-form description.</summary>
+        public ConversationFailure Failure { get; } = failure ?? new(ConversationFailureKind.Network);
     }
 }

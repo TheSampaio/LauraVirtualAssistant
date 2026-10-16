@@ -189,7 +189,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
         string? answer = await _conversationEngine.AskAsync(turn, cancellationToken).ConfigureAwait(false);
 
         return string.IsNullOrWhiteSpace(answer)
-            ? SkillResponse.NotHandled
+            ? SkillResponse.Speak((_conversationEngine.LastFailure ?? new(ConversationFailureKind.Unknown)).Describe(_localizer))
             : SkillResponse.Speak(answer);
     }
 }

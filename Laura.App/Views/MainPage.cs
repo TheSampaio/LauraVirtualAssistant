@@ -218,8 +218,6 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _platform.Text = $"Windows · {Environment.OSVersion.Version.Build}";
         _devices.Text = DeviceSummary();
         string activeProvider = _services.GetRequiredService<ConversationProviderRouter>().ActiveProvider;
-        _provider.Text = activeProvider switch { "openai" => "GPT · " + _settings.Current.GenerativeAi.OpenAiModel,
-            "gemini" => "GEMINI LIVE · " + _settings.Current.GenerativeAi.LiveVoice, "local" => "LOCAL · " + _settings.Current.GenerativeAi.LocalModel, _ => _ui.Get("ui.models.noProvider") };
         _emptyTitle.Text = _ui.Get("ui.hud.ready"); _emptyHint.Text = _ui.Get("ui.hud.prompt");
         _shortcutHint.Text = _ui.Get(activeProvider is "local" or "gemini" ? "ui.hud.talkHint" : "ui.ai.textHint");
         ToolTipProperties.SetText(_shortcutHint, activeProvider is "local" or "gemini" ? _ui.Get("ui.maui.shortcutHelp") + "\n" + _ui.Get("ui.hud.hotkey") : _shortcutHint.Text);
@@ -243,6 +241,9 @@ public sealed partial class MainPage : ContentPage, IDisposable
         var localVoice = _services.GetRequiredService<LocalVoiceSession>();
         bool muted = _settings.Current.MicrophoneMuted, listening = _live.IsListening || localVoice.IsRunning;
         string activeProvider = _services.GetRequiredService<ConversationProviderRouter>().ActiveProvider;
+        string providerText = activeProvider switch { "openai" => "GPT · " + _settings.Current.GenerativeAi.OpenAiModel,
+            "gemini" => "GEMINI LIVE · " + _settings.Current.GenerativeAi.LiveVoice, "local" => "LOCAL · " + _settings.Current.GenerativeAi.LocalModel, _ => _ui.Get("ui.models.noProvider") };
+        if (_provider.Text != providerText) { _provider.Text = providerText; }
         bool voiceSupported = activeProvider is "gemini" or "local";
         _listen.IsEnabled = voiceSupported; _microphoneButton.IsEnabled = voiceSupported;
         string micAction = _ui.Get(muted ? "ui.hud.unmute" : "ui.hud.mute");

@@ -8,6 +8,10 @@ public sealed class RecordingLocalInferenceEngine : ILocalInferenceEngine
 {
     /// <inheritdoc />
     public bool IsAvailable { get; set; } = true;
+    /// <summary>Gets the synthetic local outcome; null represents a failed generation.</summary>
+    public string? Answer { get; init; } = "Synthetic local answer";
+    /// <inheritdoc />
+    public ConversationFailure? LastFailure { get; init; }
     /// <inheritdoc />
     public string Status => "ready";
     /// <inheritdoc />
@@ -28,5 +32,5 @@ public sealed class RecordingLocalInferenceEngine : ILocalInferenceEngine
     public Task ResetSessionAsync() => Task.CompletedTask;
     /// <inheritdoc />
     public Task<string?> AskAsync(ConversationTurn turn, CancellationToken cancellationToken = default)
-    { Calls++; LastTurn = turn; return Task.FromResult<string?>("Synthetic local answer"); }
+    { Calls++; LastTurn = turn; return Task.FromResult(Answer); }
 }

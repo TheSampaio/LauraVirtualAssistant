@@ -7,8 +7,8 @@ namespace Laura.Core.Abstractions;
 ///
 /// It is deliberately optional: the dispatcher only queries it after all
 /// skills reject the command, and the default implementation does nothing. This way
-/// Laura remains fully functional and offline, and connecting a local provider such
-/// as Ollama only means registering another implementation of this interface.
+/// deterministic commands remain available offline and embedded local inference
+/// can be registered independently of the cloud providers.
 /// </summary>
 public interface IConversationEngine
 {
@@ -18,6 +18,8 @@ public interface IConversationEngine
     bool IsAvailable { get; }
     /// <summary>Gets whether the selected reviewed model can receive explicitly authorized images.</summary>
     bool SupportsImages => false;
+    /// <summary>Gets safe metadata for the last serialized request failure, cleared by the next admitted request.</summary>
+    ConversationFailure? LastFailure => null;
 
     /// <summary>
     /// Requests an answer from the model.

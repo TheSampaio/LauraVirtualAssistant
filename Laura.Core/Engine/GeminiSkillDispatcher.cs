@@ -31,6 +31,6 @@ public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISet
         }
         string? answer = await conversation.AskAsync(new ConversationTurn(request.RawText, request.Culture, user.DisplayName)
         { TurnId = request.TurnId, ContinuingTaskTurnId = request.ContinuingTaskTurnId, History = history.Where(message => request.TurnId == Guid.Empty || message.TurnId != request.TurnId).TakeLast(8).ToArray(), Image = request.Image }, cancellationToken).ConfigureAwait(false);
-        return SkillResponse.Speak(string.IsNullOrWhiteSpace(answer) ? localizer.Get(LocalizationKeys.GenerativeAi.ProviderFailed) : answer);
+        return SkillResponse.Speak(string.IsNullOrWhiteSpace(answer) ? (conversation.LastFailure ?? new(ConversationFailureKind.Unknown)).Describe(localizer) : answer);
     }
 }

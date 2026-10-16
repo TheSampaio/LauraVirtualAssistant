@@ -25,6 +25,10 @@ public sealed class RecordingConversationEngine : IConversationEngine
 
     /// <inheritdoc />
     public bool IsAvailable { get; }
+    /// <inheritdoc />
+    public bool SupportsImages { get; init; }
+    /// <inheritdoc />
+    public ConversationFailure? LastFailure { get; init; }
 
     /// <summary>Gets how many times the engine was queried.</summary>
     public int CallCount { get; private set; }

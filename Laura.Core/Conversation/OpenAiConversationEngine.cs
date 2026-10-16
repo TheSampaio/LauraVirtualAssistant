@@ -31,6 +31,8 @@ public sealed class OpenAiConversationEngine(HttpClient http, ISettingsService s
     public bool IsAvailable { get { lock (_gate) { return !_disposed && !_resetting && settings.Current.GenerativeAi is { Enabled: true, Provider: "openai" } && !string.IsNullOrWhiteSpace(keys.Read()); } } }
     /// <inheritdoc />
     public bool SupportsImages => IsAvailable && Models.ProviderModelCompatibility.OpenAi(settings.Current.GenerativeAi.OpenAiModel).HasFlag(Models.ModelCapabilities.Images);
+    /// <inheritdoc />
+    public ConversationFailure? LastFailure { get; private set; }
     /// <summary>Validates a candidate without changing the protected credential or sending conversation data.</summary>
     public async Task ValidateCredentialAsync(string candidate, string model, CancellationToken token)
     {
@@ -43,16 +45,19 @@ public sealed class OpenAiConversationEngine(HttpClient http, ISettingsService s
     /// <inheritdoc />
     public async Task<string?> AskAsync(ConversationTurn turn, CancellationToken cancellationToken = default)
     {
+        using var deadline = new CancellationTokenSource();
         CancellationTokenSource operation;
         lock (_gate)
         {
             if (!IsAvailable) { return null; }
-            operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
+            operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token, deadline.Token);
         }
         using (operation)
         {
-            operation.CancelAfter(settings.Current.GenerativeAi.Timeout);
             await _requests.WaitAsync(operation.Token).ConfigureAwait(false);
+            deadline.CancelAfter(settings.Current.GenerativeAi.Timeout);
+            bool effectsMayHaveRun = false;
+            LastFailure = null;
             try
             {
                 using var provider = new ProviderExecutionScope("openai");
@@ -73,7 +78,7 @@ public sealed class OpenAiConversationEngine(HttpClient http, ISettingsService s
                 var registrations = new List<CancellationTokenRegistration>();
                 try
                 {
-                    if (turn.Image is not null) { if (!SupportsImages) { throw new InvalidOperationException("Model vision support unverified."); } AttachImage(input, images, turn.Image, turn.ImageMimeType); }
+                    if (turn.Image is not null) { if (!SupportsImages) { throw new ConversationProviderException(new(ConversationFailureKind.UnsupportedInput)); } AttachImage(input, images, turn.Image, turn.ImageMimeType); }
                     var visible = new StringBuilder();
                     var seenCalls = new HashSet<string>(StringComparer.Ordinal);
                     int calls = 0, continuations = 0;
@@ -101,6 +106,7 @@ public sealed class OpenAiConversationEngine(HttpClient http, ISettingsService s
                                 try
                                 {
                                     using var arguments = JsonDocument.Parse(call.GetProperty("arguments").GetString() ?? "{}");
+                                    effectsMayHaveRun = true;
                                     outcome = await tools.ExecuteAsync(name, arguments.RootElement, operation.Token).ConfigureAwait(false);
                                 }
                                 catch (Exception error) when (error is JsonException or ArgumentException or PermissionDeniedException or InvalidOperationException)
@@ -136,13 +142,22 @@ public sealed class OpenAiConversationEngine(HttpClient http, ISettingsService s
                         return answer;
                     }
                     LauraDiagnostics.Record("agent.limit", outcome: "openai_rounds");
+                    LastFailure = new(ConversationFailureKind.OperationLimit, effectsMayHaveRun);
                     Interrupted?.Invoke(this, EventArgs.Empty); return null;
                 }
                 finally { foreach (var registration in registrations) { registration.Dispose(); } }
             }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && !_lifetime.IsCancellationRequested && deadline.IsCancellationRequested)
+            { LastFailure = new(ConversationFailureKind.Timeout, effectsMayHaveRun); Interrupted?.Invoke(this, EventArgs.Empty); return null; }
             catch (OperationCanceledException) { Interrupted?.Invoke(this, EventArgs.Empty); throw; }
+            catch (ConversationProviderException error)
+            { LastFailure = error.Failure with { EffectsMayHaveRun = effectsMayHaveRun }; Interrupted?.Invoke(this, EventArgs.Empty); return null; }
             catch (Exception error) when (error is HttpRequestException or IOException or JsonException or InvalidOperationException or PermissionDeniedException or KeyNotFoundException)
-            { LauraDiagnostics.Record("provider.openai_failure", outcome: error.GetType().Name); Interrupted?.Invoke(this, EventArgs.Empty); return null; }
+            {
+                LastFailure = new(error is HttpRequestException ? ConversationFailureKind.Network : error is PermissionDeniedException
+                    ? ConversationFailureKind.AccessDenied : ConversationFailureKind.InvalidResponse, effectsMayHaveRun);
+                LauraDiagnostics.Record("provider.openai_failure", outcome: LastFailure.Kind.ToString()); Interrupted?.Invoke(this, EventArgs.Empty); return null;
+            }
             finally { _requests.Release(); }
         }
     }
@@ -177,7 +192,7 @@ public sealed class OpenAiConversationEngine(HttpClient http, ISettingsService s
             input, tools = FunctionDeclarations() });
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
         LauraDiagnostics.Record("provider.openai_http", amount: (int)response.StatusCode);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode) { throw new ConversationProviderException(await ReadFailureAsync(response, token).ConfigureAwait(false)); }
         await using var stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
         using var reader = new StreamReader(stream);
         var line = new StringBuilder(); var data = new StringBuilder();
@@ -225,9 +240,36 @@ public sealed class OpenAiConversationEngine(HttpClient http, ISettingsService s
                     if (visible.Length > 0) { visible.Append('\n'); }
                     return completed.Clone();
                 }
-                else if (type is "response.failed" or "response.incomplete" or "error") { throw new IOException("Responses generation failed."); }
+                else if (type is "response.failed" or "response.incomplete" or "error")
+                {
+                    JsonElement failure = item.TryGetProperty("response", out var failedResponse) ? failedResponse : item;
+                    var classified = ConversationFailure.FromHttp(0, failure.TryGetProperty("error", out var detail) ? detail : failure);
+                    throw new ConversationProviderException(classified.Kind == ConversationFailureKind.Unknown ? new(ConversationFailureKind.InvalidResponse) : classified);
+                }
             }
         }
+    }
+    /// <summary>Reads at most 16 KiB of structured error metadata, discarding messages and oversized bodies.</summary>
+    private static async Task<ConversationFailure> ReadFailureAsync(HttpResponseMessage response, CancellationToken token)
+    {
+        var fallback = ConversationFailure.FromHttp((int)response.StatusCode);
+        if (response.Content.Headers.ContentLength > 16 * 1024) { return fallback; }
+        await using var stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
+        byte[] bytes = new byte[16 * 1024 + 1]; int length = 0;
+        while (length < bytes.Length)
+        {
+            int read = await stream.ReadAsync(bytes.AsMemory(length), token).ConfigureAwait(false);
+            if (read == 0) { break; } length += read;
+        }
+        if (length == bytes.Length) { Array.Clear(bytes); return fallback; }
+        try
+        {
+            using var document = JsonDocument.Parse(bytes.AsMemory(0, length), new JsonDocumentOptions { MaxDepth = 12 });
+            return document.RootElement.ValueKind == JsonValueKind.Object && document.RootElement.TryGetProperty("error", out var error)
+                ? ConversationFailure.FromHttp((int)response.StatusCode, error) : fallback;
+        }
+        catch (JsonException) { return fallback; }
+        finally { Array.Clear(bytes); }
     }
     private object[] FunctionDeclarations()
     {

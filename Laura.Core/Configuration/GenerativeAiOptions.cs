@@ -19,7 +19,7 @@ public sealed record GenerativeAiOptions
     /// Gets the selected chat provider: gemini (native voice) or openai (GPT text).
     /// </summary>
     public string Provider { get; init; } = "auto";
-    /// <summary>Gets explicit permission for automatic mode to send conversation data to Gemini when local inference is unavailable. GPT still requires explicit selection.</summary>
+    /// <summary>Gets explicit permission for automatic mode to send conversation data to Gemini when local inference is unavailable or an explicitly attached image requires vision. GPT still requires explicit selection.</summary>
     public bool AllowCloudFallback { get; init; }
 
     /// <summary>
