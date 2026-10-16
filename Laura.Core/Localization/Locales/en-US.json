@@ -449,7 +449,7 @@
   "ui.state.connecting": "Connecting",
   "ui.maui.clapWake": "Wake on two claps",
   "ui.maui.clapSensitivity": "Clap sensitivity",
-  "ui.maui.clapPrivacy": "Two claps call LAURA and start listening. Detection is local and optional: wake audio is neither recorded nor sent. Keep the microphone unmuted; muting closes capture. Say 'that's all' to return to standby.",
+  "ui.maui.clapPrivacy": "Two claps call LAURA and start the selected local or Gemini voice conversation. Local mode requires the installed intelligence and Whisper models. Detection is local and optional: wake audio is neither recorded nor sent. Keep the microphone unmuted; muting or disabling this option closes capture. Say 'that's all' to return to standby.",
   "ui.hud.clapLocal": "Local clap detection · audio stays on this computer",
   "ui.hud.clapArmed": "Clap wake ready",
   "assistant.rest": ["Okay, just call me if you need anything else.","All right. I'll rest; I'm here when you need me.","See you! Call me whenever you need anything."],

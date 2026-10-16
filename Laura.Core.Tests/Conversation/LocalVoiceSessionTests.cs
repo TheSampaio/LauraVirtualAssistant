@@ -42,6 +42,35 @@ public sealed class LocalVoiceSessionTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => active); Assert.Empty(engine.ConversationHistory); Assert.False(session.IsRunning); Assert.False(session.IsCapturing);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MutingOrSwitchingProvidersClosesActiveLocalCaptureWithoutDispatch(bool mute)
+    {
+        var settings = Settings(); var input = new Input { Wait = true }; await using var engine = Engine(settings); await engine.StartAsync(); using var router = Router(settings);
+        await using var session = new LocalVoiceSession(input, engine, settings, router);
+        Task active = session.StartAsync(true, CancellationToken.None); await input.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await settings.UpdateAsync(mute ? settings.Current with { MicrophoneMuted = true }
+            : settings.Current with { GenerativeAi = settings.Current.GenerativeAi with { Provider = "gemini" } });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => active);
+        Assert.False(session.IsCapturing); Assert.False(session.IsRunning); Assert.Empty(engine.ConversationHistory);
+    }
+
+    [Theory]
+    [InlineData("pt-BR", "Isso é tudo.")]
+    [InlineData("en-US", "That's all.")]
+    public async Task ExactStandbyEndsContinuousLocalListeningBeforeAnyModelInvocation(string culture, string transcript)
+    {
+        var settings = Settings(); var input = new Input { Transcript = transcript };
+        var localizer = new Laura.Core.Localization.JsonLocalizer(Path.Combine(AppContext.BaseDirectory, "Localization", "Locales"), NullLogger<Laura.Core.Localization.JsonLocalizer>.Instance);
+        localizer.SetCulture(System.Globalization.CultureInfo.GetCultureInfo(culture));
+        await using var engine = Engine(settings); await engine.StartAsync(); using var router = Router(settings);
+        await using var session = new LocalVoiceSession(input, engine, settings, router, new ListeningControl(localizer));
+        await session.StartAsync(true, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, input.Calls); Assert.False(session.IsRunning); Assert.False(session.IsCapturing);
+        Assert.DoesNotContain(engine.ConversationHistory, message => message.Source == ConversationMessageSource.UserVoice);
+    }
+
     /// <summary>Creates explicitly unmuted synthetic settings with no cloud authorization or startup speech.</summary>
     private static StubSettingsService Settings(bool muted = false) => new(LauraSettings.Default with { MicrophoneMuted = muted, Culture = "pt-BR", GreetOnStartup = false, GenerativeAi = new() { Provider = "local" } });
     /// <summary>Creates the production queue around a silent deterministic skill.</summary>
@@ -61,6 +90,7 @@ public sealed class LocalVoiceSessionTests
         internal bool Wait { get; init; }
         internal string? Transcript { get; set; }
         internal string? Culture { get; private set; }
+        internal TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         /// <inheritdoc />
         public IReadOnlyList<string> Languages => ["pt-BR", "en-US"];
         /// <inheritdoc />
@@ -69,6 +99,6 @@ public sealed class LocalVoiceSessionTests
         public IReadOnlyList<AudioDevice> OutputDevices => [];
         /// <inheritdoc />
         public async Task<string?> RecognizeAsync(string culture, int device, CancellationToken stopRecording, CancellationToken cancellationToken)
-        { Calls++; Culture = culture; if (Wait) { await Task.Delay(Timeout.Infinite, cancellationToken); } return Transcript; }
+        { Calls++; Culture = culture; Entered.TrySetResult(); if (Wait) { await Task.Delay(Timeout.Infinite, cancellationToken); } return Transcript; }
     }
 }

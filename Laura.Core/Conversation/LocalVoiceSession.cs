@@ -4,7 +4,7 @@ namespace Laura.Core.Conversation;
 
 /// <summary>Coordinates explicitly started local recognition and queued replies, keeping capture closed during synthesis and inference.</summary>
 public sealed class LocalVoiceSession(ISpeechInput input, IAssistantEngine engine, ISettingsService settings,
-    ConversationProviderRouter router) : IAsyncDisposable
+    ConversationProviderRouter router, ListeningControl? listeningControl = null) : IAsyncDisposable
 {
     private readonly SemaphoreSlim _session = new(1, 1);
     private readonly object _gate = new();
@@ -22,6 +22,13 @@ public sealed class LocalVoiceSession(ISpeechInput input, IAssistantEngine engin
     {
         var operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         lock (_gate) { _active?.Cancel(); _active = operation; }
+        var original = settings.Current;
+        EventHandler<Configuration.LauraSettings> changed = (_, current) =>
+        {
+            if (current.MicrophoneMuted || current.GenerativeAi.Provider != original.GenerativeAi.Provider || current.InputDevice != original.InputDevice)
+            { try { operation.Cancel(); } catch (ObjectDisposedException) { } }
+        };
+        settings.Changed += changed;
         Volatile.Write(ref _running, 1); Changed?.Invoke(this, EventArgs.Empty);
         return Task.Run(async () =>
         {
@@ -38,11 +45,17 @@ public sealed class LocalVoiceSession(ISpeechInput input, IAssistantEngine engin
                     finally { Volatile.Write(ref _capturing, 0); Changed?.Invoke(this, EventArgs.Empty); }
                     operation.Token.ThrowIfCancellationRequested();
                     if (settings.Current.MicrophoneMuted || router.ActiveProvider != "local") { break; }
-                    if (!string.IsNullOrWhiteSpace(text)) { await engine.SubmitVoiceCommandAsync(text, operation.Token).ConfigureAwait(false); }
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        if (listeningControl?.IsRestRequest(text) == true)
+                        { await engine.SpeakAsync(listeningControl.RestConfirmation, operation.Token).ConfigureAwait(false); break; }
+                        await engine.SubmitVoiceCommandAsync(text, operation.Token).ConfigureAwait(false);
+                    }
                 } while (continuous && !operation.IsCancellationRequested);
             }
             finally
             {
+                settings.Changed -= changed;
                 lock (_gate)
                 { if (ReferenceEquals(_active, operation)) { _active = null; Volatile.Write(ref _capturing, 0); Volatile.Write(ref _running, 0); } }
                 if (entered) { _session.Release(); } Changed?.Invoke(this, EventArgs.Empty);

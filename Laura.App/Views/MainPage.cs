@@ -435,12 +435,17 @@ public sealed partial class MainPage : ContentPage, IDisposable
         if (_services.GetRequiredService<ConversationProviderRouter>().ActiveProvider != "gemini") { Notice(_ui.Get("ui.models.localTextOnly")); return; }
         if (_settings.Current.MicrophoneMuted) { await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync("Laura", _ui.Get("ui.maui.unmuteFirst"), "OK").ConfigureAwait(true); return; }
         if (_live.IsListening) { await _live.StopListeningAsync().ConfigureAwait(true); }
-        else { await _live.StartListeningAsync().ConfigureAwait(true); }
+        else
+        {
+            using var handoff = await _services.GetRequiredService<ClapWakeCoordinator>().SuspendAsync().ConfigureAwait(true);
+            await _live.StartListeningAsync().ConfigureAwait(true);
+        }
         Reload();
     }
     /// <summary>Stops microphone capture before persisting its muted state.</summary>
     public async Task ToggleMicrophoneAsync()
     {
+        using var handoff = await _services.GetRequiredService<ClapWakeCoordinator>().SuspendAsync().ConfigureAwait(true);
         _services.GetRequiredService<LocalVoiceSession>().Stop();
         if (!_settings.Current.MicrophoneMuted) { _holdLifetime?.Cancel(); await _clapListener.StopAsync().ConfigureAwait(true); await _live.StopListeningAsync().ConfigureAwait(true); }
         await _settings.UpdateAsync(_settings.Current with { MicrophoneMuted = !_settings.Current.MicrophoneMuted }).ConfigureAwait(true);
@@ -465,7 +470,11 @@ public sealed partial class MainPage : ContentPage, IDisposable
         if (_settings.Current.MicrophoneMuted) { _micStatus.Text = _ui.Get("ui.maui.unmuteFirst"); return; }
         _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); var capture = new CancellationTokenSource(); _holdLifetime = capture;
         CancellationToken token = capture.Token;
-        try { _live.Interrupt(); await _live.StopListeningAsync().ConfigureAwait(true); token.ThrowIfCancellationRequested(); await _live.StartListeningAsync(pushToTalk: true, cancellationToken: token).ConfigureAwait(true); }
+        try
+        {
+            using var handoff = await _services.GetRequiredService<ClapWakeCoordinator>().SuspendAsync().ConfigureAwait(true);
+            _live.Interrupt(); await _live.StopListeningAsync().ConfigureAwait(true); token.ThrowIfCancellationRequested(); await _live.StartListeningAsync(pushToTalk: true, cancellationToken: token).ConfigureAwait(true);
+        }
         catch (OperationCanceledException) { }
         catch (Exception) { _micStatus.Text = _ui.Get("ui.maui.liveFailed"); }
         Reload();
@@ -476,7 +485,11 @@ public sealed partial class MainPage : ContentPage, IDisposable
         if (_settings.Current.MicrophoneMuted || Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { return; }
         var local = _services.GetRequiredService<LocalVoiceSession>(); local.Stop();
         _command?.Cancel(); _services.GetRequiredService<ILocalInferenceEngine>().Cancel(); _engine.StopSpeaking();
-        try { await local.StartAsync(continuous, release).ConfigureAwait(true); }
+        try
+        {
+            using var handoff = await _services.GetRequiredService<ClapWakeCoordinator>().SuspendAsync().ConfigureAwait(true);
+            await local.StartAsync(continuous, release).ConfigureAwait(true);
+        }
         catch (OperationCanceledException) { }
         catch (Exception error) when (error is IOException or InvalidOperationException or NAudio.MmException)
         { Notice(_ui.Get("ui.models.localVoiceFailed")); }

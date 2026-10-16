@@ -393,7 +393,7 @@
   "ui.state.connecting": "Conectando",
   "ui.maui.clapWake": "Despertar por palmas",
   "ui.maui.clapSensitivity": "Sensibilidade das palmas",
-  "ui.maui.clapPrivacy": "Duas palmas chamam a LAURA e iniciam a escuta. A detecção é local e opcional: esse áudio não é gravado nem enviado. Mantenha o microfone habilitado; silenciar encerra a captura. Diga 'isso é tudo' para voltar ao modo normal.",
+  "ui.maui.clapPrivacy": "Duas palmas chamam a LAURA e iniciam a conversa por voz local ou Gemini selecionada. O modo local exige os modelos de inteligência e Whisper instalados. A detecção é local e opcional: esse áudio não é gravado nem enviado. Mantenha o microfone habilitado; silenciar ou desativar esta opção encerra a captura. Diga 'isso é tudo' para voltar ao repouso.",
   "ui.hud.clapLocal": "Palmas locais · áudio não enviado",
   "ui.hud.clapArmed": "Palmas ativas",
   "assistant.rest": ["Ok, se precisar de algo mais, é só chamar.","Tudo bem. Vou descansar; quando precisar, estou por aqui.","Até mais! É só me chamar se precisar."],
