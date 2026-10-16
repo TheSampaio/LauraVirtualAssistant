@@ -10,6 +10,22 @@ public sealed class ProviderModelCatalogTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "laura-provider-catalogue-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
+    public async Task StructuredGoogleInvalidKeyIsDistinguishedFromAProviderOutage()
+    {
+        using var transport = new Transport(); using var http = new HttpClient(transport); using var catalogue = new ProviderModelCatalog(http, _directory);
+        transport.Responses.Enqueue(new(HttpStatusCode.BadRequest) { Content = new StringContent("""{"error":{"details":[{"reason":"API_KEY_INVALID"}]}}""") });
+        var result = await catalogue.ListAsync("gemini", "synthetic-invalid-key");
+        Assert.Equal("invalid_credentials", result.Error); Assert.True(result.Stale); Assert.Empty(result.Models);
+    }
+    [Fact]
+    public void ReviewedDeprecationDoesNotInventTheStatusOfAnUnreviewedFutureModel()
+    {
+        Assert.True(ProviderModelCompatibility.IsDeprecated("gpt-4.1-nano"));
+        Assert.True(ProviderModelCompatibility.IsDeprecated("gpt-5-mini-2025-08-07"));
+        Assert.False(ProviderModelCompatibility.IsDeprecated("gpt-5.4-mini"));
+        Assert.False(ProviderModelCompatibility.IsDeprecated("future-model"));
+    }
+    [Fact]
     public async Task GeminiPaginatesAndNeverInfersLiveFromOrdinaryGenerationOrAnUnreviewedName()
     {
         using var transport = new Transport(); using var http = new HttpClient(transport);

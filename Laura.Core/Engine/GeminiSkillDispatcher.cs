@@ -1,19 +1,28 @@
 using Laura.Core.Abstractions;
 using Laura.Core.Conversation;
 using Laura.Core.Skills;
+using Laura.Core.Localization;
 
 namespace Laura.Core.Engine;
 
 /// <summary>Routes natural-language requests through the selected provider and its shared native tools.</summary>
 public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISettingsService settings, IUserContext user,
-    IConversationMemory memory, ILocalizer localizer) : ISkillDispatcher
+    IConversationMemory memory, ILocalizer localizer, SkillDispatcher? localDispatcher = null) : ISkillDispatcher
 {
+    private bool UseLocalDispatcher => localDispatcher is not null && (settings.Current.GenerativeAi.Provider == "local"
+        || settings.Current.GenerativeAi.Provider == "auto" && (conversation as ConversationProviderRouter)?.ActiveProvider != "gemini");
     /// <inheritdoc />
-    public bool CanUseGenerativeFallback(SkillRequest request) => conversation.IsAvailable;
+    public bool CanUseGenerativeFallback(SkillRequest request) => UseLocalDispatcher ? localDispatcher!.CanUseGenerativeFallback(request) : conversation.IsAvailable;
     /// <inheritdoc />
     public async Task<SkillResponse> DispatchAsync(SkillRequest request, CancellationToken cancellationToken = default)
     {
-        if (!conversation.IsAvailable) { return SkillResponse.Speak(localizer.Get(settings.Current.GenerativeAi.Provider is "local" or "auto" ? "ui.models.noProvider" : "ui.ai.configureProvider")); }
+        if (UseLocalDispatcher)
+        {
+            SkillResponse native = await localDispatcher!.DispatchAsync(request, cancellationToken).ConfigureAwait(false);
+            return !native.Handled && settings.Current.GenerativeAi.Enabled && !conversation.IsAvailable
+                ? SkillResponse.Speak(localizer.Get(LocalizationKeys.GenerativeAi.NoProvider)) : native;
+        }
+        if (!conversation.IsAvailable) { return SkillResponse.Speak(localizer.Get(settings.Current.GenerativeAi.Provider is "local" or "auto" ? LocalizationKeys.GenerativeAi.NoProvider : LocalizationKeys.GenerativeAi.ConfigureProvider)); }
         IReadOnlyList<ConversationMessage> history = [];
         if (settings.Current.RememberConversations)
         {
@@ -22,6 +31,6 @@ public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISet
         }
         string? answer = await conversation.AskAsync(new ConversationTurn(request.RawText, request.Culture, user.DisplayName)
         { TurnId = request.TurnId, History = history.Where(message => request.TurnId == Guid.Empty || message.TurnId != request.TurnId).TakeLast(8).ToArray(), Image = request.Image }, cancellationToken).ConfigureAwait(false);
-        return SkillResponse.Speak(string.IsNullOrWhiteSpace(answer) ? localizer.Get("ui.ai.providerFailed") : answer);
+        return SkillResponse.Speak(string.IsNullOrWhiteSpace(answer) ? localizer.Get(LocalizationKeys.GenerativeAi.ProviderFailed) : answer);
     }
 }

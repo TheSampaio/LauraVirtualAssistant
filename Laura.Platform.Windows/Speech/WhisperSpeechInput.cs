@@ -30,6 +30,7 @@ public sealed class WhisperSpeechInput(ILocalModelManager models, ISettingsServi
     {
         if (settings.Current.MicrophoneMuted || stopRecording.IsCancellationRequested) { return null; }
         cancellationToken.ThrowIfCancellationRequested();
+        if (!File.Exists(models.GetModelPath(SupportedModels.Speech.Id))) { throw new FileNotFoundException("Install multilingual Whisper Base before opening local speech capture."); }
         var detector = new SpeechTurnDetector(Math.Max(1000, settings.Current.GenerativeAi.SilenceDurationMs));
         using var audio = new MemoryStream(); using var capture = new WaveInEvent { DeviceNumber = device, WaveFormat = new WaveFormat(16000, 16, 1), BufferMilliseconds = 20 };
         var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

@@ -37,17 +37,26 @@ internal static class LocalModelSmoke
         Console.WriteLine("Starting native synthetic generation.");
         string? answer = await inference.AskAsync(new("Answer only with the number: what is 2 + 2?", CultureInfo.GetCultureInfo("en-US"), "Synthetic tester") { TurnId = Guid.NewGuid() }, cancellationToken);
         double generateMs = watch.Elapsed.TotalMilliseconds;
+        int answerChunks = streamed;
         if (string.IsNullOrWhiteSpace(answer) || !answer.Contains('4') || answer.Contains("<think>", StringComparison.Ordinal) || streamed == 0)
         { throw new InvalidOperationException("Local generation did not produce a verified visible streamed answer."); }
+        string oldText = string.Concat(Enumerable.Repeat("Previous synthetic narrative. ", 1500));
+        var history = Enumerable.Range(0, 8).Select(index => new ConversationMessage(index % 2 == 0 ? ConversationMessageSource.UserTyped : ConversationMessageSource.Assistant, oldText, DateTimeOffset.UtcNow)).ToArray();
+        string? afterTrimming = await inference.AskAsync(new("Answer only with the number: what is 2 + 2?", CultureInfo.GetCultureInfo("en-US"), "Synthetic tester") { History = history }, cancellationToken);
+        if (afterTrimming is null || !afterTrimming.Contains('4')) { throw new InvalidOperationException("Whole-history trimming lost the current request."); }
+        bool contextRejected = false;
+        try { await inference.AskAsync(new(string.Concat(Enumerable.Repeat(" oversized", 10000)), CultureInfo.GetCultureInfo("en-US"), "Synthetic tester"), cancellationToken); }
+        catch (InvalidOperationException) when (inference.Status == "context_exceeded") { contextRejected = true; }
+        if (!contextRejected) { throw new InvalidOperationException("Oversized current input was not rejected with its actual context category."); }
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); cancel.CancelAfter(300);
         bool cancellationObserved = false;
         try { await inference.AskAsync(new("Write a very long story about a synthetic red reactor.", CultureInfo.GetCultureInfo("en-US"), "Synthetic tester"), cancel.Token); }
         catch (OperationCanceledException) { cancellationObserved = true; }
         if (!cancellationObserved) { throw new InvalidOperationException("Local generation cancellation was not observed."); }
         using var process = Process.GetCurrentProcess(); process.Refresh();
-        var benchmark = new { artifact = SupportedModels.Intelligence, hardware, loadMs, generateMs, firstTokenMs, streamedChunks = streamed,
+        var benchmark = new { artifact = SupportedModels.Intelligence, hardware, loadMs, generateMs, firstTokenMs, streamedChunks = answerChunks,
             answerCharacters = answer.Length, privateBytes = process.PrivateMemorySize64, peakWorkingSetBytes = process.PeakWorkingSet64,
-            cpuOnly = true, gpuMeasurements = "not available: no GPU backend tested", cancellationObserved };
+            cpuOnly = true, gpuMeasurements = "not available: no GPU backend tested", cancellationObserved, wholeHistoryTrimmingVerified = true, oversizedInputRejected = contextRejected };
         await File.WriteAllTextAsync(Path.Combine(directory, "local-benchmark.json"), JsonSerializer.Serialize(benchmark, new JsonSerializerOptions { WriteIndented = true }), cancellationToken);
         await inference.UnloadAsync(cancellationToken);
         if (inference.LoadedModel is not null || inference.Status != "unloaded") { throw new InvalidOperationException("Native model did not unload."); }

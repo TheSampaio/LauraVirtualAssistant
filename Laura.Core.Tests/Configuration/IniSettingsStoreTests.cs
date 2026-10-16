@@ -8,6 +8,14 @@ namespace Laura.Core.Tests.Configuration;
 /// </summary>
 public sealed class IniSettingsStoreTests : IDisposable
 {
+    [Fact]
+    public async Task LocalModelContextAndCloudConsentRoundTripWithoutChangingExplicitProviderSelection()
+    {
+        var options = new GenerativeAiOptions { Provider = "openai", OpenAiModel = "o3", AllowCloudFallback = true,
+            LocalModel = "qwen2.5-0.5b-instruct-q4_k_m", LocalContextTokens = 2048 }.Sanitized();
+        var store = CreateStore(); await store.SaveAsync(LauraSettings.Default with { GenerativeAi = options });
+        Assert.Equal(options, (await store.LoadAsync()).GenerativeAi);
+    }
     private readonly string _filePath = Path.Combine(
         Path.GetTempPath(),
         $"laura-test-{Guid.NewGuid():N}.ini");

@@ -68,7 +68,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (request.Source == SkillRequestSource.Context)
+        if (request.Source == SkillRequestSource.Context || request.Image is not null)
         { return await AskConversationEngineAsync(request, cancellationToken).ConfigureAwait(false); }
 
         IReadOnlyList<string>? steps = CommandSequence.Parse(request.RawText, _localizer.GetPhrases("phrases.sequencePrefix"));
@@ -101,7 +101,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
 
             if (response.Handled)
             {
-                _logger.LogInformation("Command \"{Command}\" handled by {Skill}.", request.RawText, skill.Id);
+                _logger.LogInformation("Local command handled by {Skill}.", skill.Id);
                 return response;
             }
         }
@@ -116,7 +116,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
 
         return _settings.Current.GenerativeAi.Enabled
             && _conversationEngine.IsAvailable
-            && (request.Source == SkillRequestSource.Context || !_skills.Any(skill => skill.CanHandle(request)));
+            && (request.Source == SkillRequestSource.Context || request.Image is not null || !_skills.Any(skill => skill.CanHandle(request)));
     }
 
     /// <summary>
@@ -148,7 +148,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Skill {Skill} failed while handling \"{Command}\".", skill.Id, request.RawText);
+            _logger.LogError("Skill {Skill} failed ({ErrorType}).", skill.Id, exception.GetType().Name);
             return SkillResponse.Speak(_localizer.Get(LocalizationKeys.Assistant.SkillFailed));
         }
     }
@@ -170,21 +170,19 @@ public sealed class SkillDispatcher : ISkillDispatcher
     {
         if (!_settings.Current.GenerativeAi.Enabled || !_conversationEngine.IsAvailable)
         {
-            _logger.LogInformation("No skill recognized \"{Command}\".", request.RawText);
+            _logger.LogInformation("No native skill recognized the request ({Characters} characters).", request.RawText.Length);
             return SkillResponse.NotHandled;
         }
 
-        var turn = new ConversationTurn(request.RawText, request.Culture, _userContext.DisplayName);
+        if (request.Image is not null && !_conversationEngine.SupportsImages)
+        { return SkillResponse.Speak(_localizer.Get(LocalizationKeys.GenerativeAi.ImagesUnsupported)); }
+        var turn = new ConversationTurn(request.RawText, request.Culture, _userContext.DisplayName) { TurnId = request.TurnId, Image = request.Image };
         if (_memory is not null && _settings.Current.RememberConversations)
         {
             try
             {
-                var history = _memory.ReadRecent(8).ToList();
-                if (history.LastOrDefault() is { Source: ConversationMessageSource.UserTyped } last && last.Text == request.RawText)
-                {
-                    history.RemoveAt(history.Count - 1);
-                }
-                turn = turn with { History = history, Memories = [.. _memory.Search("").Take(3).Select(static fact => fact.Text)] };
+                var history = _memory.ReadRecent(9).Where(message => request.TurnId == Guid.Empty || message.TurnId != request.TurnId).TakeLast(8).ToArray();
+                turn = turn with { History = history };
             }
             catch (Exception exception) { _logger.LogWarning(exception, "Context memory unavailable."); }
         }

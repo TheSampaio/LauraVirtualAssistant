@@ -32,13 +32,14 @@ public sealed class WindowsOfflineSpeechSynthesizer : ISpeechSynthesizer
             synthesis.Voice = NativeSpeech.AllVoices.Where(voice => voice.Language.Equals(request.Culture, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(voice => voice.Gender == VoiceGender.Female).FirstOrDefault()
                 ?? throw new InvalidOperationException("Install a Windows speech voice for the configured conversation language before using offline speech.");
+            synthesis.Options.SpeakingRate = 1 + request.Voice.Rate * .05;
+            synthesis.Options.AudioPitch = 1 + request.Voice.Pitch * .03;
             using var audio = await synthesis.SynthesizeTextToStreamAsync(request.Text).AsTask(operation.Token).ConfigureAwait(false);
             using var stream = audio.AsStreamForRead(); using var wave = new WaveFileReader(stream);
             using var player = new WaveOutEvent { DeviceNumber = request.OutputDevice, Volume = request.Voice.Volume / 100f, DesiredLatency = 120 };
             var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             player.PlaybackStopped += (_, result) => { if (result.Exception is { } error) { completed.TrySetException(error); } else { completed.TrySetResult(); } };
             player.Init(wave); Volatile.Write(ref _speaking, 1);
-            using var cancelled = operation.Token.Register(player.Stop);
             operation.Token.ThrowIfCancellationRequested(); player.Play();
             await completed.Task.WaitAsync(operation.Token).ConfigureAwait(false); operation.Token.ThrowIfCancellationRequested();
         }

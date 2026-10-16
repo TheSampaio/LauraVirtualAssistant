@@ -80,14 +80,16 @@ public static class ServiceConfiguration
             new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, SupportedModels.All));
         services.AddSingleton<LlamaLocalInferenceEngine>();
         services.AddSingleton<ILocalInferenceEngine>(provider => provider.GetRequiredService<LlamaLocalInferenceEngine>());
-        services.AddSingleton<IProviderModelCatalog>(provider => new ProviderModelCatalog(new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan },
-            Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "ModelCatalog")));
+        services.AddSingleton<IProviderModelCatalog>(provider => Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)
+            ? new UiSmokeModelCatalog()
+            : new ProviderModelCatalog(new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan },
+                Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "ModelCatalog")));
         services.AddSingleton(provider => new PermissionStore(Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Security", "permissions.json")));
         services.AddSingleton(provider => new PermissionManager(provider.GetRequiredService<PermissionStore>(),
             () => provider.GetRequiredService<ISettingsService>().Current.Permissions,
             () => new[] { provider.GetRequiredService<AssistantStorage>().Directory,
                 provider.GetRequiredService<ISettingsService>().Current.Brain.Directory }.Where(path => !string.IsNullOrWhiteSpace(path)),
-            Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Workspace")));
+            Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Workspace"), provider.GetRequiredService<IUiLocalizer>()));
         services.AddSingleton<SqliteConversationMemory>(_ => new SqliteConversationMemory(
             Path.Combine(Path.GetDirectoryName(settingsPath)!, "memory.db")));
         services.AddSingleton<IBrainEmbedding, OnnxBrainEmbedding>();
@@ -154,6 +156,7 @@ public static class ServiceConfiguration
         services.AddSingleton<GreetingComposer>();
 
         AddSkills(services);
+        services.AddSingleton<SkillDispatcher>();
         services.AddSingleton<ISkillDispatcher, GeminiSkillDispatcher>();
 
         services.AddSingleton<IAssistantEngine, AssistantEngine>();

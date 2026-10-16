@@ -11,6 +11,21 @@ namespace Laura.Core.Tests.Engine;
 /// <summary>Checks natural app routing and privacy boundaries through the selected provider.</summary>
 public sealed class GeminiSkillDispatcherTests : IDisposable
 {
+    [Fact]
+    public async Task LocalNativeCommandsWorkWithoutAnyModelOrCloudAndDoNotEnterGenerativeFallback()
+    {
+        var conversation = new RecordingConversationEngine(false, null);
+        var settings = new StubSettingsService(LauraSettings.Default with { GenerativeAi = new() { Provider = "local" } });
+        var skill = new FakeSkill("native-fixture", 1, "native command", SkillResponse.Speak("Observed native result"));
+        var localizer = new StubLocalizer(); var user = new StubUserContext(); var memory = CreateMemory();
+        var local = new SkillDispatcher([skill], localizer, conversation, settings, user, Microsoft.Extensions.Logging.Abstractions.NullLogger<SkillDispatcher>.Instance, memory);
+        var dispatcher = new GeminiSkillDispatcher(conversation, settings, user, memory, localizer, local);
+        var request = SkillRequest.Create("native command", CultureInfo.GetCultureInfo("pt-BR"), DateTimeOffset.UtcNow, SkillRequestSource.Text);
+        Assert.False(dispatcher.CanUseGenerativeFallback(request));
+        Assert.Equal("Observed native result", (await dispatcher.DispatchAsync(request)).SpokenText); Assert.Equal(1, skill.ExecutionCount); Assert.Equal(0, conversation.CallCount);
+        var unknown = request with { RawText = "unrecognized request", NormalizedText = "unrecognized request" };
+        Assert.Equal("ui.models.noProvider", (await dispatcher.DispatchAsync(unknown)).SpokenText); Assert.Equal(0, conversation.CallCount);
+    }
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "laura-dispatch-" + Guid.NewGuid().ToString("N"));
     /// <summary>Provides actual bounded SQLite history for dispatch integration checks.</summary>
     private SqliteConversationMemory CreateMemory()

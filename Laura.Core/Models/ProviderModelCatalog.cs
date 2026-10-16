@@ -44,6 +44,8 @@ public sealed class ProviderModelCatalog(HttpClient http, string cacheDirectory,
                     else { request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credential); }
                     using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
                     if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) { throw new ListingException("invalid_credentials"); }
+                    if (response.StatusCode == HttpStatusCode.BadRequest)
+                    { throw new ListingException(provider == "gemini" && await InvalidGoogleCredentialAsync(response.Content, timeout.Token).ConfigureAwait(false) ? "invalid_credentials" : "invalid_request"); }
                     if (response.StatusCode == HttpStatusCode.TooManyRequests) { throw new ListingException("rate_limit"); }
                     if (!response.IsSuccessStatusCode) { throw new ListingException("provider_unavailable"); }
                     await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
@@ -64,7 +66,8 @@ public sealed class ProviderModelCatalog(HttpClient http, string cacheDirectory,
                             ? operations.EnumerateArray().Where(method => method.ValueKind == JsonValueKind.String).Select(method => method.GetString()!).ToHashSet(StringComparer.Ordinal) : [];
                         ModelCapabilities capabilities = provider == "gemini" ? ProviderModelCompatibility.Gemini(id, methods) : ProviderModelCompatibility.OpenAi(id);
                         int? context = item.TryGetProperty("inputTokenLimit", out var limit) && limit.TryGetInt32(out int tokens) && tokens > 0 ? tokens : null;
-                        bool deprecated = item.TryGetProperty("deprecated", out var retirement) && retirement.ValueKind == JsonValueKind.True;
+                        bool deprecated = item.TryGetProperty("deprecated", out var retirement) && retirement.ValueKind == JsonValueKind.True
+                            || provider == "openai" && ProviderModelCompatibility.IsDeprecated(id);
                         models[id] = new(id, name, capabilities, context, deprecated);
                         if (models.Count > 5000) { throw new ListingException("invalid_response"); }
                     }
@@ -104,6 +107,23 @@ public sealed class ProviderModelCatalog(HttpClient http, string cacheDirectory,
     /// <summary>Returns only the last complete valid catalogue, explicitly marked stale after refresh failure.</summary>
     private static ProviderModelCatalogue Stale(ProviderModelCatalogue? cached, string provider, string category) => cached is null
         ? new(provider, [], null, true, category) : cached with { Stale = true, Error = category };
+    /// <summary>Recognizes bounded structured Google authentication errors without retaining or logging the remote error body.</summary>
+    private static async Task<bool> InvalidGoogleCredentialAsync(HttpContent content, CancellationToken cancellationToken)
+    {
+        if (content.Headers.ContentLength > 16384) { return false; }
+        await using var stream = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var bytes = new MemoryStream(); byte[] buffer = new byte[2048]; int read;
+        while ((read = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+        { if (bytes.Length + read > 16384) { return false; } await bytes.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false); }
+        try
+        {
+            using var document = JsonDocument.Parse(bytes.ToArray(), new JsonDocumentOptions { MaxDepth = 16 });
+            if (!document.RootElement.TryGetProperty("error", out var error) || !error.TryGetProperty("details", out var details) || details.ValueKind != JsonValueKind.Array) { return false; }
+            return details.EnumerateArray().Any(detail => detail.ValueKind == JsonValueKind.Object && detail.TryGetProperty("reason", out var reason)
+                && reason.ValueKind == JsonValueKind.String && reason.GetString() is "API_KEY_INVALID" or "API_KEY_EXPIRED");
+        }
+        catch (Exception error) when (error is JsonException or InvalidOperationException) { return false; }
+    }
     /// <inheritdoc />
     public void Dispose() { _requests.Dispose(); http.Dispose(); }
 }

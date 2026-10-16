@@ -12,6 +12,15 @@ namespace Laura.Core.Tests.Engine;
 /// </summary>
 public sealed class SkillDispatcherTests
 {
+    [Fact]
+    public async Task UnsupportedImageCannotBeDroppedOrInterpretedAsANativeCommand()
+    {
+        var skill = new FakeSkill("native", 1, "native command", SkillResponse.Speak("Must not execute"));
+        var conversation = new RecordingConversationEngine(true, "Must not receive unsupported image");
+        var dispatcher = CreateDispatcher([skill], conversation, true);
+        SkillResponse response = await dispatcher.DispatchAsync(CommandFor("native command") with { Image = [1, 2, 3] });
+        Assert.Equal("ui.models.imagesUnsupported", response.SpokenText); Assert.Equal(0, skill.ExecutionCount); Assert.Equal(0, conversation.CallCount);
+    }
     private static SkillRequest CommandFor(string text) => SkillRequest.Create(
         text,
         CultureInfo.GetCultureInfo("en-US"),
