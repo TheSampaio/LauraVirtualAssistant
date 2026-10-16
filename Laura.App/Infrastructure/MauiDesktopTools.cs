@@ -17,10 +17,11 @@ public sealed class MauiDesktopTools(IUiLocalizer ui, ILocalizer conversation, U
         PermissionOperation operation = action switch
         {
             DesktopAction.ReadClipboard => PermissionOperation.ClipboardCloud, DesktopAction.CaptureScreen => PermissionOperation.Internal,
-            DesktopAction.SaveNote => PermissionOperation.FileWrite, DesktopAction.Undo => PermissionOperation.Undo,
+            DesktopAction.SaveNote => PermissionOperation.WorkspaceNote, DesktopAction.Undo => PermissionOperation.Undo,
             DesktopAction.ListFiles => PermissionOperation.Internal, _ => PermissionOperation.Unknown
         };
         try { return await permissions.ExecuteAsync(new(operation, "Local desktop command", ui.Get("ui.tools.confirm." + action),
+            resources: action == DesktopAction.SaveNote ? [files.RootDirectory] : [],
             parameters: note ?? "", destination: action == DesktopAction.ReadClipboard ? MauiToolPermissions.CloudDestination : ""),
             token => ExecuteAuthorizedAsync(action, note, token), cancellationToken).ConfigureAwait(false); }
         catch (PermissionDeniedException) { return conversation.Get("tools.denied"); }

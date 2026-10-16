@@ -218,6 +218,11 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             return result;
         }
         catch (PermissionDeniedException) { return new("Operation denied by local authorization. The denied effect was not dispatched; do not retry through another tool.") { Failed = true, Status = "blocked" }; }
+        catch (System.ComponentModel.Win32Exception error)
+        {
+            Laura.Core.Diagnostics.LauraDiagnostics.Record("tool.windows_failure", amount: error.NativeErrorCode, outcome: "win32");
+            return new("Native Windows adapter failed (Win32 " + error.NativeErrorCode.ToString(System.Globalization.CultureInfo.InvariantCulture) + "). No successful execution or goal completion was verified.") { Failed = true, Status = "failed" };
+        }
         catch (BrainSourceException error) { return new(error.Message) { Failed = true }; }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or JsonException or InvalidOperationException)
         { return new("Invalid or protected operation: " + error.GetType().Name + ". Do not claim success.") { Failed = true }; }

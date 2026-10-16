@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 // Explicit smoke tests use isolated storage and never open the microphone.
 if (args.Length > 0 && args[0] == "--process-fixture") { return CommandSmoke.RunFixture(args[1..]); }
+if (args.Length > 0 && args[0] == "--window-fixture") { return ApplicationCloseSmoke.RunFixture(args.Length > 1 && args[1] == "hold"); }
 if (args.Length == 2 && args[0] == "--inspect-gui-policy")
 {
     using var image = File.OpenRead(args[1]);
@@ -27,6 +28,8 @@ using var settings = new SettingsService(new IniSettingsStore(Path.Combine(direc
 await settings.LoadAsync(timeout.Token);
 var memory = new SqliteConversationMemory(Path.Combine(directory, "memory.db"));
 memory.Initialize();
+if (args.Contains("--application-close-smoke", StringComparer.Ordinal))
+{ await ApplicationCloseSmoke.RunAsync(timeout.Token); return 0; }
 if (args.Contains("--offline-voice-smoke", StringComparer.Ordinal))
 { await OfflineVoiceSmoke.RunAsync(directory, args.Contains("--download", StringComparer.Ordinal), timeout.Token); return 0; }
 if (args.Contains("--local-model-smoke", StringComparer.Ordinal))

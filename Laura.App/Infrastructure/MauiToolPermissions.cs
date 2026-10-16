@@ -35,7 +35,8 @@ internal static class MauiToolPermissions
             "computer_settings" when action is "lock" or "show_desktop" or "minimize" or "maximize" or "wallpaper" or "dark_mode" or "light_mode" or "shutdown" or "restart" => PermissionOperation.SystemSettings,
             "file_control" => action switch
             {
-                "list" or "search" or "info" or "open" => PermissionOperation.Internal,
+                "open" => PermissionOperation.Internal,
+                "list" or "search" or "info" => ProviderExecutionScope.Destination.Length == 0 ? PermissionOperation.FileReadLocal : PermissionOperation.FileReadCloud,
                 "read" => ProviderExecutionScope.Destination.Length == 0 ? PermissionOperation.FileReadLocal : PermissionOperation.FileReadCloud, "write" => PermissionOperation.FileWrite,
                 "mkdir" => PermissionOperation.FileCreateDirectory, "copy" => PermissionOperation.FileCopy,
                 "move" => PermissionOperation.FileMove, "delete" => PermissionOperation.FileTrash,

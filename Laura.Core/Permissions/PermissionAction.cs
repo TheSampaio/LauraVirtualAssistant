@@ -63,7 +63,9 @@ public enum PermissionOperation
     /// <summary>Ask an identity-pinned application window to close normally; unsaved state may require user interaction.</summary>
     ApplicationClose,
     /// <summary>Review a temporary task workspace and its explicit disclosure recipient.</summary>
-    WorkspaceAuthorization
+    WorkspaceAuthorization,
+    /// <summary>Create a generated plain-text note in Laura's fixed workspace without accepting a caller-supplied filename.</summary>
+    WorkspaceNote
 }
 
 /// <summary>Immutable execution identity constructed by trusted adapters, never deserialized from a model.</summary>

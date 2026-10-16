@@ -15,7 +15,7 @@ public static class PermissionPolicy
         PermissionOperation.WindowManagement when action.AutomaticEligible && action.Resources.Length == 0 && action.Destination.Length == 0 => PermissionRisk.Moderate,
         PermissionOperation.WorkspaceAuthorization when action.Destination.Length > 0 => PermissionRisk.Critical,
         PermissionOperation.FileWrite when action.Resources.Length == 1 && DataExtensions.Contains(Path.GetExtension(action.Resources[0])) => PermissionRisk.Moderate,
-        PermissionOperation.FileCreateDirectory or PermissionOperation.ClipboardWrite or PermissionOperation.LocalCapture or PermissionOperation.ScreenshotExport or PermissionOperation.BrainAttachment => PermissionRisk.Moderate,
+        PermissionOperation.WorkspaceNote or PermissionOperation.FileCreateDirectory or PermissionOperation.ClipboardWrite or PermissionOperation.LocalCapture or PermissionOperation.ScreenshotExport or PermissionOperation.BrainAttachment => PermissionRisk.Moderate,
         PermissionOperation.ApplicationLaunch when action.Resources.Length == 1 && action.Destination.Length == 0 => PermissionRisk.Moderate,
         PermissionOperation.FileCopy or PermissionOperation.FileMove or PermissionOperation.FileTrash => PermissionRisk.High,
         PermissionOperation.Process when action.Destination.Length > 0 => PermissionRisk.Critical,
@@ -32,7 +32,7 @@ public static class PermissionPolicy
         if (action.Operation == PermissionOperation.WindowManagement) { return action.AutomaticEligible; }
         if (action.Operation == PermissionOperation.ApplicationLaunch) { return options.OpenInstalledApplications && action.AutomaticEligible; }
         return workspaceRoot is not null && action.Resources.Length == 1 && Within(action.Resources[0], workspaceRoot)
-            && !SensitivePath(action.Resources[0]) && action.Operation is PermissionOperation.FileReadLocal or PermissionOperation.FileWrite or PermissionOperation.FileCreateDirectory;
+            && !SensitivePath(action.Resources[0]) && action.Operation is PermissionOperation.FileReadLocal or PermissionOperation.FileWrite or PermissionOperation.FileCreateDirectory or PermissionOperation.WorkspaceNote;
     }
     /// <summary>Identifies policy, credential and security files that cannot inherit automatic workspace capabilities.</summary>
     public static bool SensitivePath(string path)
@@ -85,7 +85,7 @@ public static class PermissionPolicy
                 if ((File.Exists(current) || Directory.Exists(current)) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
                 { throw new PermissionDeniedException("Redirected resources are not supported."); }
             }
-            if (action.Operation is PermissionOperation.FileWrite or PermissionOperation.FileCreateDirectory or PermissionOperation.FileCopy or PermissionOperation.FileMove or PermissionOperation.FileTrash or PermissionOperation.ScreenshotExport or PermissionOperation.WorkspaceAuthorization)
+            if (action.Operation is PermissionOperation.FileWrite or PermissionOperation.FileCreateDirectory or PermissionOperation.FileCopy or PermissionOperation.FileMove or PermissionOperation.FileTrash or PermissionOperation.ScreenshotExport or PermissionOperation.WorkspaceAuthorization or PermissionOperation.WorkspaceNote)
             {
                 if (Path.TrimEndingDirectorySeparator(path) == Path.TrimEndingDirectorySeparator(Path.GetPathRoot(path)!))
                 { throw new PermissionDeniedException("Filesystem roots are protected."); }

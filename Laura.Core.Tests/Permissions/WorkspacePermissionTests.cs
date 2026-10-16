@@ -5,6 +5,26 @@ namespace Laura.Core.Tests.Permissions;
 /// <summary>Exercises native reviewed task scopes without trusting repository text or model policy fields.</summary>
 public sealed class WorkspacePermissionTests : IDisposable
 {
+    [Fact]
+    /// <summary>Ensures synchronous effect startup cannot delay dispatch or block approval snapshots.</summary>
+    public async Task SynchronousNativeStartupCannotHoldTheApprovalUiSnapshotGate()
+    {
+        Directory.CreateDirectory(_root);
+        using var manager = new PermissionManager(new PermissionStore(Path.Combine(_root, "permissions.json")), () => new());
+        using var entered = new ManualResetEventSlim(); using var release = new ManualResetEventSlim();
+        var dispatchTime = System.Diagnostics.Stopwatch.StartNew();
+        Task<int> effect = manager.ExecuteAsync(new(PermissionOperation.Internal, "Synthetic native startup", "No OS effect"), _ =>
+        { entered.Set(); release.Wait(TimeSpan.FromSeconds(10)); return Task.FromResult(1); });
+        try
+        {
+            Assert.True(dispatchTime.Elapsed < TimeSpan.FromSeconds(3), "Dispatch waited for synchronous native startup.");
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(3)));
+            var snapshot = await Task.Run(() => manager.PendingRequests).WaitAsync(TimeSpan.FromSeconds(3));
+            Assert.Empty(snapshot);
+        }
+        finally { release.Set(); }
+        Assert.Equal(1, await effect);
+    }
     private readonly string _root = Path.Combine(Path.GetTempPath(), "laura-task-permissions-" + Guid.NewGuid().ToString("N"));
 
     [Theory]
@@ -71,6 +91,7 @@ public sealed class WorkspacePermissionTests : IDisposable
     [InlineData(PermissionOperation.FileWrite, "code.cs", false)]
     [InlineData(PermissionOperation.FileWrite, ".env", false)]
     [InlineData(PermissionOperation.FileReadLocal, "note.md", true)]
+    [InlineData(PermissionOperation.WorkspaceNote, "Notes", true)]
     [InlineData(PermissionOperation.FileReadCloud, "note.md", false)]
     [InlineData(PermissionOperation.FileTrash, "note.md", false)]
     public void AutomaticWorkspacePolicyRemainsBounded(PermissionOperation operation, string name, bool expected)

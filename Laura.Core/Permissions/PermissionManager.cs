@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Laura.Core.Abstractions;
+using Laura.Core.Localization;
 
 namespace Laura.Core.Permissions;
 
@@ -11,6 +13,7 @@ public sealed class PermissionManager : IDisposable
     private readonly Func<PermissionOptions> _options;
     private readonly Func<IEnumerable<string>> _protectedRoots;
     private readonly string? _workspaceRoot;
+    private readonly IUiLocalizer? _ui;
     private readonly Dictionary<Guid, Pending> _pending = [];
     private readonly List<PermissionGrant> _grants = [];
     private readonly List<ApprovalAudit> _history = [];
@@ -19,10 +22,10 @@ public sealed class PermissionManager : IDisposable
     private long _resetVersion;
 
     /// <summary>Loads only local persistent grants. An unreadable/corrupt store starts with no grants.</summary>
-    public PermissionManager(PermissionStore store, Func<PermissionOptions> options, Func<IEnumerable<string>>? protectedRoots = null, string? workspaceRoot = null)
+    public PermissionManager(PermissionStore store, Func<PermissionOptions> options, Func<IEnumerable<string>>? protectedRoots = null, string? workspaceRoot = null, IUiLocalizer? ui = null)
     {
         _store = store; _options = options; _protectedRoots = protectedRoots ?? (() => []);
-        _workspaceRoot = workspaceRoot;
+        _workspaceRoot = workspaceRoot; _ui = ui;
         try { var loaded = store.Load(); _grants.AddRange(loaded.Grants); _history.AddRange(loaded.History); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or PermissionDeniedException or ArgumentException)
         { StorageWarning = "Permission storage unavailable; no grants were restored."; }
@@ -130,9 +133,9 @@ public sealed class PermissionManager : IDisposable
                 if (pending is not null && pending.Request.Expires <= DateTimeOffset.UtcNow)
                 { outcome = ApprovalOutcome.Expired; throw new PermissionDeniedException("Approval expired before dispatch."); }
                 if (pending is not null) { _pending.Remove(id); }
-                // Enter the effect while holding the dispatch gate; concurrent revocation cannot precede a new invocation.
+                // Commit dispatch under the authorization gate, then run effects on a worker so native startup cannot block approval UI reads.
                 dispatched = true;
-                operation = execute(cancellationToken);
+                operation = Task.Run(() => execute(cancellationToken), cancellationToken);
             }
             reason = "Authorized by " + authorization + ".";
             Laura.Core.Diagnostics.LauraDiagnostics.Record("permission.authorization", outcome: authorization, interactionId: action.TaskId);
@@ -176,8 +179,9 @@ public sealed class PermissionManager : IDisposable
         if (!Directory.Exists(root) || PermissionPolicy.SensitivePath(root) || _protectedRoots().Any(path => path.Length > 0 && PermissionPolicy.Within(path, root)))
         { throw new PermissionDeniedException("Choose an existing project directory outside protected storage and its parents."); }
         var action = new PermissionAction(PermissionOperation.WorkspaceAuthorization, "Workspace task review",
-            "Authorize project file reads, creation and edits for this task for one hour. Credential and policy files, deletion, processes, network and system changes are excluded."
-                + (destination.Length > 0 ? " Project text read by this task will be disclosed to " + destination + "." : " Access remains local."),
+            (_ui?.Get(LocalizationKeys.Permissions.WorkspaceReview) ?? "Authorize project file reads, creation and edits for this task for one hour. Credential and policy files, deletion, processes, network and system changes are excluded.")
+                + " " + (destination.Length > 0 ? _ui?.Get(LocalizationKeys.Permissions.WorkspaceCloudReview, destination) ?? "Project text read by this task will be disclosed to " + destination + "."
+                    : _ui?.Get(LocalizationKeys.Permissions.WorkspaceLocalReview) ?? "Access remains local."),
             [root], parameters: taskId.ToString("D"), destination: destination, taskId: taskId);
         return ExecuteAsync(action, token =>
         {

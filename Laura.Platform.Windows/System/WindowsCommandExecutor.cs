@@ -42,6 +42,7 @@ public sealed class WindowsCommandExecutor(PermissionManager permissions) : ICom
         foreach (string argument in request.Arguments) { start.ArgumentList.Add(argument); }
         using var process = new Process { StartInfo = start };
         long began = Stopwatch.GetTimestamp();
+        cancellationToken.ThrowIfCancellationRequested();
         if (!process.Start()) { throw new InvalidOperationException("The native process did not start."); }
         int processId = process.Id; process.StandardInput.Close();
         var stdout = new StringBuilder(); var stderr = new StringBuilder(); object gate = new(); long sequence = 0;

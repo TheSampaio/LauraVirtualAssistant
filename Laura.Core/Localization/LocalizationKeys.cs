@@ -171,7 +171,25 @@ public static class LocalizationKeys
     /// <summary>Texts for the optional generative mode.</summary>
     public static class GenerativeAi
     {
+        /// <summary>Requests explicit provider configuration.</summary>
+        public const string ConfigureProvider = "ui.ai.configureProvider";
+        /// <summary>Explains an unavailable local-first model without implying cloud authorization.</summary>
+        public const string NoProvider = "ui.models.noProvider";
+        /// <summary>Reports a provider failure without inventing a cause.</summary>
+        public const string ProviderFailed = "ui.ai.providerFailed";
+        /// <summary>Refuses an unsupported image before dispatch.</summary>
+        public const string ImagesUnsupported = "ui.models.imagesUnsupported";
         /// <summary>Notice that the generative model did not answer.</summary>
         public const string Unavailable = "ai.unavailable";
+    }
+    /// <summary>Trusted workspace reviews use the independent interface culture.</summary>
+    public static class Permissions
+    {
+        /// <summary>One-hour bounded workspace capability review.</summary>
+        public const string WorkspaceReview = "ui.permissions.workspaceReview";
+        /// <summary>Actual runtime disclosure destination.</summary>
+        public const string WorkspaceCloudReview = "ui.permissions.workspaceCloudReview";
+        /// <summary>Strictly local workspace access.</summary>
+        public const string WorkspaceLocalReview = "ui.permissions.workspaceLocalReview";
     }
 }
