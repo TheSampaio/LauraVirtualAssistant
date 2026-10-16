@@ -76,6 +76,12 @@ public static class ServiceConfiguration
             settingsPath,
             provider.GetRequiredService<ILogger<IniSettingsStore>>()));
         services.AddSingleton<ISettingsService, SettingsService>();
+        services.AddSingleton<ILocalModelManager>(provider => new LocalModelManager(Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Models"),
+            new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, SupportedModels.All));
+        services.AddSingleton<LlamaLocalInferenceEngine>();
+        services.AddSingleton<ILocalInferenceEngine>(provider => provider.GetRequiredService<LlamaLocalInferenceEngine>());
+        services.AddSingleton<IProviderModelCatalog>(provider => new ProviderModelCatalog(new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan },
+            Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "ModelCatalog")));
         services.AddSingleton(provider => new PermissionStore(Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Security", "permissions.json")));
         services.AddSingleton(provider => new PermissionManager(provider.GetRequiredService<PermissionStore>(),
             () => provider.GetRequiredService<ISettingsService>().Current.Permissions,
@@ -137,7 +143,7 @@ public static class ServiceConfiguration
         services.AddSingleton<IBriefingContributor, ReminderBriefingContributor>();
         services.AddSingleton<ClapWakeCoordinator>();
         services.AddSingleton<MarkLvConfigurationImporter>();
-        services.AddSingleton(provider => new ConversationProviderRouter(provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<GeminiLiveClient>(), provider.GetRequiredService<OpenAiConversationEngine>()));
+        services.AddSingleton(provider => new ConversationProviderRouter(provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<GeminiLiveClient>(), provider.GetRequiredService<OpenAiConversationEngine>(), provider.GetRequiredService<ILocalInferenceEngine>()));
         services.AddSingleton<IConversationEngine>(provider => provider.GetRequiredService<ConversationProviderRouter>());
         services.AddSingleton<WindowsApplicationCatalog>();
         services.AddSingleton<WindowsResourceMonitor>();
@@ -151,6 +157,7 @@ public static class ServiceConfiguration
         services.AddSingleton<ISkillDispatcher, GeminiSkillDispatcher>();
 
         services.AddSingleton<IAssistantEngine, AssistantEngine>();
+        services.AddSingleton<LocalVoiceSession>();
         services.AddSingleton<HourlyAnnouncer>();
     }
 
@@ -185,6 +192,9 @@ public static class ServiceConfiguration
     private static void AddPlatform(IServiceCollection services)
     {
         services.AddSingleton<ISpeechSynthesizer, SpeechRouter>();
+        services.AddSingleton<WindowsOfflineSpeechSynthesizer>();
+        services.AddSingleton<WhisperSpeechInput>();
+        services.AddSingleton<ISpeechInput>(provider => provider.GetRequiredService<WhisperSpeechInput>());
         services.AddSingleton<ISystemController, WindowsSystemController>();
         services.AddSingleton<IProcessLauncher, WindowsProcessLauncher>();
         services.AddSingleton<ICommandExecutor, WindowsCommandExecutor>();

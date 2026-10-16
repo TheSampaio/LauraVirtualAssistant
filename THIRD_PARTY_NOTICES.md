@@ -18,6 +18,8 @@ The HUD bundles selected Lucide SVG icons from https://github.com/lucide-icons/l
 | Windows App SDK | 1.7.250909003 | Included Microsoft license/notices |
 | Windows SDK APIs | target 10.0.19041.0 | Windows platform terms |
 | NAudio.Core / NAudio.WinMM | 2.2.1 | MIT, https://github.com/naudio/NAudio |
+| LLamaSharp / LLamaSharp.Backend.Cpu | 0.27.0 | MIT; embedded llama.cpp at `3f7c29d318e317b63f54c558bc69803963d7d88c`, https://github.com/SciSharp/LLamaSharp |
+| Whisper.net / Whisper.net.Runtime | 1.9.1 | MIT; local recognition, https://github.com/sandrohanea/whisper.net |
 | Microsoft.Data.Sqlite | 9.0.10 | MIT, https://github.com/dotnet/efcore |
 | Markdig | 1.4.0 | BSD-2-Clause, https://github.com/xoofx/markdig; included license |
 | YamlDotNet | 18.1.0 | MIT, https://github.com/aaubry/YamlDotNet; included license |
@@ -29,7 +31,7 @@ The HUD bundles selected Lucide SVG icons from https://github.com/lucide-icons/l
 | xUnit (development only) | 2.9.2 / runner 2.8.2 | Apache-2.0, https://github.com/xunit/xunit |
 | Microsoft.NET.Test.Sdk (development only) | 17.12.0 | MIT, https://github.com/microsoft/vstest |
 
-Exact transitive dependency versions, declarations, repository commits and NuGet SHA512 values are in `licenses/dependency-inventory.json` and package lock files. Upstream license and third-party notice texts accompany the release. Historical attribution files for removed packages remain in the license archive; they do not indicate that those engines ship. Windows Forms, System.Speech, LLamaSharp, Whisper, OllamaSharp and Sherpa have been removed from the runtime dependency graph. No local AI weights or voice assets are packaged.
+Exact transitive dependency versions, declarations, repository commits and NuGet SHA512 values are in `licenses/dependency-inventory.json` and package lock files. Upstream license and third-party notice texts accompany the release. Windows Forms, System.Speech, OllamaSharp and Sherpa remain absent. Qwen3.5-4B (Apache-2.0) and multilingual Whisper Base (MIT) are downloaded separately using reviewed immutable URLs, sizes and SHA-256 values. Their licenses are included; no model weights or Windows voice assets are packaged. Local synthesis uses voices already installed under Windows platform terms.
 
 Microsoft Visual C++ CRT/OpenMP 14.51.36247.0 (redistributable directory 14.51.36231, Visual Studio 2026 Release channel) is bundled as unmodified, signed app-local binaries under Microsoft software license terms, separately from Laura's MIT code. Official runtime/Visual Studio license documents and the distributable list are included. Builders/redistributors need the corresponding redistribution rights; end-user runtime terms are presented by the installer. `licenses/vc-runtime-inventory.json` pins binary SHA256/version. Updating these app-local dependencies requires republishing Laura.
 

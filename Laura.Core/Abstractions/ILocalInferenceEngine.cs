@@ -11,6 +11,8 @@ public interface ILocalInferenceEngine : IConversationEngine
     string? LoadedModel { get; }
     /// <summary>Notifies subscribers of streamed response text.</summary>
     event EventHandler<string>? TokenReceived;
+    /// <summary>Reports native weight-loading fraction when supported by the backend.</summary>
+    event EventHandler<float>? LoadingProgress { add { } remove { } }
     /// <summary>Loads the model on a worker, releasing the previous native model.</summary>
     Task LoadAsync(string id, CancellationToken cancellationToken);
     /// <summary>Cancels generation without queueing behind native inference.</summary>

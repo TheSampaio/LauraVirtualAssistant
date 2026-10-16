@@ -51,7 +51,7 @@ public sealed class GeminiSkillDispatcherTests : IDisposable
     public async Task Dispatch_UnconfiguredSelectedProviderRequestsKeyInsteadOfCallingAProvider()
     {
         var conversation = new RecordingConversationEngine(false, null);
-        var dispatcher = new GeminiSkillDispatcher(conversation, new StubSettingsService(LauraSettings.Default), new StubUserContext(), CreateMemory(), new StubLocalizer());
+        var dispatcher = new GeminiSkillDispatcher(conversation, new StubSettingsService(LauraSettings.Default with { GenerativeAi = new() { Provider = "gemini" } }), new StubUserContext(), CreateMemory(), new StubLocalizer());
         var response = await dispatcher.DispatchAsync(SkillRequest.Create("Open Steam", CultureInfo.GetCultureInfo("en-US"), DateTimeOffset.Now, SkillRequestSource.Text));
         Assert.Equal("ui.ai.configureProvider", response.SpokenText); Assert.Equal(0, conversation.CallCount);
     }

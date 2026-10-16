@@ -45,6 +45,7 @@ public sealed class AssistantEngine : IAssistantEngine
     private const int MaxConversationHistory = 200;
 
     private Task? _worker;
+    private Guid _activeTurnId;
 
     // Stored as an int because volatile reads of enums are not supported; the state
     // is read by the UI while the loop writes it.
@@ -191,6 +192,13 @@ public sealed class AssistantEngine : IAssistantEngine
             cancellationToken);
     }
     /// <inheritdoc />
+    public Task SubmitVoiceCommandAsync(string text, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        return EnqueueAndWaitAsync(completion => new CommandSubmitted(text) { Completion = completion,
+            RequestCancellation = cancellationToken, MessageSource = ConversationMessageSource.UserVoice }, cancellationToken);
+    }
+    /// <inheritdoc />
     public Task ClearConversationAsync(CancellationToken cancellationToken = default)
     {
         if (_worker is null || State == AssistantState.Stopped) { throw new InvalidOperationException("Start the assistant before resetting its conversation."); }
@@ -297,7 +305,8 @@ public sealed class AssistantEngine : IAssistantEngine
                     break;
                 case CommandSubmitted submitted:
                     Guid turnId = Guid.NewGuid();
-                    PublishConversation(ConversationMessageSource.UserTyped, submitted.DisplayText ?? submitted.Text, turnId);
+                    _activeTurnId = turnId;
+                    PublishConversation(submitted.MessageSource, submitted.DisplayText ?? submitted.Text, turnId);
                     await ExecuteCommandAsync(submitted.Text,
                         submitted.DisplayText is null ? SkillRequestSource.Text : SkillRequestSource.Context, request.Token, submitted.Image, turnId).ConfigureAwait(false);
                     break;
@@ -318,6 +327,7 @@ public sealed class AssistantEngine : IAssistantEngine
                                 SetState(AssistantState.Thinking);
                                 string prompt = await _startupBriefing.CreateRequestAsync(_greetingComposer.ComposeStartupBriefing(), startup.Token).ConfigureAwait(false);
                                 Guid startupTurnId = Guid.NewGuid();
+                                _activeTurnId = startupTurnId;
                                 PublishConversation(ConversationMessageSource.UserTyped, _startupBriefing.DisplayTitle, startupTurnId);
                                 await ExecuteCommandAsync(prompt, SkillRequestSource.Context, startup.Token, turnId: startupTurnId).ConfigureAwait(false);
                             }
@@ -354,6 +364,7 @@ public sealed class AssistantEngine : IAssistantEngine
         finally
         {
             _activeGeneration.Value = null;
+            _activeTurnId = Guid.Empty;
             message.Completion?.TrySetResult();
         }
     }
@@ -460,7 +471,7 @@ public sealed class AssistantEngine : IAssistantEngine
         }
 
         if (_activeGeneration.Value is { } active && active != Volatile.Read(ref _conversationGeneration)) { return; }
-        var message = new ConversationMessage(source, text, _clock.Now) { TurnId = turnId };
+        var message = new ConversationMessage(source, text, _clock.Now) { TurnId = turnId == Guid.Empty && source == ConversationMessageSource.Assistant ? _activeTurnId : turnId };
         Laura.Core.Diagnostics.LauraDiagnostics.Record("conversation.message", amount: text.Length, outcome: source.ToString(), interactionId: _memory?.WorkingTurnId);
         if (_memory is not null && _settings.Current.RememberConversations)
         {
@@ -561,6 +572,8 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <summary>Text command sent by the interface.</summary>
     private sealed record CommandSubmitted(string Text) : EngineMessage
     {
+        /// <summary>Gets the trusted capture origin selected by the native caller.</summary>
+        public ConversationMessageSource MessageSource { get; init; } = ConversationMessageSource.UserTyped;
         /// <summary>Gets an explicitly queued image; saved history contains only its question and answer.</summary>
         public byte[]? Image { get; init; }
         /// <summary>Gets a concise user-visible label for a context-rich internal request.</summary>

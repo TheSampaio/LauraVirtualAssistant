@@ -22,11 +22,15 @@ if (args.Length == 2 && args[0] == "--inspect-gui-policy")
 if (args.Length == 0) { Console.Error.WriteLine("Usage: Laura.Smoke <isolated-directory> --gemini --key-file <Mark-LV api_keys.json> [--quick] [--vad]"); return 2; }
 string directory = Path.GetFullPath(args[0]);
 Directory.CreateDirectory(directory);
-using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(args.Contains("--local-model-smoke", StringComparer.Ordinal) ? 20 : 5));
 using var settings = new SettingsService(new IniSettingsStore(Path.Combine(directory, "settings.ini"), NullLogger<IniSettingsStore>.Instance), NullLogger<SettingsService>.Instance);
 await settings.LoadAsync(timeout.Token);
 var memory = new SqliteConversationMemory(Path.Combine(directory, "memory.db"));
 memory.Initialize();
+if (args.Contains("--offline-voice-smoke", StringComparer.Ordinal))
+{ await OfflineVoiceSmoke.RunAsync(directory, args.Contains("--download", StringComparer.Ordinal), timeout.Token); return 0; }
+if (args.Contains("--local-model-smoke", StringComparer.Ordinal))
+{ await LocalModelSmoke.RunAsync(directory, args.Contains("--download", StringComparer.Ordinal), timeout.Token); return 0; }
 if (args.Contains("--command-smoke", StringComparer.Ordinal))
 { await CommandSmoke.RunAsync(directory, timeout.Token); return 0; }
 if (args.Contains("--silent-thinking", StringComparer.Ordinal))

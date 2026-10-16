@@ -66,6 +66,8 @@ public interface IAssistantEngine : IAsyncDisposable
     ///     A task completed when the command has finished processing.
     /// </summary>
     Task SubmitCommandAsync(string text, CancellationToken cancellationToken = default);
+    /// <summary>Queues a completed explicitly captured local transcript while preserving its voice origin.</summary>
+    Task SubmitVoiceCommandAsync(string text, CancellationToken cancellationToken = default) => SubmitCommandAsync(text, cancellationToken);
     /// <summary>Queues briefing data exclusively for generation, bypassing local commands and using a concise history title.</summary>
     Task SubmitContextCommandAsync(string text, string displayText, CancellationToken cancellationToken = default);
     /// <summary>Queues an explicitly selected PNG alongside its question through the normal conversation and speech flow.</summary>

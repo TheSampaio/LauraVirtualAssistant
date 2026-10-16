@@ -13,15 +13,15 @@ public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISet
     /// <inheritdoc />
     public async Task<SkillResponse> DispatchAsync(SkillRequest request, CancellationToken cancellationToken = default)
     {
-        if (!conversation.IsAvailable) { return SkillResponse.Speak(localizer.Get("ui.ai.configureProvider")); }
+        if (!conversation.IsAvailable) { return SkillResponse.Speak(localizer.Get(settings.Current.GenerativeAi.Provider is "local" or "auto" ? "ui.models.noProvider" : "ui.ai.configureProvider")); }
         IReadOnlyList<ConversationMessage> history = [];
         if (settings.Current.RememberConversations)
         {
-            try { history = memory.ReadRecent(8); }
+            try { history = memory.ReadRecent(9); }
             catch (Exception error) when (error is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException) { }
         }
         string? answer = await conversation.AskAsync(new ConversationTurn(request.RawText, request.Culture, user.DisplayName)
-        { TurnId = request.TurnId, History = history.Where(message => request.TurnId == Guid.Empty || message.TurnId != request.TurnId).ToArray(), Image = request.Image }, cancellationToken).ConfigureAwait(false);
+        { TurnId = request.TurnId, History = history.Where(message => request.TurnId == Guid.Empty || message.TurnId != request.TurnId).TakeLast(8).ToArray(), Image = request.Image }, cancellationToken).ConfigureAwait(false);
         return SkillResponse.Speak(string.IsNullOrWhiteSpace(answer) ? localizer.Get("ui.ai.providerFailed") : answer);
     }
 }

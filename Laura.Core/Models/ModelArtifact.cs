@@ -8,7 +8,7 @@ namespace Laura.Core.Models;
 /// <param name="Sha256">Publisher's LFS SHA256 digest.</param>
 /// <param name="Quantization">Quantization description.</param>
 /// <param name="ContextLength">Supported context ceiling.</param>
-/// <param name="RecommendedRam">Conservative total system RAM recommendation.</param>
+/// <param name="RecommendedRam">Measured or reviewed total system RAM recommendation; zero means not established.</param>
 /// <param name="License">Weight license name.</param>
 /// <param name="LicenseUrl">Weight terms and attribution.</param>
 public sealed record ModelArtifact(string Id, string Name, Uri Source, long Size, string Sha256,

@@ -8,7 +8,7 @@ namespace Laura.App.Infrastructure;
 
 /// <summary>Hands off local clap capture to a short acknowledgment and then continuous conversation.</summary>
 public sealed class ClapWakeCoordinator(WindowsClapListener listener, GeminiLiveClient live, IAssistantEngine engine,
-    ISettingsService settings, GreetingComposer greeting, ILogger<ClapWakeCoordinator> logger) : IAsyncDisposable
+    ISettingsService settings, GreetingComposer greeting, ILogger<ClapWakeCoordinator> logger, ConversationProviderRouter router) : IAsyncDisposable
 {
     private readonly CancellationTokenSource _lifetime = new();
     private CancellationTokenSource? _wake;
@@ -31,7 +31,7 @@ public sealed class ClapWakeCoordinator(WindowsClapListener listener, GeminiLive
             using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(200));
             while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
             {
-                bool allowed = settings.Current.ClapWakeEnabled && !settings.Current.MicrophoneMuted && Volatile.Read(ref _busy) == 0
+                bool allowed = router.ActiveProvider == "gemini" && settings.Current.ClapWakeEnabled && !settings.Current.MicrophoneMuted && Volatile.Read(ref _busy) == 0
                     && !live.IsListening && !live.IsCaptureStarting && !live.IsSpeaking && !live.IsThinking && engine.State == AssistantState.Ready;
                 if (!allowed) { await listener.StopAsync().ConfigureAwait(false); continue; }
                 if (Environment.TickCount64 < _retryAfter) { continue; }
@@ -55,10 +55,10 @@ public sealed class ClapWakeCoordinator(WindowsClapListener listener, GeminiLive
         try
         {
             await listener.StopAsync().ConfigureAwait(false);
-            if (!settings.Current.ClapWakeEnabled || settings.Current.MicrophoneMuted) { return; }
+            if (router.ActiveProvider != "gemini" || !settings.Current.ClapWakeEnabled || settings.Current.MicrophoneMuted) { return; }
             await engine.SpeakAsync(greeting.ComposeWakeGreeting(), wake.Token).ConfigureAwait(false);
             wake.Token.ThrowIfCancellationRequested();
-            if (!settings.Current.MicrophoneMuted && settings.Current.ClapWakeEnabled)
+            if (router.ActiveProvider == "gemini" && !settings.Current.MicrophoneMuted && settings.Current.ClapWakeEnabled)
             { await live.StartListeningAsync(cancellationToken: wake.Token).ConfigureAwait(false); }
         }
         catch (OperationCanceledException) { if (!live.IsListening && !live.IsCaptureStarting && !live.IsSpeaking) { live.ReturnToReady(); } }

@@ -77,7 +77,8 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     /// <summary>Publishes only the provider's visible output transcription, never hidden reasoning or raw protocol data.</summary>
     public event EventHandler<ConversationStreamUpdate>? StreamUpdated;
     /// <inheritdoc />
-    public bool IsAvailable => !Volatile.Read(ref _disposed) && !Volatile.Read(ref _conversationReset) && _settings.Current.GenerativeAi is { Enabled: true, Provider: "gemini" } && !string.IsNullOrEmpty(_keys.Read());
+    public bool IsAvailable => !Volatile.Read(ref _disposed) && !Volatile.Read(ref _conversationReset)
+        && _settings.Current.GenerativeAi is { Enabled: true } options && (options.Provider == "gemini" || options is { Provider: "auto", AllowCloudFallback: true }) && !string.IsNullOrEmpty(_keys.Read());
     /// <summary>Gets verified image support for the two reviewed Live models. Unknown overrides never pretend to accept vision.</summary>
     public bool SupportsImages => IsAvailable && GeminiLiveOptions.HasVerifiedImageSupport(_settings.Current.GenerativeAi.Model);
     /// <summary>Gets a payload-free protocol failure category for troubleshooting, never a server error description or credential.</summary>

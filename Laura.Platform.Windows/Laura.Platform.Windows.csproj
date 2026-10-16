@@ -21,6 +21,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Embedded MIT-licensed llama.cpp binding/backend; the pinned native revision includes Qwen3.5. -->
+    <PackageReference Include="LLamaSharp" Version="0.27.0" />
+    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.27.0" />
+    <!-- Offline multilingual ASR, distinct from speech synthesis; both packages are MIT licensed. -->
+    <PackageReference Include="Whisper.net" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
     <!-- Official minimal MCP client; framing/version negotiation remain outside the cognitive Core. Apache-2.0. -->
     <PackageReference Include="ModelContextProtocol.Core" Version="2.2.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.13" />

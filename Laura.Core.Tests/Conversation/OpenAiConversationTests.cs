@@ -224,12 +224,12 @@ public sealed class OpenAiConversationTests
         await fixture.Provider.AskAsync(Turn); Assert.Single(fixture.Transport.Requests[^1].GetProperty("input").EnumerateArray());
     }
     [Fact]
-    public async Task ConfigurationRoundTripsIndependentModelsAndDefaultsToGemini()
+    public async Task ConfigurationRoundTripsIndependentModelsAndDefaultsToLocalFirstWithoutCloudPermission()
     {
         using var fixture = new Fixture(); var store = new IniSettingsStore(Path.Combine(fixture.Root, "settings.ini"), Microsoft.Extensions.Logging.Abstractions.NullLogger<IniSettingsStore>.Instance);
         var options = new GenerativeAiOptions { Provider = "OPENAI", Model = "gemini-3.1-flash-live-preview", OpenAiModel = "gpt-5.4-mini" }.Sanitized();
         await store.SaveAsync(new LauraSettings { GenerativeAi = options }); var loaded = await store.LoadAsync(); Assert.Equal(options, loaded.GenerativeAi);
-        Assert.Equal("gemini", GenerativeAiOptions.Default.Provider); Assert.Equal("gemini", (options with { Provider = "unknown" }).Sanitized().Provider);
+        Assert.Equal("auto", GenerativeAiOptions.Default.Provider); Assert.Equal("auto", (options with { Provider = "unknown" }).Sanitized().Provider); Assert.False(GenerativeAiOptions.Default.AllowCloudFallback);
         Assert.Equal(GenerativeAiOptions.Default.OpenAiModel, (options with { OpenAiModel = "../../invalid" }).Sanitized().OpenAiModel);
     }
     private static readonly ConversationTurn Turn = new("Synthetic objective", CultureInfo.GetCultureInfo("pt-BR"), "User");

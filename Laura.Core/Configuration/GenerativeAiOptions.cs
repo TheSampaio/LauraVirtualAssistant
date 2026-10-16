@@ -18,7 +18,9 @@ public sealed record GenerativeAiOptions
     /// <summary>
     /// Gets the selected chat provider: gemini (native voice) or openai (GPT text).
     /// </summary>
-    public string Provider { get; init; } = "gemini";
+    public string Provider { get; init; } = "auto";
+    /// <summary>Gets explicit permission for automatic mode to send conversation data to Gemini when local inference is unavailable. GPT still requires explicit selection.</summary>
+    public bool AllowCloudFallback { get; init; }
 
     /// <summary>
     /// Gets a legacy configuration field retained for INI compatibility; Live uses its fixed Google endpoint.
@@ -32,6 +34,10 @@ public sealed record GenerativeAiOptions
 
     /// <summary>Gets the independent optional GPT Responses model; never overwrites the Gemini Live model.</summary>
     public string OpenAiModel { get; init; } = "gpt-5.4-mini";
+    /// <summary>Gets the reviewed managed local weight identifier.</summary>
+    public string LocalModel { get; init; } = "qwen3.5-4b-q4_k_m";
+    /// <summary>Gets the conservative native context allocation, bounded independently of the model's advertised maximum.</summary>
+    public int LocalContextTokens { get; init; } = 4096;
 
     /// <summary>Gets the native Gemini Live voice, shared with Mark-LV.</summary>
     public string LiveVoice { get; init; } = "Aoede";
@@ -69,9 +75,10 @@ public sealed record GenerativeAiOptions
     /// </summary>
     public GenerativeAiOptions Sanitized() => this with
     {
-        Provider = string.Equals(Provider, "openai", StringComparison.OrdinalIgnoreCase) ? "openai" : "gemini",
-        OpenAiModel = OpenAiModel?.Trim() is { Length: > 0 and <= 100 } gpt && gpt.StartsWith("gpt-", StringComparison.Ordinal)
-            && !gpt.Contains("..", StringComparison.Ordinal) && gpt.All(static c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.') ? gpt : Default.OpenAiModel,
+        Provider = Provider?.Trim().ToLowerInvariant() is "gemini" or "openai" or "local" or "auto" ? Provider.Trim().ToLowerInvariant() : Default.Provider,
+        LocalModel = Models.SupportedModels.All.Any(model => !model.IsSpeechModel && model.Id == LocalModel) ? LocalModel : Default.LocalModel,
+        LocalContextTokens = Math.Clamp(LocalContextTokens, 1024, 8192),
+        OpenAiModel = OpenAiModel?.Trim() is { } gpt && Models.ProviderModelCompatibility.ValidIdentifier(gpt) ? gpt : Default.OpenAiModel,
         ContinuousListening = true,
         SilenceDurationMs = Math.Clamp(SilenceDurationMs, 300, 2000),
         Endpoint = string.IsNullOrWhiteSpace(Endpoint) ? Default.Endpoint : Endpoint.Trim(),

@@ -26,6 +26,7 @@ public sealed class AssistantEngineTests
         Assert.Equal(["Verified answer"], speech.SpokenTexts);
         Assert.Contains(AssistantState.Thinking, states); Assert.Equal(AssistantState.Ready, engine.State);
         Assert.NotEqual(Guid.Empty, turnId); Assert.Equal(turnId, engine.ConversationHistory[0].TurnId);
+        Assert.Equal(turnId, engine.ConversationHistory[1].TurnId);
         Assert.Equal(["What are you doing?", "Verified answer"], engine.ConversationHistory.Select(message => message.Text));
     }
 

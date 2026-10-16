@@ -30,7 +30,7 @@ public sealed class OpenAiConversationEngine(HttpClient http, ISettingsService s
     /// <inheritdoc />
     public bool IsAvailable { get { lock (_gate) { return !_disposed && !_resetting && settings.Current.GenerativeAi is { Enabled: true, Provider: "openai" } && !string.IsNullOrWhiteSpace(keys.Read()); } } }
     /// <inheritdoc />
-    public bool SupportsImages => IsAvailable && settings.Current.GenerativeAi.OpenAiModel is "gpt-5.4-mini" or "gpt-5.4-mini-2026-03-17";
+    public bool SupportsImages => IsAvailable && Models.ProviderModelCompatibility.OpenAi(settings.Current.GenerativeAi.OpenAiModel).HasFlag(Models.ModelCapabilities.Images);
     /// <summary>Validates a candidate without changing the protected credential or sending conversation data.</summary>
     public async Task ValidateCredentialAsync(string candidate, string model, CancellationToken token)
     {
