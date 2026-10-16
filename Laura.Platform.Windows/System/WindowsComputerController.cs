@@ -40,6 +40,25 @@ public static class WindowsComputerController
         if (!IsWindow(handle) || process != target.ProcessId || process == Environment.ProcessId || Title(handle) != target.Title) { return false; }
         ShowWindow(handle, 9); return SetForegroundWindow(handle) && GetForegroundWindow() == handle;
     }
+    /// <summary>Posts normal close only to the pinned window and observes its removal without dismissing save prompts or killing processes.</summary>
+    public static async Task<bool> CloseVerifiedAsync(WindowsInputTarget target, CancellationToken cancellationToken)
+    {
+        nint handle = new(target.Handle);
+        _ = GetWindowThreadProcessId(handle, out uint process);
+        if (!IsWindow(handle) || process != target.ProcessId || process == Environment.ProcessId || Title(handle) != target.Title)
+        { throw new InvalidOperationException("The reviewed application window changed before closing."); }
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!PostMessage(handle, 0x0010, 0, 0)) { throw new global::System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()); }
+        long start = global::System.Diagnostics.Stopwatch.GetTimestamp();
+        while (global::System.Diagnostics.Stopwatch.GetElapsedTime(start) < TimeSpan.FromSeconds(3))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _ = GetWindowThreadProcessId(handle, out uint currentProcess);
+            if (!IsWindow(handle) || currentProcess != target.ProcessId) { return true; }
+            await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+        }
+        return false;
+    }
     /// <summary>Refuses mouse input redirected onto another top-level window.</summary>
     public static void ValidatePoint(WindowsInputTarget target, int x, int y)
     {
@@ -108,6 +127,9 @@ public static class WindowsComputerController
     [StructLayout(LayoutKind.Sequential)] private struct MouseInput { internal int X, Y; internal uint Data, Flags, Time; internal nuint Extra; }
     [StructLayout(LayoutKind.Sequential)] private struct KeyboardInput { internal ushort Key, Scan; internal uint Flags, Time; internal nuint Extra; }
     private delegate bool EnumProcedure(nint window, nint data);
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(nint window, uint message, nuint wParam, nint lParam);
     [DllImport("user32.dll")] private static extern uint SendInput(uint count, Input[] inputs, int size);
     [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindow(nint window);

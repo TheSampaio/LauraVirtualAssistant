@@ -12,6 +12,7 @@ using Laura.Platform.Windows.Speech;
 using Microsoft.Extensions.Logging.Abstractions;
 
 // Explicit smoke tests use isolated storage and never open the microphone.
+if (args.Length > 0 && args[0] == "--process-fixture") { return CommandSmoke.RunFixture(args[1..]); }
 if (args.Length == 2 && args[0] == "--inspect-gui-policy")
 {
     using var image = File.OpenRead(args[1]);
@@ -26,6 +27,8 @@ using var settings = new SettingsService(new IniSettingsStore(Path.Combine(direc
 await settings.LoadAsync(timeout.Token);
 var memory = new SqliteConversationMemory(Path.Combine(directory, "memory.db"));
 memory.Initialize();
+if (args.Contains("--command-smoke", StringComparer.Ordinal))
+{ await CommandSmoke.RunAsync(directory, timeout.Token); return 0; }
 if (args.Contains("--silent-thinking", StringComparer.Ordinal))
 {
     await using var live = new GeminiLiveClient(settings, new ProtectedApiKeyStore(directory), memory, Array.Empty<ISkill>(), new SmokeShell());

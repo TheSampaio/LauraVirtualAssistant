@@ -55,7 +55,15 @@ public enum PermissionOperation
     /// <summary>Open a code-verified installed GUI application without arguments, elevation or command execution.</summary>
     ApplicationLaunch,
     /// <summary>Launch or invoke an external MCP server whose effects cannot be safely inferred from advertised annotations.</summary>
-    ExternalTool
+    ExternalTool,
+    /// <summary>Read local project data without a remote recipient.</summary>
+    FileReadLocal,
+    /// <summary>Focus or reposition an identity-pinned native window without injecting input.</summary>
+    WindowManagement,
+    /// <summary>Ask an identity-pinned application window to close normally; unsaved state may require user interaction.</summary>
+    ApplicationClose,
+    /// <summary>Review a temporary task workspace and its explicit disclosure recipient.</summary>
+    WorkspaceAuthorization
 }
 
 /// <summary>Immutable execution identity constructed by trusted adapters, never deserialized from a model.</summary>
@@ -63,11 +71,12 @@ public sealed class PermissionAction
 {
     /// <summary>Snapshots relevant parameters. Only their SHA-256 digest enters the audit/store.</summary>
     public PermissionAction(PermissionOperation operation, string origin, string description,
-        IEnumerable<string>? resources = null, string parameters = "", string destination = "", bool userInitiated = false, bool automaticEligible = false)
+        IEnumerable<string>? resources = null, string parameters = "", string destination = "", bool userInitiated = false, bool automaticEligible = false, Guid taskId = default)
     {
         Operation = operation; Origin = origin; Description = description; Destination = destination;
         UserInitiated = userInitiated;
         AutomaticEligible = automaticEligible;
+        TaskId = taskId;
         Resources = (resources ?? []).ToImmutableArray();
         Fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         { operation, origin, resources = Resources, parameters, destination, userInitiated }))));
@@ -88,6 +97,8 @@ public sealed class PermissionAction
     public bool UserInitiated { get; }
     /// <summary>Gets native installation-policy evidence; model JSON is never allowed to supply this value.</summary>
     public bool AutomaticEligible { get; }
+    /// <summary>Gets the native active task identity, never read from a model-supplied argument.</summary>
+    public Guid TaskId { get; }
 }
 
 /// <summary>A pending immutable request. Its ID accepts exactly one timely UI decision.</summary>
@@ -95,9 +106,21 @@ public sealed record ApprovalRequest(Guid Id, PermissionAction Action, Permissio
     DateTimeOffset Created, DateTimeOffset Expires, bool CanRemember);
 /// <summary>A revocable exact operation grant. Directory scopes are limited to one file operation and origin.</summary>
 public sealed record PermissionGrant(Guid Id, PermissionOperation Operation, string Origin, string Scope,
-    string Fingerprint, DateTimeOffset Created, bool Persistent, bool DirectoryScope);
+    string Fingerprint, DateTimeOffset Created, bool Persistent, bool DirectoryScope)
+{
+    /// <summary>Gets an explicitly reviewed task identity; ordinary grants have no task scope.</summary>
+    public Guid TaskId { get; init; }
+    /// <summary>Gets the task grant deadline; task scopes never survive process restart.</summary>
+    public DateTimeOffset? Expires { get; init; }
+    /// <summary>Gets the explicitly reviewed disclosure host, empty for strictly local workspace access.</summary>
+    public string Destination { get; init; } = "";
+}
 /// <summary>Minimal audit data; no prompts, clipboard, file contents, URLs, arguments, credentials or tokens.</summary>
 public sealed record ApprovalAudit(Guid Id, DateTimeOffset Time, PermissionOperation Operation,
-    string Origin, PermissionRisk Risk, ApprovalOutcome Outcome, string Scope, string Reason);
+    string Origin, PermissionRisk Risk, ApprovalOutcome Outcome, string Scope, string Reason)
+{
+    /// <summary>Gets the native task identity without storing its prompt or objective.</summary>
+    public Guid TaskId { get; init; }
+}
 /// <summary>Denial stops execution rather than returning a reusable approval token.</summary>
 public sealed class PermissionDeniedException(string reason) : InvalidOperationException(reason);

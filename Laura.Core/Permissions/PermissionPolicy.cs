@@ -11,7 +11,9 @@ public static class PermissionPolicy
     {
         PermissionRisk risk = action.Operation switch
     {
-        PermissionOperation.Internal => PermissionRisk.Low,
+        PermissionOperation.Internal or PermissionOperation.FileReadLocal => PermissionRisk.Low,
+        PermissionOperation.WindowManagement when action.AutomaticEligible && action.Resources.Length == 0 && action.Destination.Length == 0 => PermissionRisk.Moderate,
+        PermissionOperation.WorkspaceAuthorization when action.Destination.Length > 0 => PermissionRisk.Critical,
         PermissionOperation.FileWrite when action.Resources.Length == 1 && DataExtensions.Contains(Path.GetExtension(action.Resources[0])) => PermissionRisk.Moderate,
         PermissionOperation.FileCreateDirectory or PermissionOperation.ClipboardWrite or PermissionOperation.LocalCapture or PermissionOperation.ScreenshotExport or PermissionOperation.BrainAttachment => PermissionRisk.Moderate,
         PermissionOperation.ApplicationLaunch when action.Resources.Length == 1 && action.Destination.Length == 0 => PermissionRisk.Moderate,
@@ -24,13 +26,24 @@ public static class PermissionPolicy
         return action.Operation != PermissionOperation.Internal && risk < PermissionRisk.High && action.Resources.Any(SensitivePath) ? PermissionRisk.High : risk;
     }
     /// <summary>Only trusted native application adapters may describe this bounded effect; arbitrary processes never inherit the policy.</summary>
-    public static bool AllowsAutomatic(PermissionAction action, PermissionOptions options) => options.Mode == ApprovalMode.Automatic && options.OpenInstalledApplications && action.AutomaticEligible
-        && action.Operation == PermissionOperation.ApplicationLaunch && Risk(action) == PermissionRisk.Moderate;
-    private static bool SensitivePath(string path)
+    public static bool AllowsAutomatic(PermissionAction action, PermissionOptions options, string? workspaceRoot = null)
+    {
+        if (options.Mode != ApprovalMode.Automatic || Risk(action) > PermissionRisk.Moderate || action.Destination.Length != 0) { return false; }
+        if (action.Operation == PermissionOperation.WindowManagement) { return action.AutomaticEligible; }
+        if (action.Operation == PermissionOperation.ApplicationLaunch) { return options.OpenInstalledApplications && action.AutomaticEligible; }
+        return workspaceRoot is not null && action.Resources.Length == 1 && Within(action.Resources[0], workspaceRoot)
+            && !SensitivePath(action.Resources[0]) && action.Operation is PermissionOperation.FileReadLocal or PermissionOperation.FileWrite or PermissionOperation.FileCreateDirectory;
+    }
+    /// <summary>Identifies policy, credential and security files that cannot inherit automatic workspace capabilities.</summary>
+    public static bool SensitivePath(string path)
     {
         string[] segments = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return segments.Any(segment => new[] { ".git", ".ssh", ".aws", ".codex", ".agents", "Security", "Credentials" }.Contains(segment, StringComparer.OrdinalIgnoreCase))
-            || new[] { "AGENTS.md", "SKILL.md" }.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+            || new[] { "AGENTS.md", "CLAUDE.md", "SKILL.md", "NuGet.Config", "global.json" }.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+            || Path.GetFileName(path).StartsWith(".env", StringComparison.OrdinalIgnoreCase)
+            || Path.GetFileName(path).StartsWith("appsettings", StringComparison.OrdinalIgnoreCase)
+            || new[] { ".npmrc", ".pypirc", ".netrc", "id_rsa", "id_ed25519", "settings.ini", "api_keys.json" }.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+            || new[] { ".key", ".pfx", ".p12", ".pem", ".dat", ".db" }.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase)
             || Path.GetFileName(path).Contains("secret", StringComparison.OrdinalIgnoreCase)
             || Path.GetFileName(path).Contains("credential", StringComparison.OrdinalIgnoreCase);
     }
@@ -72,7 +85,7 @@ public static class PermissionPolicy
                 if ((File.Exists(current) || Directory.Exists(current)) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
                 { throw new PermissionDeniedException("Redirected resources are not supported."); }
             }
-            if (action.Operation is PermissionOperation.FileWrite or PermissionOperation.FileCreateDirectory or PermissionOperation.FileCopy or PermissionOperation.FileMove or PermissionOperation.FileTrash or PermissionOperation.ScreenshotExport)
+            if (action.Operation is PermissionOperation.FileWrite or PermissionOperation.FileCreateDirectory or PermissionOperation.FileCopy or PermissionOperation.FileMove or PermissionOperation.FileTrash or PermissionOperation.ScreenshotExport or PermissionOperation.WorkspaceAuthorization)
             {
                 if (Path.TrimEndingDirectorySeparator(path) == Path.TrimEndingDirectorySeparator(Path.GetPathRoot(path)!))
                 { throw new PermissionDeniedException("Filesystem roots are protected."); }
@@ -83,7 +96,13 @@ public static class PermissionPolicy
     }
 
     /// <summary>Matches the exact effect, origin and destination. Higher risks never reuse grants.</summary>
-    public static bool Matches(PermissionGrant grant, PermissionAction action) => CanRemember(action)
+    public static bool Matches(PermissionGrant grant, PermissionAction action) => grant.TaskId != Guid.Empty
+        ? grant.Operation == PermissionOperation.WorkspaceAuthorization && action.TaskId == grant.TaskId && !grant.Persistent
+            && grant.Expires > DateTimeOffset.UtcNow && grant.Origin == action.Origin
+            && action.Resources.Length > 0 && action.Resources.All(path => Within(path, grant.Scope) && !SensitivePath(path))
+            && (action.Operation is PermissionOperation.FileReadLocal or PermissionOperation.FileWrite or PermissionOperation.FileCreateDirectory
+                && action.Destination.Length == 0 || action.Operation == PermissionOperation.FileReadCloud && grant.Destination.Length > 0 && action.Destination == grant.Destination)
+        : CanRemember(action)
         && grant.Operation == action.Operation && grant.Origin == action.Origin
         && !(action.Operation == PermissionOperation.ApplicationLaunch && grant.DirectoryScope)
         && (grant.DirectoryScope ? action.Resources.Length == 1 && Within(action.Resources[0], grant.Scope) : grant.Fingerprint == action.Fingerprint);

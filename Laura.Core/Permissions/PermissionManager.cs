@@ -76,9 +76,10 @@ public sealed class PermissionManager : IDisposable
             PermissionGrant? grant;
             lock (_gate) { grant = _grants.FirstOrDefault(item => PermissionPolicy.Matches(item, action)); }
             bool nativeConsent = action.UserInitiated && risk <= PermissionRisk.Moderate && action.Operation is PermissionOperation.LocalCapture or PermissionOperation.ScreenshotExport or PermissionOperation.BrainAttachment or PermissionOperation.ClipboardWrite;
-            bool automaticPolicy = PermissionPolicy.AllowsAutomatic(action, _options());
+            bool automaticPolicy = PermissionPolicy.AllowsAutomatic(action, _options(), _workspaceRoot);
             bool allowed = automaticPolicy || nativeConsent || action.Operation == PermissionOperation.Internal || grant is not null
-                && (_options().Mode == ApprovalMode.Automatic || !grant.DirectoryScope);
+                && (grant.TaskId != Guid.Empty || _options().Mode == ApprovalMode.Automatic || !grant.DirectoryScope);
+            string authorization = nativeConsent ? "native_gesture" : automaticPolicy ? "automatic_policy" : grant?.TaskId != Guid.Empty && grant is not null ? "task_grant" : grant is not null ? "remembered_grant" : action.Operation == PermissionOperation.Internal ? "internal_policy" : "user_approval";
             if (allowed) { outcome = nativeConsent ? ApprovalOutcome.Approved : ApprovalOutcome.Automatic; }
             else
             {
@@ -119,9 +120,10 @@ public sealed class PermissionManager : IDisposable
                 { throw new PermissionDeniedException("Authorization was revoked before dispatch."); }
                 if (pending is not null && pending.Request.Expires <= DateTimeOffset.UtcNow)
                 { outcome = ApprovalOutcome.Expired; throw new PermissionDeniedException("Approval expired before dispatch."); }
-                if (grant is { DirectoryScope: true } && _options().Mode != ApprovalMode.Automatic)
+                if (grant is { DirectoryScope: true, TaskId: var scopedTask } && scopedTask == Guid.Empty && _options().Mode != ApprovalMode.Automatic)
                 { throw new PermissionDeniedException("Approval mode changed before dispatch."); }
-                if (automaticPolicy && !PermissionPolicy.AllowsAutomatic(action, _options())) { throw new PermissionDeniedException("Automatic opening policy changed before dispatch."); }
+                if (grant is { TaskId: var activeTask } && activeTask != Guid.Empty && !PermissionPolicy.Matches(grant, action)) { throw new PermissionDeniedException("Task scope expired before dispatch."); }
+                if (automaticPolicy && !PermissionPolicy.AllowsAutomatic(action, _options(), _workspaceRoot)) { throw new PermissionDeniedException("Automatic policy changed before dispatch."); }
                 if (proposedGrant is not null)
                 { _grants.Add(proposedGrant); try { Save(); } catch { _grants.Remove(proposedGrant); throw; } }
                 cancellationToken.ThrowIfCancellationRequested();
@@ -132,7 +134,8 @@ public sealed class PermissionManager : IDisposable
                 dispatched = true;
                 operation = execute(cancellationToken);
             }
-            reason = "Authorized dispatch.";
+            reason = "Authorized by " + authorization + ".";
+            Laura.Core.Diagnostics.LauraDiagnostics.Record("permission.authorization", outcome: authorization, interactionId: action.TaskId);
             T result = await operation.ConfigureAwait(false);
             if (succeeded is not null && !succeeded(result)) { outcome = ApprovalOutcome.Failed; reason = "Authorized operation reported failure."; }
             return result;
@@ -152,7 +155,7 @@ public sealed class PermissionManager : IDisposable
                 if (action.Operation != PermissionOperation.Internal)
                 {
                     _history.Add(new(id, DateTimeOffset.UtcNow, action.Operation, action.Origin, risk, outcome,
-                        action.Resources.Length > 0 ? action.Resources[0] : action.Operation.ToString(), reason));
+                        action.Resources.Length > 0 ? action.Resources[0] : action.Operation.ToString(), reason) { TaskId = action.TaskId });
                     try { Save(); } catch (Exception error) when (error is IOException or UnauthorizedAccessException or PermissionDeniedException)
                     { StorageWarning = "Audit could not be persisted."; }
                 }
@@ -164,6 +167,27 @@ public sealed class PermissionManager : IDisposable
     public void RefreshOptions() { lock (_gate) { Save(); } Changed?.Invoke(this, EventArgs.Empty); }
     /// <summary>Revokes one grant before persisting. A failed write leaves this process fail closed.</summary>
     public void Revoke(Guid id) { lock (_gate) { _grants.RemoveAll(item => item.Id == id); Save(); } Changed?.Invoke(this, EventArgs.Empty); }
+    /// <summary>Requests one native review of project edits and an optional explicit cloud read recipient. Args: taskId: Trusted active task; directory: Existing project root; destination: Actual provider host. Returns: Revocable session-only grant.</summary>
+    public Task<PermissionGrant> AuthorizeWorkspaceAsync(Guid taskId, string directory, string destination, CancellationToken cancellationToken = default)
+    {
+        if (taskId == Guid.Empty || destination is not ("" or "api.openai.com" or "generativelanguage.googleapis.com"))
+        { throw new PermissionDeniedException("A workspace requires an active task and a known recipient."); }
+        string root = Path.GetFullPath(directory);
+        if (!Directory.Exists(root) || PermissionPolicy.SensitivePath(root) || _protectedRoots().Any(path => path.Length > 0 && PermissionPolicy.Within(path, root)))
+        { throw new PermissionDeniedException("Choose an existing project directory outside protected storage and its parents."); }
+        var action = new PermissionAction(PermissionOperation.WorkspaceAuthorization, "Workspace task review",
+            "Authorize project file reads, creation and edits for this task for one hour. Credential and policy files, deletion, processes, network and system changes are excluded."
+                + (destination.Length > 0 ? " Project text read by this task will be disclosed to " + destination + "." : " Access remains local."),
+            [root], parameters: taskId.ToString("D"), destination: destination, taskId: taskId);
+        return ExecuteAsync(action, token =>
+        {
+            token.ThrowIfCancellationRequested();
+            var grant = new PermissionGrant(Guid.NewGuid(), PermissionOperation.WorkspaceAuthorization, "Native tool: file_control", root,
+                action.Fingerprint, DateTimeOffset.UtcNow, false, true) { TaskId = taskId, Expires = DateTimeOffset.UtcNow.AddHours(1), Destination = destination };
+            lock (_gate) { _grants.Add(grant); }
+            return Task.FromResult(grant);
+        }, cancellationToken);
+    }
     /// <summary>Clears all grants and cancels pending operations; settings reset is performed by the local UI.</summary>
     public void Reset()
     {

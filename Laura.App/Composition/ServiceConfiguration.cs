@@ -187,6 +187,7 @@ public static class ServiceConfiguration
         services.AddSingleton<ISpeechSynthesizer, SpeechRouter>();
         services.AddSingleton<ISystemController, WindowsSystemController>();
         services.AddSingleton<IProcessLauncher, WindowsProcessLauncher>();
+        services.AddSingleton<ICommandExecutor, WindowsCommandExecutor>();
         services.AddSingleton<IStartupRegistration, RegistryStartupRegistration>();
     }
 
