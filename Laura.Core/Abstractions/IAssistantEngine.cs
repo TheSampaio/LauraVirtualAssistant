@@ -25,6 +25,8 @@ public interface IAssistantEngine : IAsyncDisposable
     /// Gets the current state.
     /// </summary>
     AssistantState State { get; }
+    /// <summary>Gets payload-free bounded pending-message depth for local diagnostics.</summary>
+    int PendingMessageCount => 0;
 
     /// <summary>
     /// Gets recent conversation messages for UI surfaces that are created after
@@ -89,7 +91,7 @@ public interface IAssistantEngine : IAsyncDisposable
     Task SpeakAsync(string text, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Immediately stops speech.
+    /// Interrupts active speech/conversation and fences previously queued user turns without clearing retained history.
     /// </summary>
     void StopSpeaking();
     /// <summary>Cancels the old generation, drains its work and clears only conversation history at the consumer barrier.</summary>

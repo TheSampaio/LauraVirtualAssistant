@@ -33,11 +33,12 @@ public sealed class AssistantEngine : IAssistantEngine
     private bool _operational;
     private readonly object _generationGate = new();
     private CancellationTokenSource _conversationCancellation = new();
+    private CancellationTokenSource? _activeRequest;
     private long _conversationGeneration;
     private readonly AsyncLocal<long?> _activeGeneration = new();
 
-    private readonly Channel<EngineMessage> _messages = Channel.CreateUnbounded<EngineMessage>(
-        new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
+    private readonly Channel<EngineMessage> _messages = Channel.CreateBounded<EngineMessage>(
+        new BoundedChannelOptions(32) { SingleReader = true, SingleWriter = false, FullMode = BoundedChannelFullMode.Wait, AllowSynchronousContinuations = false });
 
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<ConversationMessage> _conversationHistory = [];
@@ -107,6 +108,8 @@ public sealed class AssistantEngine : IAssistantEngine
 
     /// <inheritdoc />
     public AssistantState State => (AssistantState)Volatile.Read(ref _state);
+    /// <inheritdoc />
+    public int PendingMessageCount => _messages.Reader.Count;
 
     /// <inheritdoc />
     public IReadOnlyList<ConversationMessage> ConversationHistory
@@ -250,9 +253,20 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <inheritdoc />
     public void StopSpeaking()
     {
-        try { _startupCancellation?.Cancel(); } catch (ObjectDisposedException) { }
+        if (_startupCancellation is { } startup) { _ = CancelRequestAsync(startup); }
+        CancellationTokenSource? active;
+        lock (_generationGate) { Interlocked.Increment(ref _conversationGeneration); active = _activeRequest; }
+        if (active is not null) { _ = CancelRequestAsync(active); }
         _synthesizer.CancelSpeech();
         Enqueue(new StopRequested());
+    }
+
+    /// <summary>Cancels callbacks asynchronously so an external cancellation registration cannot block the native UI.</summary>
+    private async Task CancelRequestAsync(CancellationTokenSource request)
+    {
+        try { await request.CancelAsync().ConfigureAwait(false); }
+        catch (ObjectDisposedException) { }
+        catch (AggregateException exception) { _logger.LogWarning("Request cancellation callback failed ({ErrorType}).", exception.GetType().Name); }
     }
 
     /// <inheritdoc />
@@ -295,16 +309,16 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <returns>A task completed when the message has been handled.</returns>
     private async Task HandleAsync(EngineMessage message, CancellationToken cancellationToken)
     {
+        CancellationTokenSource? request = null;
         try
         {
-            CancellationTokenSource request;
             lock (_generationGate)
             {
                 if (message is CommandSubmitted or SpeechRequested or StartupRequested && message.Generation != _conversationGeneration) { return; }
                 request = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, message.RequestCancellation, _conversationCancellation.Token);
+                _activeRequest = request;
                 _activeGeneration.Value = message.Generation;
             }
-            using var requestLifetime = request;
             request.Token.ThrowIfCancellationRequested();
             switch (message)
             {
@@ -376,6 +390,8 @@ public sealed class AssistantEngine : IAssistantEngine
         }
         finally
         {
+            lock (_generationGate) { if (ReferenceEquals(_activeRequest, request)) { _activeRequest = null; } }
+            request?.Dispose();
             _activeGeneration.Value = null;
             _activeTurnId = Guid.Empty;
             message.Completion?.TrySetResult();
@@ -529,12 +545,23 @@ public sealed class AssistantEngine : IAssistantEngine
     {
         lock (_generationGate)
         {
-        message.Generation = _conversationGeneration;
-        if (!_messages.Writer.TryWrite(message))
+            message.Generation = _conversationGeneration;
+            if (_messages.Writer.TryWrite(message)) { return; }
+        }
+        _ = WriteMessageAsync(message, _lifetime.Token);
+    }
+
+    /// <summary>Waits for bounded queue capacity asynchronously, preserving caller cancellation and observable admission latency.</summary>
+    private async Task WriteMessageAsync(EngineMessage message, CancellationToken cancellationToken)
+    {
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        try
         {
-            message.Completion?.TrySetResult();
+            await _messages.Writer.WriteAsync(message, cancellationToken).ConfigureAwait(false);
+            Laura.Core.Diagnostics.LauraDiagnostics.Record("engine.queue_wait", System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds, PendingMessageCount);
         }
-        }
+        catch (OperationCanceledException) { message.Completion?.TrySetCanceled(cancellationToken); }
+        catch (ChannelClosedException) { message.Completion?.TrySetCanceled(new CancellationToken(true)); }
     }
 
     /// <summary>
@@ -543,14 +570,17 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <param name="factory">Creates the message already associated with the completion signal.</param>
     /// <param name="cancellationToken">Token that aborts waiting.</param>
     /// <returns>A task completed when the message has been handled.</returns>
-    private Task EnqueueAndWaitAsync(
+    private async Task EnqueueAndWaitAsync(
         Func<TaskCompletionSource, EngineMessage> factory,
         CancellationToken cancellationToken)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        Enqueue(factory(completion));
-        return completion.Task.WaitAsync(cancellationToken);
+        var message = factory(completion);
+        lock (_generationGate) { message.Generation = _conversationGeneration; }
+        using var operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
+        await WriteMessageAsync(message, operation.Token).ConfigureAwait(false);
+        await completion.Task.WaitAsync(operation.Token).ConfigureAwait(false);
     }
 
     /// <summary>

@@ -10,6 +10,31 @@ namespace Laura.Core.Tests.Engine;
 /// <summary>Verifies actual queued cancellation, worker recovery and concise internal briefing history.</summary>
 public sealed class AssistantEngineTests
 {
+    /// <summary>Exercises real bounded admission, cancellation before dispatch and priority interruption of active/queued stale work.</summary>
+    [Fact]
+    public async Task BoundedQueueBackpressureDoesNotBlockCallerAndStopInterruptsActiveWork()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var executed = new List<string>();
+        var dispatcher = new CallbackSkillDispatcher(async (request, token) =>
+        {
+            executed.Add(request.RawText);
+            if (request.RawText == "long operation")
+            { entered.SetResult(); try { await Task.Delay(Timeout.Infinite, token); } finally { if (token.IsCancellationRequested) { cancelled.SetResult(); } } }
+            return SkillResponse.Silent();
+        });
+        await using var engine = CreateEngine(dispatcher, new RecordingSpeechSynthesizer()); await engine.StartAsync();
+        Task active = engine.SubmitCommandAsync("long operation"); await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        var queued = Enumerable.Range(0, 40).Select(index => engine.SubmitCommandAsync("queued " + index)).ToArray();
+        Assert.Equal(32, engine.PendingMessageCount); Assert.All(queued, pending => Assert.False(pending.IsCompleted));
+        using var admission = new CancellationTokenSource(); Task withdrawn = engine.SubmitCommandAsync("withdrawn before admission", admission.Token);
+        admission.Cancel(); await Assert.ThrowsAnyAsync<OperationCanceledException>(() => withdrawn);
+        engine.StopSpeaking(); await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await Task.WhenAll(queued.Append(active)).WaitAsync(TimeSpan.FromSeconds(5)); await engine.SubmitCommandAsync("new barrier");
+        Assert.Equal(["long operation", "new barrier"], executed); Assert.Equal(0, engine.PendingMessageCount);
+        Assert.Equal(["long operation", "new barrier"], engine.ConversationHistory.Select(message => message.Text));
+    }
+
     [Theory]
     [InlineData("gemini")]
     [InlineData("openai")]
