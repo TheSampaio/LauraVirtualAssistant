@@ -9,4 +9,8 @@ namespace Laura.Core.Conversation;
 public sealed record ConversationMessage(
     ConversationMessageSource Source,
     string Text,
-    DateTimeOffset Timestamp);
+    DateTimeOffset Timestamp)
+{
+    /// <summary>Gets the originating turn identity; legacy transcript rows have no identity.</summary>
+    public Guid TurnId { get; init; }
+}

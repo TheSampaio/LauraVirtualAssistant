@@ -296,9 +296,10 @@ public sealed class AssistantEngine : IAssistantEngine
                     SetState(AssistantState.Ready);
                     break;
                 case CommandSubmitted submitted:
-                    PublishConversation(ConversationMessageSource.UserTyped, submitted.DisplayText ?? submitted.Text);
+                    Guid turnId = Guid.NewGuid();
+                    PublishConversation(ConversationMessageSource.UserTyped, submitted.DisplayText ?? submitted.Text, turnId);
                     await ExecuteCommandAsync(submitted.Text,
-                        submitted.DisplayText is null ? SkillRequestSource.Text : SkillRequestSource.Context, request.Token, submitted.Image).ConfigureAwait(false);
+                        submitted.DisplayText is null ? SkillRequestSource.Text : SkillRequestSource.Context, request.Token, submitted.Image, turnId).ConfigureAwait(false);
                     break;
 
                 case SpeechRequested requested:
@@ -316,8 +317,9 @@ public sealed class AssistantEngine : IAssistantEngine
                             {
                                 SetState(AssistantState.Thinking);
                                 string prompt = await _startupBriefing.CreateRequestAsync(_greetingComposer.ComposeStartupBriefing(), startup.Token).ConfigureAwait(false);
-                                PublishConversation(ConversationMessageSource.UserTyped, _startupBriefing.DisplayTitle);
-                                await ExecuteCommandAsync(prompt, SkillRequestSource.Context, startup.Token).ConfigureAwait(false);
+                                Guid startupTurnId = Guid.NewGuid();
+                                PublishConversation(ConversationMessageSource.UserTyped, _startupBriefing.DisplayTitle, startupTurnId);
+                                await ExecuteCommandAsync(prompt, SkillRequestSource.Context, startup.Token, turnId: startupTurnId).ConfigureAwait(false);
                             }
                         }
                         finally { _startupCancellation = null; SetState(AssistantState.Ready); }
@@ -363,22 +365,17 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <param name="cancellationToken">Token that aborts execution.</param>
     /// <param name="source">Distinguishes an actionable command from non-actionable briefing data.</param>
     /// <param name="image">Explicit PNG attachment for this interaction, or null for text-only input.</param>
+    /// <param name="turnId">Stable identity shared with the published user message.</param>
     /// <returns>A task completed when the response has finished being spoken.</returns>
-    private async Task ExecuteCommandAsync(string text, SkillRequestSource source, CancellationToken cancellationToken, byte[]? image = null)
+    private async Task ExecuteCommandAsync(string text, SkillRequestSource source, CancellationToken cancellationToken, byte[]? image = null, Guid turnId = default)
     {
         SetState(AssistantState.Working);
 
-        SkillRequest request = SkillRequest.Create(text, _localizer.Culture, _clock.Now, source) with { Image = image };
+        SkillRequest request = SkillRequest.Create(text, _localizer.Culture, _clock.Now, source) with { Image = image, TurnId = turnId };
 
         bool willUseGenerativeAi = _settings.Current.GenerativeAi.Enabled
             && _dispatcher.CanUseGenerativeFallback(request);
         if (willUseGenerativeAi) { SetState(AssistantState.Thinking); }
-
-        if (willUseGenerativeAi && _settings.Current.GenerativeAi.Provider != "gemini")
-        {
-            await SpeakInternalAsync(_localizer.Get(LocalizationKeys.Assistant.Thinking), cancellationToken)
-                .ConfigureAwait(false);
-        }
 
         SkillResponse response = await _dispatcher.DispatchAsync(request, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
@@ -454,7 +451,8 @@ public sealed class AssistantEngine : IAssistantEngine
     /// </summary>
     /// <param name="source">Message source.</param>
     /// <param name="text">Message text.</param>
-    private void PublishConversation(ConversationMessageSource source, string text)
+    /// <param name="turnId">Originating turn identity, or empty for standalone notifications.</param>
+    private void PublishConversation(ConversationMessageSource source, string text, Guid turnId = default)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -462,7 +460,7 @@ public sealed class AssistantEngine : IAssistantEngine
         }
 
         if (_activeGeneration.Value is { } active && active != Volatile.Read(ref _conversationGeneration)) { return; }
-        var message = new ConversationMessage(source, text, _clock.Now);
+        var message = new ConversationMessage(source, text, _clock.Now) { TurnId = turnId };
         Laura.Core.Diagnostics.LauraDiagnostics.Record("conversation.message", amount: text.Length, outcome: source.ToString(), interactionId: _memory?.WorkingTurnId);
         if (_memory is not null && _settings.Current.RememberConversations)
         {

@@ -14,6 +14,21 @@ namespace Laura.Core.Tests.Conversation;
 public sealed class OpenAiConversationTests
 {
     [Fact]
+    public async Task CurrentTurnIsNotReplayedAndToolDisclosureUsesTheOpenAiRuntime()
+    {
+        using var fixture = new Fixture(); Guid current = Guid.NewGuid(), earlier = Guid.NewGuid();
+        fixture.Tools.Execute = _ =>
+        { Assert.Equal("api.openai.com", ProviderExecutionScope.Destination); return Task.FromResult(new AssistantToolResult("Observed")); };
+        fixture.Transport.Replies.Enqueue(_ => Reply([Call("read")])); fixture.Transport.Replies.Enqueue(_ => Reply([], "Answer"));
+        await fixture.Provider.AskAsync(Turn with { TurnId = current, History = [
+            new(ConversationMessageSource.UserTyped, "Same question", DateTimeOffset.UtcNow) { TurnId = earlier },
+            new(ConversationMessageSource.UserTyped, "Display title", DateTimeOffset.UtcNow) { TurnId = current }] });
+        var input = fixture.Transport.Requests[0].GetProperty("input").EnumerateArray().ToArray();
+        Assert.Equal(2, input.Length); Assert.Equal("Same question", input[0].GetProperty("content").GetString());
+        Assert.Equal(Turn.Prompt, input[1].GetProperty("content").GetString()); Assert.Null(ProviderExecutionScope.Provider);
+    }
+
+    [Fact]
     public async Task StreamsVisibleTextReplaysCompleteToolOutputAndUsesNativeOutcomes()
     {
         using var fixture = new Fixture();

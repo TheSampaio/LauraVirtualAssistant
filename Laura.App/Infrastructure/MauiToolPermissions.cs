@@ -1,12 +1,13 @@
 using System.Text.Json;
 using Laura.Core.Permissions;
+using Laura.Core.Conversation;
 
 namespace Laura.App.Infrastructure;
 
 /// <summary>Closed tool/effect registry. Model supplied risk, origin, policy and permission fields are never consumed.</summary>
 internal static class MauiToolPermissions
 {
-    internal const string CloudDestination = "generativelanguage.googleapis.com";
+    internal static string CloudDestination => ProviderExecutionScope.Destination;
     internal static PermissionAction Describe(string name, JsonElement args)
     {
         string action = Text(args, "action");
@@ -59,7 +60,7 @@ internal static class MauiToolPermissions
             _ when name == "read_brain_image" => Text(args, "path"),
             _ => action
         };
-        return new(operation, "Gemini tool: " + name, detail, resources, CanonicalParameters(args), destination);
+        return new(operation, "Native tool: " + name, detail, resources, CanonicalParameters(args), destination);
     }
     private static string CanonicalParameters(JsonElement arguments)
     {

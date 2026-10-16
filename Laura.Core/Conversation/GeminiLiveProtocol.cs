@@ -49,7 +49,7 @@ public static class GeminiLiveProtocol
         var turns = new List<object>();
         if (includeHistory)
         {
-            turns.AddRange(turn.History.TakeLast(8).Select(message => (object)new
+            turns.AddRange(turn.PriorHistory().TakeLast(8).Select(message => (object)new
             {
                 role = message.Source == ConversationMessageSource.Assistant ? "model" : "user",
                 parts = new[] { new { text = message.Text } },

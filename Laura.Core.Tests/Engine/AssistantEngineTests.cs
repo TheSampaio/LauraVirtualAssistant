@@ -10,6 +10,25 @@ namespace Laura.Core.Tests.Engine;
 /// <summary>Verifies actual queued cancellation, worker recovery and concise internal briefing history.</summary>
 public sealed class AssistantEngineTests
 {
+    [Theory]
+    [InlineData("gemini")]
+    [InlineData("openai")]
+    public async Task GenerativeProcessingKeepsThinkingVisualAndSpeaksOnlyTheAnswer(string provider)
+    {
+        var speech = new RecordingSpeechSynthesizer(); var localizer = new StubLocalizer(); var clock = new SystemClock();
+        var settings = new StubSettingsService(LauraSettings.Default with { GreetOnStartup = false, GenerativeAi = new() { Provider = provider } });
+        var states = new List<AssistantState>(); Guid turnId = Guid.Empty;
+        var dispatcher = new CallbackSkillDispatcher((request, _) => { turnId = request.TurnId; return Task.FromResult(SkillResponse.Speak("Verified answer")); });
+        await using var engine = new AssistantEngine(speech, dispatcher, settings, localizer, new StubShellController(),
+            new GreetingComposer(localizer, new StubUserContext(), clock), clock, NullLogger<AssistantEngine>.Instance);
+        engine.StateChanged += (_, state) => states.Add(state);
+        await engine.StartAsync(); await engine.SubmitCommandAsync("What are you doing?");
+        Assert.Equal(["Verified answer"], speech.SpokenTexts);
+        Assert.Contains(AssistantState.Thinking, states); Assert.Equal(AssistantState.Ready, engine.State);
+        Assert.NotEqual(Guid.Empty, turnId); Assert.Equal(turnId, engine.ConversationHistory[0].TurnId);
+        Assert.Equal(["What are you doing?", "Verified answer"], engine.ConversationHistory.Select(message => message.Text));
+    }
+
     [Fact]
     public async Task ClearDuringAnUncooperativeTurnWaitsAndFencesOldResponsesAndQueuedCommands()
     {

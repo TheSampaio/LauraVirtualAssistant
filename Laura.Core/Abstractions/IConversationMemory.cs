@@ -14,6 +14,8 @@ public interface IConversationMemory
     Guid WorkingTurnId => WorkingContext.TurnId;
     /// <summary>Updates current user input before tool dispatch without creating a persistent fact.</summary>
     void SetWorkingContext(string text) { }
+    /// <summary>Retains a trusted caller's turn identity together with bounded grounding text.</summary>
+    void SetWorkingContext(ConversationWorkingContext context) => SetWorkingContext(context.UserText);
     /// <summary>Updates a partial transcription within the same user turn, without changing its identity or persisting it.</summary>
     void UpdateWorkingContext(string text) => SetWorkingContext(text);
     /// <summary>Creates or migrates supported schema versions; unsupported/corrupt data is preserved.</summary>

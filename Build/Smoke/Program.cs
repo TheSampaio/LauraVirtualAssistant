@@ -26,6 +26,21 @@ using var settings = new SettingsService(new IniSettingsStore(Path.Combine(direc
 await settings.LoadAsync(timeout.Token);
 var memory = new SqliteConversationMemory(Path.Combine(directory, "memory.db"));
 memory.Initialize();
+if (args.Contains("--silent-thinking", StringComparer.Ordinal))
+{
+    await using var live = new GeminiLiveClient(settings, new ProtectedApiKeyStore(directory), memory, Array.Empty<ISkill>(), new SmokeShell());
+    int bytes = 0, messages = 0;
+    live.AudioOutputReceived += (_, pcm) => Interlocked.Add(ref bytes, pcm.Length);
+    live.MessageReceived += (_, _) => Interlocked.Increment(ref messages);
+    live.SetThinking(); await Task.Delay(3100, timeout.Token);
+    if (!live.IsThinking || live.IsSpeaking || live.IsListening || bytes != 0 || messages != 0)
+    { throw new InvalidOperationException("Processing produced unsolicited speech, history or capture."); }
+    live.ReturnToReady(); live.SetThinking(); live.Interrupt(); live.ReturnToReady();
+    await Task.Delay(2200, timeout.Token);
+    if (bytes != 0 || messages != 0) { throw new InvalidOperationException("Interrupted processing produced delayed output."); }
+    Console.WriteLine("Silent native processing and interruption verified without credentials, cloud traffic or microphone capture.");
+    return 0;
+}
 if (args.Contains("--gemini", StringComparer.Ordinal))
 {
     int index = Array.IndexOf(args, "--key-file");
@@ -108,29 +123,12 @@ if (args.Contains("--gemini", StringComparer.Ordinal))
         {
             live.SetThinking(); await Task.Delay(300, timeout.Token); live.ReturnToReady();
             await Task.Delay(2500, timeout.Token);
-            if (Interlocked.Read(ref feedbackBytes) != 0) { throw new InvalidOperationException("A quick response played stale thinking feedback."); }
-            live.SetThinking();
-            using var feedbackTimeout = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
-            feedbackTimeout.CancelAfter(TimeSpan.FromSeconds(30));
-            while (live.LastReadAloudTranscript != "Só um minuto." || live.IsSpeaking)
-            { await Task.Delay(100, feedbackTimeout.Token); }
-            long completed = Interlocked.Read(ref feedbackBytes);
-            if (completed == 0 || !live.IsThinking || feedbackMessages != 0 || live.IsListening)
-            { throw new InvalidOperationException("Thinking feedback failed audio, state, history or microphone verification."); }
-            live.SetThinking(); await Task.Delay(2500, timeout.Token);
-            if (Interlocked.Read(ref feedbackBytes) != completed) { throw new InvalidOperationException("Thinking feedback repeated in the same state."); }
-            live.ReturnToReady();
-            live.SetThinking();
-            while (Interlocked.Read(ref feedbackBytes) == completed) { await Task.Delay(10, feedbackTimeout.Token); }
-            live.ReturnToReady(); await Task.Delay(500, timeout.Token);
-            long canceled = Interlocked.Read(ref feedbackBytes);
-            if (live.IsSpeaking) { throw new InvalidOperationException("Thinking audio remained buffered after the response started."); }
-            await Task.Delay(1500, timeout.Token);
-            if (Interlocked.Read(ref feedbackBytes) != canceled) { throw new InvalidOperationException("Canceled thinking feedback kept producing audio."); }
-            live.SetThinking(); await Task.Delay(300, timeout.Token); live.Interrupt(); live.ReturnToReady();
-            await Task.Delay(2500, timeout.Token);
-            if (Interlocked.Read(ref feedbackBytes) != canceled) { throw new InvalidOperationException("Interrupted thinking feedback still played."); }
-            Console.WriteLine("Native Portuguese thinking voice, fast-response cancellation, one-shot delivery, unchanged thinking state, empty history and closed microphone verified.");
+            live.SetThinking(); await Task.Delay(3000, timeout.Token);
+            if (!live.IsThinking || live.IsSpeaking || live.IsListening || feedbackMessages != 0 || Interlocked.Read(ref feedbackBytes) != 0)
+            { throw new InvalidOperationException("Thinking state produced unsolicited speech, history or microphone capture."); }
+            live.Interrupt(); live.ReturnToReady(); await Task.Delay(2500, timeout.Token);
+            if (Interlocked.Read(ref feedbackBytes) != 0) { throw new InvalidOperationException("Interrupted processing produced unsolicited audio."); }
+            Console.WriteLine("Silent thinking, fast and prolonged processing, interruption, empty history and closed microphone verified.");
         }
         finally { live.ReturnToReady(); live.AudioOutputReceived -= CountFeedback; live.MessageReceived -= CountMessage; }
     }

@@ -501,14 +501,18 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         finally { _gate.Release(); }
     }
     /// <summary>Produces selective untrusted context under a configured character budget, with dated attribution and unresolved contradictions visible.</summary>
-    public async Task<string> RecallAsync(string query, CancellationToken cancellationToken = default)
+    public Task<string> RecallAsync(string query, CancellationToken cancellationToken = default)
+        => RecallAsync(query, settings.Current.Brain.ContextCharacters, cancellationToken);
+
+    /// <summary>Returns complete attributed evidence units within the caller's remaining context budget.</summary>
+    public async Task<string> RecallAsync(string query, int characterBudget, CancellationToken cancellationToken = default)
     {
         if (!settings.Current.RememberConversations) { return ""; }
         if (localizer is not null && Regex.IsMatch(TextNormalizer.Normalize(query), localizer.Get(LocalizationKeys.Brain.OverviewPattern), RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))) { query = ""; }
         IReadOnlyList<BrainHit> hits = await SearchAsync(query, 8, cancellationToken: cancellationToken).ConfigureAwait(false);
         LauraDiagnostics.Record("brain.retrieved", amount: hits.Count, outcome: index.SemanticAvailable ? "hybrid" : "lexical",
             ids: hits.Select(hit => hit.Note.Id).ToArray(), scores: hits.Select(hit => hit.Score).ToArray());
-        var builder = new StringBuilder(); int budget = settings.Current.Brain.ContextCharacters;
+        var builder = new StringBuilder(); int budget = Math.Clamp(characterBudget, 0, settings.Current.Brain.ContextCharacters);
         foreach (BrainHit hit in hits)
         {
             string[] conflicts = Snapshot.Edges.Where(edge => edge.Type == "contradicts" && (edge.Source == hit.Note.Id || edge.Target == hit.Note.Id)).Select(edge => edge.Source == hit.Note.Id ? edge.Target : edge.Source).Distinct(StringComparer.Ordinal).Take(4).ToArray();
@@ -517,7 +521,13 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
             string association = hit.Activation is null ? "" : "Associated via authored relations: " + string.Join(" -> ", hit.Activation.Path.Select(step =>
                 step.Edge.Source + " " + step.Edge.Type + (step.Reversed ? " (reverse retrieval)" : "") + " " + step.Edge.Target + " [" + step.Edge.Provenance + "]")) + ". This retrieval path does not establish a new fact.\n";
             string piece = $"[{hit.Note.Id}] {hit.Note.Title} ({hit.Note.UpdatedAt:yyyy-MM-dd}, {hit.Note.MemoryType}, confidence {hit.Note.Confidence.ToString("F2", CultureInfo.InvariantCulture)}, evidence {hit.Note.Verification}, source {hit.Note.Source})\n{warning}{location}{association}{hit.Excerpt}\n";
-            if (builder.Length + piece.Length > budget) { builder.Append(piece.AsSpan(0, budget - builder.Length)); break; }
+            // Preserve the citation, conflict warning and source passage as one evidence unit.
+            if (builder.Length + piece.Length > budget)
+            {
+                string notice = $"[{hit.Note.Id}] Evidence omitted due to context budget.\n{warning}";
+                if (conflicts.Length > 0 && builder.Length + notice.Length <= budget) { builder.Append(notice); }
+                continue;
+            }
             builder.Append(piece);
         }
         return builder.ToString();

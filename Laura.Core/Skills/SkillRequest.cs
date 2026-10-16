@@ -8,6 +8,9 @@ namespace Laura.Core.Skills;
 /// </summary>
 public sealed record SkillRequest
 {
+    /// <summary>Gets the originating user turn identity, preserved across dispatch and provider context.</summary>
+    public Guid TurnId { get; init; }
+
     /// <summary>Gets the text as it came from the source, kept for logging and the generative AI.</summary>
     public required string RawText { get; init; }
 

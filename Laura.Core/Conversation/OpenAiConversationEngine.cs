@@ -55,14 +55,15 @@ public sealed class OpenAiConversationEngine(HttpClient http, ISettingsService s
             await _requests.WaitAsync(operation.Token).ConfigureAwait(false);
             try
             {
+                using var provider = new ProviderExecutionScope("openai");
                 operation.Token.ThrowIfCancellationRequested();
-                memory.SetWorkingContext(turn.Prompt);
+                memory.SetWorkingContext(new ConversationWorkingContext(turn.TurnId, turn.Prompt));
                 using var correlation = LauraDiagnostics.Correlate(memory.WorkingContext.TurnId);
                 using var measurement = LauraDiagnostics.Measure("interaction.openai");
                 BrainContext? recalled = context is null ? null : await context.BuildAsync(turn.Prompt, operation.Token).ConfigureAwait(false);
                 var input = new List<object>();
                 var history = settings.Current.RememberConversations && turn.History.Count > 0 ? turn.History : _history;
-                foreach (var message in history.TakeLast(8))
+                foreach (var message in history.Where(message => turn.TurnId == Guid.Empty || message.TurnId != turn.TurnId).TakeLast(8))
                 { input.Add(new { role = message.Source == ConversationMessageSource.Assistant ? "assistant" : "user", content = message.Text }); }
                 input.Add(new { role = "user", content = turn.Prompt });
                 if (recalled is not null)

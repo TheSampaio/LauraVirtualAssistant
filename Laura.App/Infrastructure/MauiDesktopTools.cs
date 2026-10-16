@@ -7,11 +7,12 @@ using Laura.Core.Permissions;
 namespace Laura.App.Infrastructure;
 
 /// <summary>Retains trusted confirmations and scoped file operations in the MAUI presentation.</summary>
-public sealed class MauiDesktopTools(IUiLocalizer ui, ILocalizer conversation, UserFileWorkspace files, PermissionManager permissions, ScreenshotCoordinator screenshots) : IDesktopTools
+public sealed class MauiDesktopTools(IUiLocalizer ui, ILocalizer conversation, UserFileWorkspace files, PermissionManager permissions, ScreenshotCoordinator screenshots, ISettingsService settings) : IDesktopTools
 {
     /// <inheritdoc />
     public async Task<string> ExecuteAsync(DesktopAction action, string? note, CancellationToken cancellationToken)
     {
+        using var provider = new Laura.Core.Conversation.ProviderExecutionScope(Laura.Core.Conversation.ProviderExecutionScope.Provider ?? settings.Current.GenerativeAi.Provider);
         if (!Enum.IsDefined(action)) { throw new ArgumentOutOfRangeException(nameof(action)); }
         PermissionOperation operation = action switch
         {

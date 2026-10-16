@@ -22,6 +22,22 @@ public sealed class SqliteConversationMemoryTests : IDisposable
     }
 
     [Fact]
+    public void MigratesVersionFourAndPreservesNewTurnIdentitiesAcrossRestart()
+    {
+        Directory.CreateDirectory(_directory);
+        using (var connection = new SqliteConnection($"Data Source={Database};Pooling=False"))
+        {
+            connection.Open(); using var command = connection.CreateCommand();
+            command.CommandText = "CREATE TABLE messages(id INTEGER PRIMARY KEY,source INTEGER NOT NULL,text TEXT NOT NULL,stamp TEXT NOT NULL); INSERT INTO messages VALUES(1,0,'Legacy question','2026-10-15T00:00:00Z'); PRAGMA user_version=4";
+            command.ExecuteNonQuery();
+        }
+        var store = new SqliteConversationMemory(Database); Guid turnId = Guid.NewGuid();
+        store.Append(new(ConversationMessageSource.UserTyped, "New question", DateTimeOffset.UtcNow) { TurnId = turnId });
+        var messages = new SqliteConversationMemory(Database).ReadRecent(10);
+        Assert.Equal(Guid.Empty, messages[0].TurnId); Assert.Equal("Legacy question", messages[0].Text);
+        Assert.Equal(turnId, messages[1].TurnId); Assert.Equal("New question", messages[1].Text);
+    }
+    [Fact]
     public void LiteralSearchAndDeletionCannotExecuteInjectedSql()
     {
         var store = new SqliteConversationMemory(Database);

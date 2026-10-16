@@ -26,6 +26,8 @@ public sealed class BrainContextBuilder(BrainService brain, ISettingsService set
         await brain.RefreshIfDirtyAsync(cancellationToken).ConfigureAwait(false);
         BrainOptions options = settings.Current.Brain;
         string catalogue = skills is null ? "" : await skills.DiscoverAsync(query, Math.Min(2000, options.ContextCharacters / 2), cancellationToken).ConfigureAwait(false);
+        int remaining = Math.Max(0, options.ContextCharacters - catalogue.Length);
+        string cacheKey = remaining.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + query;
         BrainSnapshot snapshot = brain.Snapshot;
         string? context = null;
         if (settings.Current.RememberConversations)
@@ -33,22 +35,21 @@ public sealed class BrainContextBuilder(BrainService brain, ISettingsService set
             lock (_cacheGate)
             {
                 if (!ReferenceEquals(snapshot, _snapshot) || options != _options) { _cache.Clear(); _snapshot = snapshot; _options = options; }
-                _cache.TryGetValue(query, out context);
+                _cache.TryGetValue(cacheKey, out context);
             }
             if (context is null)
             {
-                context = await brain.RecallAsync(query, cancellationToken).ConfigureAwait(false);
+                context = await brain.RecallAsync(query, remaining, cancellationToken).ConfigureAwait(false);
                 lock (_cacheGate)
                 {
                     if (ReferenceEquals(snapshot, brain.Snapshot) && ReferenceEquals(snapshot, _snapshot))
-                    { if (_cache.Count >= 32) { _cache.Clear(); } _cache[query] = context; }
+                    { if (_cache.Count >= 32) { _cache.Clear(); } _cache[cacheKey] = context; }
                 }
             }
             else { LauraDiagnostics.Record("cognition.retrieval.cache-hit"); }
         }
         context ??= "";
-        int remaining = Math.Max(0, options.ContextCharacters - catalogue.Length);
-        return new(context.Length > remaining ? context[..remaining] : context, catalogue);
+        return new(context, catalogue);
     }
 }
 

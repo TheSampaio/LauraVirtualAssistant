@@ -20,7 +20,8 @@ public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISet
             try { history = memory.ReadRecent(8); }
             catch (Exception error) when (error is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException) { }
         }
-        string? answer = await conversation.AskAsync(new ConversationTurn(request.RawText, request.Culture, user.DisplayName) { History = history, Image = request.Image }, cancellationToken).ConfigureAwait(false);
+        string? answer = await conversation.AskAsync(new ConversationTurn(request.RawText, request.Culture, user.DisplayName)
+        { TurnId = request.TurnId, History = history.Where(message => request.TurnId == Guid.Empty || message.TurnId != request.TurnId).ToArray(), Image = request.Image }, cancellationToken).ConfigureAwait(false);
         return SkillResponse.Speak(string.IsNullOrWhiteSpace(answer) ? localizer.Get("ui.ai.providerFailed") : answer);
     }
 }

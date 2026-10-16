@@ -5,6 +5,16 @@ namespace Laura.Core.Tests.Brain;
 public sealed partial class BrainTests
 {
     [Fact]
+    public async Task ContextBudgetNeverCutsAnAttributedEvidenceUnit()
+    {
+        BrainService brain = Create();
+        await brain.SaveAsync(Note("Knowledge/Complete.md", "Synthetic evidence", "Evidence begins. " + new string('x', 650) + " Evidence ends."));
+        string complete = await brain.RecallAsync("Synthetic evidence"); Assert.Contains("Evidence begins.", complete);
+        Assert.Empty(await brain.RecallAsync("Synthetic evidence", complete.Length - 1));
+        Assert.Equal(complete, await brain.RecallAsync("Synthetic evidence", complete.Length));
+    }
+
+    [Fact]
     public async Task LongInputsUseABoundedRetrievalQueryWithoutBreakingTheInteraction()
     {
         BrainService brain = Create(); await brain.SaveAsync(Note("Knowledge/Long.md", "Synthetic editor fixture", "Editor knowledge remains available."));

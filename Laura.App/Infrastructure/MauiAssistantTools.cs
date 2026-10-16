@@ -109,6 +109,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
     /// <inheritdoc />
     public async Task<AssistantToolResult> ExecuteAsync(string name, JsonElement arguments, CancellationToken cancellationToken)
     {
+        using var provider = new Laura.Core.Conversation.ProviderExecutionScope(Laura.Core.Conversation.ProviderExecutionScope.Provider ?? settings.Current.GenerativeAi.Provider);
         if (Environment.GetCommandLineArgs().Contains("--brain-github-smoke", StringComparer.Ordinal)
             && name is not ("list_capabilities" or "plan_task" or "task_status" or "assess_source_learning" or "recall_memory" or "study_github_repository" or "read_brain_passage" or "list_brain_skills" or "propose_brain_skill"))
         { return new("The isolated public-source diagnostic permits only repository acquisition, knowledge retrieval and inert proposal tools.") { Failed = true, Status = "blocked" }; }
@@ -141,6 +142,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
     /// <inheritdoc />
     public async Task<string?> PendingTaskContinuationAsync(CancellationToken cancellationToken)
     {
+        using var provider = new Laura.Core.Conversation.ProviderExecutionScope(Laura.Core.Conversation.ProviderExecutionScope.Provider ?? settings.Current.GenerativeAi.Provider);
         await _actions.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {

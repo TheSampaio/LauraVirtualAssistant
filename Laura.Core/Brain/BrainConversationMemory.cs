@@ -22,7 +22,13 @@ public sealed class BrainConversationMemory(BrainService brain, BrainLearning le
     public Guid WorkingTurnId { get { lock (_gate) { return _turnId; } } }
     /// <inheritdoc />
     public void SetWorkingContext(string text)
-    { ArgumentNullException.ThrowIfNull(text); lock (_gate) { _lastUserText = text.Length <= 4000 ? text : ""; _turnId = Guid.NewGuid(); } }
+        => SetWorkingContext(new ConversationWorkingContext(Guid.NewGuid(), text));
+    /// <inheritdoc />
+    public void SetWorkingContext(ConversationWorkingContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context); ArgumentNullException.ThrowIfNull(context.UserText);
+        lock (_gate) { _lastUserText = context.UserText.Length <= 4000 ? context.UserText : ""; _turnId = context.TurnId == Guid.Empty ? Guid.NewGuid() : context.TurnId; }
+    }
     /// <inheritdoc />
     public void UpdateWorkingContext(string text)
     { ArgumentNullException.ThrowIfNull(text); lock (_gate) { _lastUserText = text.Length <= 4000 ? text : ""; if (_turnId == Guid.Empty) { _turnId = Guid.NewGuid(); } } }
@@ -63,7 +69,7 @@ public sealed class BrainConversationMemory(BrainService brain, BrainLearning le
         { transcripts.AppendForLearning(message, FileBrainStorage.Hash(brain.Location)); learning.RecoverPending(transcripts); }
         else { transcripts.Append(message); }
         if (updateContext && message.Source != ConversationMessageSource.Assistant)
-        { SetWorkingContext(message.Text); }
+        { SetWorkingContext(new ConversationWorkingContext(message.TurnId, message.Text)); }
     }
     /// <inheritdoc />
     public IReadOnlyList<ConversationMessage> ReadRecent(int limit) => transcripts.ReadRecent(limit);

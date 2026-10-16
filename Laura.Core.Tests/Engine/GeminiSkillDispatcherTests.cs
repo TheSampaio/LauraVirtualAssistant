@@ -35,6 +35,19 @@ public sealed class GeminiSkillDispatcherTests : IDisposable
         Assert.Equal(expectedHistory, conversation.LastTurn.History.Count);
     }
     [Fact]
+    public async Task Dispatch_ExcludesTheCurrentIdentityAndKeepsAnIdenticalEarlierQuestion()
+    {
+        var memory = CreateMemory(); Guid current = Guid.NewGuid(), earlier = Guid.NewGuid();
+        memory.Append(new(ConversationMessageSource.UserTyped, "Repeat this question", DateTimeOffset.UtcNow) { TurnId = earlier });
+        memory.Append(new(ConversationMessageSource.UserTyped, "Short display title", DateTimeOffset.UtcNow) { TurnId = current });
+        var conversation = new RecordingConversationEngine(true, "Answer");
+        var dispatcher = new GeminiSkillDispatcher(conversation, new StubSettingsService(LauraSettings.Default), new StubUserContext(), memory, new StubLocalizer());
+        await dispatcher.DispatchAsync(SkillRequest.Create("Repeat this question", CultureInfo.GetCultureInfo("en-US"), DateTimeOffset.UtcNow, SkillRequestSource.Context) with { TurnId = current });
+        Assert.Equal(current, conversation.LastTurn!.TurnId);
+        Assert.DoesNotContain(conversation.LastTurn.History, message => message.TurnId == current);
+        Assert.Contains(conversation.LastTurn.History, message => message.TurnId == earlier && message.Text == "Repeat this question");
+    }
+    [Fact]
     public async Task Dispatch_UnconfiguredSelectedProviderRequestsKeyInsteadOfCallingAProvider()
     {
         var conversation = new RecordingConversationEngine(false, null);

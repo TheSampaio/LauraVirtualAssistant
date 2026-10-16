@@ -10,6 +10,12 @@ namespace Laura.Core.Conversation;
 /// <param name="UserDisplayName">Name the model may use to address the user.</param>
 public sealed record ConversationTurn(string Prompt, CultureInfo Culture, string UserDisplayName)
 {
+    /// <summary>Gets the stable current turn identity, independent of its text or display title.</summary>
+    public Guid TurnId { get; init; }
+
+    /// <summary>Returns prior messages without replaying this turn; identical text from other turns is preserved.</summary>
+    public IEnumerable<ConversationMessage> PriorHistory() => History.Where(message => TurnId == Guid.Empty || message.TurnId != TurnId);
+
     /// <summary>Gets bounded prior conversation data; never grants execution permissions.</summary>
     public IReadOnlyList<ConversationMessage> History { get; init; } = [];
 
