@@ -17,6 +17,7 @@ public static class MauiSmokeRunner
     public static async Task RunAsync(IServiceProvider services, Window window, string directory)
     {
         Directory.CreateDirectory(directory);
+        VerifyReactorTransitions();
         try
         {
             if (Environment.GetCommandLineArgs().Contains("--chat-diagnostics-smoke", StringComparer.Ordinal))
@@ -34,13 +35,16 @@ public static class MauiSmokeRunner
                     foreach (double width in new[] { 1440d, 720d })
                     {
                         window.Width = width; window.Height = width == 720 ? 600 : 900; await Task.Delay(300).ConfigureAwait(true); setup.VerifySettingsForSmoke();
+                        await setup.ShowProviderForSmokeAsync("openai").ConfigureAwait(true);
                         await CaptureAsync(window, Path.Combine(directory, "gpt-settings-top-" + culture + "-" + width + ".png")).ConfigureAwait(true);
                         await setup.VerifySettingsScrollForSmokeAsync(true).ConfigureAwait(true);
                         await CaptureAsync(window, Path.Combine(directory, "gpt-settings-bottom-" + culture + "-" + width + ".png")).ConfigureAwait(true);
                         await setup.VerifySettingsScrollForSmokeAsync(false).ConfigureAwait(true);
+                        await setup.ShowProviderForSmokeAsync("gemini").ConfigureAwait(true);
+                        await CaptureAsync(window, Path.Combine(directory, "gemini-models-" + culture + "-" + width + ".png")).ConfigureAwait(true);
                     }
                 }
-                await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "Optional GPT and Gemini selection, independent DPAPI credential masking/preservation/removal, missing-key behavior and native EN/PT settings at 1440/720 verified with synthetic keys. No cloud, microphone or clipboard access.").ConfigureAwait(true); return;
+                await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "Optional GPT and Gemini selection, populated compatible model pickers, search with selection preservation, manual refresh, independent DPAPI credential masking/preservation/removal, missing-key behavior and native EN/PT settings at 1440/720 verified with synthetic keys/catalogue. No cloud, microphone or clipboard access.").ConfigureAwait(true); return;
             }
             if (Environment.GetCommandLineArgs().Contains("--voice-cancellation-smoke", StringComparer.Ordinal))
             {
@@ -351,6 +355,25 @@ public static class MauiSmokeRunner
         }
         for (int index = 0; index < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(element); index++)
         { foreach (string row in Describe(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(element, index), root)) { yield return row; } }
+    }
+    /// <summary>Checks elapsed-time equivalence, rapid state changes and reduced-motion settling on the actual UI drawable.</summary>
+    private static void VerifyReactorTransitions()
+    {
+        var coarse = new Controls.AssistantCoreDrawable { Mode = Controls.ReactorMode.Thinking };
+        var fine = new Controls.AssistantCoreDrawable { Mode = Controls.ReactorMode.Thinking };
+        coarse.Advance(.1f, true);
+        for (int frame = 0; frame < 10; frame++) { fine.Advance(.01f, true); }
+        if (MathF.Abs(coarse.ThinkingAmount - fine.ThinkingAmount) > .00001f || coarse.ThinkingAmount is <= 0 or >= 1)
+        { throw new InvalidOperationException("Reactor transition depends on frame count instead of elapsed time."); }
+        foreach (Controls.ReactorMode mode in Enum.GetValues<Controls.ReactorMode>())
+        {
+            fine.Mode = mode; fine.Advance(.016f, true);
+            if (!float.IsFinite(fine.ActivityAmount) || fine.ActivityAmount is < 0 or > 1 || fine.ThinkingAmount is < 0 or > 1 || fine.SpeakingAmount is < 0 or > 1)
+            { throw new InvalidOperationException("A rapid reactor state transition exceeded its visual bounds."); }
+        }
+        fine.Mode = Controls.ReactorMode.Idle; fine.Advance(0, false);
+        if (fine.ActivityAmount != 0 || fine.ThinkingAmount != 0 || fine.SpeakingAmount != 0)
+        { throw new InvalidOperationException("Reduced-motion reactor did not settle immediately."); }
     }
     /// <summary>Captures the application's native WinUI content rather than the user's desktop.</summary>
     internal static async Task CaptureAsync(Window window, string path)

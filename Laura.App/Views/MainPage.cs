@@ -168,6 +168,9 @@ public sealed partial class MainPage : ContentPage, IDisposable
         live.StreamUpdated += ReceiveStream;
         services.GetRequiredService<OpenAiConversationEngine>().StreamUpdated += ReceiveStream;
         services.GetRequiredService<OpenAiConversationEngine>().Interrupted += StreamInterrupted;
+        services.GetRequiredService<Laura.Platform.Windows.Conversation.LlamaLocalInferenceEngine>().StreamUpdated += ReceiveStream;
+        services.GetRequiredService<Laura.Platform.Windows.Conversation.LlamaLocalInferenceEngine>().Interrupted += StreamInterrupted;
+        services.GetRequiredService<LocalVoiceSession>().Changed += LocalCaptureChanged;
         live.Interrupted += StreamInterrupted;
         live.StatusChanged += (_, state) => MainThread.BeginInvokeOnMainThread(() => SetState(state));
         settings.Changed += (_, _) => MainThread.BeginInvokeOnMainThread(Reload);
@@ -211,10 +214,12 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _deviceTitle.Text = _ui.Get("ui.hud.devices").ToUpperInvariant();
         _platform.Text = $"Windows · {Environment.OSVersion.Version.Build}";
         _devices.Text = DeviceSummary();
-        _provider.Text = _settings.Current.GenerativeAi.Provider == "openai" ? "GPT · " + _settings.Current.GenerativeAi.OpenAiModel : "GEMINI LIVE · " + _settings.Current.GenerativeAi.LiveVoice;
+        string activeProvider = _services.GetRequiredService<ConversationProviderRouter>().ActiveProvider;
+        _provider.Text = activeProvider switch { "openai" => "GPT · " + _settings.Current.GenerativeAi.OpenAiModel,
+            "gemini" => "GEMINI LIVE · " + _settings.Current.GenerativeAi.LiveVoice, "local" => "LOCAL · " + _settings.Current.GenerativeAi.LocalModel, _ => _ui.Get("ui.models.noProvider") };
         _emptyTitle.Text = _ui.Get("ui.hud.ready"); _emptyHint.Text = _ui.Get("ui.hud.prompt");
-        _shortcutHint.Text = _ui.Get(_settings.Current.GenerativeAi.Provider == "openai" ? "ui.ai.textHint" : "ui.hud.talkHint");
-        ToolTipProperties.SetText(_shortcutHint, _settings.Current.GenerativeAi.Provider == "openai" ? _shortcutHint.Text : _ui.Get("ui.maui.shortcutHelp") + "\n" + _ui.Get("ui.hud.hotkey"));
+        _shortcutHint.Text = _ui.Get(activeProvider is "local" or "gemini" ? "ui.hud.talkHint" : "ui.ai.textHint");
+        ToolTipProperties.SetText(_shortcutHint, activeProvider is "local" or "gemini" ? _ui.Get("ui.maui.shortcutHelp") + "\n" + _ui.Get("ui.hud.hotkey") : _shortcutHint.Text);
         ToolTipProperties.SetText(_networkMeter, _ui.Get("ui.maui.networkHint"));
         _diskUnavailable.Text = _ui.Get("ui.hud.disksUnavailable");
         RefreshFeedback(); UpdateSendAction(); _nextMetrics = 0;
@@ -232,8 +237,10 @@ public sealed partial class MainPage : ContentPage, IDisposable
     /// <summary>Synchronizes voice controls and explicit capture feedback with current runtime state.</summary>
     private void RefreshFeedback()
     {
-        bool muted = _settings.Current.MicrophoneMuted, listening = _live.IsListening;
-        bool voiceSupported = _settings.Current.GenerativeAi.Provider == "gemini";
+        var localVoice = _services.GetRequiredService<LocalVoiceSession>();
+        bool muted = _settings.Current.MicrophoneMuted, listening = _live.IsListening || localVoice.IsRunning;
+        string activeProvider = _services.GetRequiredService<ConversationProviderRouter>().ActiveProvider;
+        bool voiceSupported = activeProvider is "gemini" or "local";
         _listen.IsEnabled = voiceSupported; _microphoneButton.IsEnabled = voiceSupported;
         string micAction = _ui.Get(muted ? "ui.hud.unmute" : "ui.hud.mute");
         _microphoneButton.Source = Theme.IconSource(muted ? "mic_off" : "mic"); _micIcon.Source = _microphoneButton.Source;
@@ -244,7 +251,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _micStatus.Text = _ui.Get(muted ? "ui.maui.muted" : listening && _live.IsSpeaking ? "ui.hud.capturePaused" : listening ? "ui.maui.streaming" : _clapListener.IsCapturing ? "ui.hud.clapLocal" : "ui.maui.micReady");
         _voiceHint.Text = _ui.Get(muted ? "ui.hud.micMuted" : listening ? "ui.maui.listening" : _clapListener.IsCapturing ? "ui.hud.clapArmed" : "ui.hud.micReady");
         _voiceHint.TextColor = listening ? Theme.Accent : Theme.Muted;
-        if (!voiceSupported) { _micStatus.Text = _ui.Get("ui.ai.gptTextOnly"); _voiceHint.Text = _ui.Get("ui.ai.gptTextOnly"); }
+        if (!voiceSupported) { _micStatus.Text = _ui.Get(activeProvider == "openai" ? "ui.ai.gptTextOnly" : "ui.models.noProvider"); _voiceHint.Text = _micStatus.Text; }
         string state = _visualMode switch { ReactorMode.Speaking => "Speaking", ReactorMode.Thinking => "Thinking", ReactorMode.Listening => "Listening", ReactorMode.Working => "Working", _ => _reportedStatus };
         _status.Text = state switch { "Ready" => _ui.Get("ui.state.ready"), "Speaking" => _ui.Get("ui.state.speaking"), "Thinking" => _ui.Get("ui.state.thinking"), "Connecting" => _ui.Get("ui.state.connecting"), "Working" => _ui.Get("ui.state.working"), "Listening" => _ui.Get("ui.maui.listening"), "Stopped" => _ui.Get("ui.hud.stopped"), _ => state };
         _status.TextColor = _visualMode == ReactorMode.Speaking ? Theme.Speaking : Theme.Accent;
@@ -287,16 +294,18 @@ public sealed partial class MainPage : ContentPage, IDisposable
     /// <summary>Animates vector rings and refreshes measured system statistics at one-second intervals.</summary>
     private void Tick(object? sender, EventArgs args)
     {
-        _core.Mode = _smokeMode ?? (_live.IsSpeaking ? ReactorMode.Speaking : _live.IsThinking || _engine.State == AssistantState.Thinking ? ReactorMode.Thinking : _live.IsListening ? ReactorMode.Listening : _engine.State == AssistantState.Working ? ReactorMode.Working : ReactorMode.Idle);
+        _core.Mode = _smokeMode ?? (_live.IsSpeaking || _engine.State == AssistantState.Speaking ? ReactorMode.Speaking : _live.IsThinking || _engine.State == AssistantState.Thinking ? ReactorMode.Thinking : _live.IsListening || _services.GetRequiredService<LocalVoiceSession>().IsCapturing ? ReactorMode.Listening : _engine.State == AssistantState.Working ? ReactorMode.Working : ReactorMode.Idle);
         if (_visualMode != _core.Mode) { _visualMode = _core.Mode; RefreshFeedback(); _reactor.Invalidate(); }
         bool animate = _accessibility.AnimationsEnabled;
-        _core.Level = animate ? _core.Level + ((_core.Mode == ReactorMode.Listening ? _live.InputLevel : _live.OutputLevel) - _core.Level) * .25f : 0;
         long frame = Stopwatch.GetTimestamp();
         double frameDelay = Stopwatch.GetElapsedTime(_lastFrame, frame).TotalMilliseconds;
         if (_windowVisible && _pageVisible && frameDelay > 100) { Laura.Core.Diagnostics.LauraDiagnostics.Record("ui.dispatcher_gap", frameDelay); }
         float seconds = (float)Math.Clamp(Stopwatch.GetElapsedTime(_lastFrame, frame).TotalSeconds, 0, .1); _lastFrame = frame;
+        _core.Advance(seconds, animate && _smokeAngle is null);
+        float blend = 1 - MathF.Exp(-seconds / .09f);
+        _core.Level = animate ? _core.Level + ((_core.Mode == ReactorMode.Listening ? _live.InputLevel : _live.OutputLevel) - _core.Level) * blend : 0;
         if (_smokeAngle is { } angle) { _core.Angle = angle; _core.Level = 0; _reactor.Invalidate(); }
-        else if (animate) { _core.Angle = (_core.Angle + (_core.Active ? 36 : 14) * seconds) % AssistantCoreDrawable.CycleDegrees; _reactor.Invalidate(); }
+        else if (animate) { _core.Angle = (_core.Angle + (14 + 22 * _core.ActivityAmount) * seconds) % AssistantCoreDrawable.CycleDegrees; _reactor.Invalidate(); }
         if (Environment.TickCount64 < _nextMetrics) { return; }
         _nextMetrics = Environment.TickCount64 + 1000;
         _clock.Text = DateTime.Now.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
@@ -413,7 +422,13 @@ public sealed partial class MainPage : ContentPage, IDisposable
     /// <summary>Toggles automatic turn detection; a natural speech pause triggers a response without another click.</summary>
     private async Task ToggleListeningAsync()
     {
-        if (_settings.Current.GenerativeAi.Provider != "gemini") { Notice(_ui.Get("ui.ai.gptTextOnly")); return; }
+        if (_services.GetRequiredService<ConversationProviderRouter>().ActiveProvider == "local")
+        {
+            var local = _services.GetRequiredService<LocalVoiceSession>();
+            if (local.IsRunning) { local.Stop(); return; }
+            await ListenLocallyAsync(true, CancellationToken.None).ConfigureAwait(true); return;
+        }
+        if (_services.GetRequiredService<ConversationProviderRouter>().ActiveProvider != "gemini") { Notice(_ui.Get("ui.models.localTextOnly")); return; }
         if (_settings.Current.MicrophoneMuted) { await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync("Laura", _ui.Get("ui.maui.unmuteFirst"), "OK").ConfigureAwait(true); return; }
         if (_live.IsListening) { await _live.StopListeningAsync().ConfigureAwait(true); }
         else { await _live.StartListeningAsync().ConfigureAwait(true); }
@@ -422,18 +437,25 @@ public sealed partial class MainPage : ContentPage, IDisposable
     /// <summary>Stops microphone capture before persisting its muted state.</summary>
     public async Task ToggleMicrophoneAsync()
     {
+        _services.GetRequiredService<LocalVoiceSession>().Stop();
         if (!_settings.Current.MicrophoneMuted) { _holdLifetime?.Cancel(); await _clapListener.StopAsync().ConfigureAwait(true); await _live.StopListeningAsync().ConfigureAwait(true); }
         await _settings.UpdateAsync(_settings.Current with { MicrophoneMuted = !_settings.Current.MicrophoneMuted }).ConfigureAwait(true);
     }
     /// <summary>Cancels microphone input, native generation, local generation and playback.</summary>
     public async Task InterruptAsync()
     {
+        _services.GetRequiredService<LocalVoiceSession>().Stop(); _services.GetRequiredService<ILocalInferenceEngine>().Cancel();
         _holdLifetime?.Cancel(); _command?.Cancel(); _live.Interrupt(); _engine.StopSpeaking(); await _live.StopListeningAsync().ConfigureAwait(true); Reload();
     }
     /// <summary>Captures only while the global Ctrl+Space chord is held, including connection cancellation on release.</summary>
     public async Task SetPushToTalkAsync(bool held)
     {
-        if (held && _settings.Current.GenerativeAi.Provider != "gemini") { Notice(_ui.Get("ui.ai.gptTextOnly")); return; }
+        if (held && _services.GetRequiredService<ConversationProviderRouter>().ActiveProvider == "local")
+        {
+            _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _holdLifetime = new CancellationTokenSource();
+            await ListenLocallyAsync(false, _holdLifetime.Token).ConfigureAwait(true); return;
+        }
+        if (held && _services.GetRequiredService<ConversationProviderRouter>().ActiveProvider != "gemini") { Notice(_ui.Get("ui.models.localTextOnly")); return; }
         if (!held)
         { var lifetime = _holdLifetime; _holdLifetime = null; lifetime?.Cancel(); await _live.StopListeningAsync().ConfigureAwait(true); lifetime?.Dispose(); Reload(); return; }
         if (_settings.Current.MicrophoneMuted) { _micStatus.Text = _ui.Get("ui.maui.unmuteFirst"); return; }
@@ -444,6 +466,20 @@ public sealed partial class MainPage : ContentPage, IDisposable
         catch (Exception) { _micStatus.Text = _ui.Get("ui.maui.liveFailed"); }
         Reload();
     }
+    /// <summary>Starts only an explicit local microphone workflow and reports actual missing-model/device failures.</summary>
+    private async Task ListenLocallyAsync(bool continuous, CancellationToken release)
+    {
+        if (_settings.Current.MicrophoneMuted || Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { return; }
+        var local = _services.GetRequiredService<LocalVoiceSession>(); local.Stop();
+        _command?.Cancel(); _services.GetRequiredService<ILocalInferenceEngine>().Cancel(); _engine.StopSpeaking();
+        try { await local.StartAsync(continuous, release).ConfigureAwait(true); }
+        catch (OperationCanceledException) { }
+        catch (Exception error) when (error is IOException or InvalidOperationException or NAudio.MmException)
+        { Notice(_ui.Get("ui.models.localVoiceFailed")); }
+        Reload();
+    }
+    /// <summary>Marshals local capture notifications to the native UI dispatcher.</summary>
+    private void LocalCaptureChanged(object? sender, EventArgs args) => Dispatcher.Dispatch(RefreshFeedback);
     /// <summary>Previews colors for the isolated rendering harness without recording or playing sound.</summary>
     public void PreviewReactorForSmoke(ReactorMode? mode)
     { if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Visual preview is restricted to isolated smoke verification."); } _smokeMode = mode; _core.Level = .5f; }
@@ -521,5 +557,12 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _approvalsButton.BackgroundColor = count > 0 ? Theme.Primary : Theme.Field;
     }
     /// <inheritdoc />
-    public void Dispose() { _services.GetRequiredService<OpenAiConversationEngine>().StreamUpdated -= ReceiveStream; _services.GetRequiredService<OpenAiConversationEngine>().Interrupted -= StreamInterrupted; _engine.ConversationMessageReceived -= ReceiveMessage; _live.MessageReceived -= ReceiveMessage; _live.StreamUpdated -= ReceiveStream; _live.Interrupted -= StreamInterrupted; _conversationScroll.Dispose(); _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed -= OnApprovalsChanged; _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this); }
+    public void Dispose()
+    {
+        _services.GetRequiredService<OpenAiConversationEngine>().StreamUpdated -= ReceiveStream; _services.GetRequiredService<OpenAiConversationEngine>().Interrupted -= StreamInterrupted;
+        var local = _services.GetRequiredService<Laura.Platform.Windows.Conversation.LlamaLocalInferenceEngine>(); local.StreamUpdated -= ReceiveStream; local.Interrupted -= StreamInterrupted;
+        var voice = _services.GetRequiredService<LocalVoiceSession>(); voice.Changed -= LocalCaptureChanged; voice.Stop();
+        _engine.ConversationMessageReceived -= ReceiveMessage; _live.MessageReceived -= ReceiveMessage; _live.StreamUpdated -= ReceiveStream; _live.Interrupted -= StreamInterrupted;
+        _conversationScroll.Dispose(); _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed -= OnApprovalsChanged; _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this);
+    }
 }

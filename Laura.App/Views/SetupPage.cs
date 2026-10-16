@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Laura.App.Infrastructure;
+using Laura.App.Controls;
 using Laura.App.Theming;
 using Laura.Core.Abstractions;
 using Laura.Core.Configuration;
@@ -21,14 +22,15 @@ public sealed class SetupPage : ContentPage
     private readonly OpenAiApiKeyStore _openAiKeys;
     private readonly ConversationProviderRouter _router;
     private readonly Picker _chatProvider;
-    private readonly Entry _openAiKey = Theme.Entry(), _openAiModel = Theme.Entry();
+    private readonly Entry _openAiKey = Theme.Entry();
+    private readonly ProviderModelPicker _openAiModel, _model;
     private readonly IUiLocalizer _ui;
     private readonly IStartupRegistration _startup;
     private readonly ISpeechSynthesizer _speech;
     private readonly ILocalizer _conversation;
     private readonly WindowsApplicationCatalog _applications;
     private readonly Picker _voice, _culture, _uiCulture, _input, _output;
-    private readonly Entry _key = Theme.Entry(), _model = Theme.Entry(), _nickname = Theme.Entry(), _appSearch = Theme.Entry();
+    private readonly Entry _key = Theme.Entry(), _nickname = Theme.Entry(), _appSearch = Theme.Entry();
     private readonly Editor _persona = new() { TextColor = Theme.Text, BackgroundColor = Theme.Field, HeightRequest = 120 };
     private readonly Switch _muted, _remember, _greeting, _hourly, _autoStart, _clapWake;
     private readonly Slider _volume, _silence, _clapSensitivity;
@@ -52,19 +54,28 @@ public sealed class SetupPage : ContentPage
     private readonly ContentView _active = new();
     private readonly string _createdCulture;
     private readonly PermissionSettingsView _permissions;
+    private readonly LocalModelSettingsView _localModels;
+    private readonly Switch _cloudFallback = new() { OnColor = Theme.Accent };
+    private View? _localConnection, _cloudConnection;
     private readonly ScreenshotSettingsView _screenshots;
 
     /// <summary>Creates independent tabs with a fixed save footer and no offline provider controls.</summary>
     public SetupPage(ISettingsService settings, IApiKeyStore keys, GeminiLiveClient live, IUiLocalizer ui,
         IStartupRegistration startup, ISpeechSynthesizer speech, WindowsApplicationCatalog applications, ILocalizer conversation, Laura.App.Platforms.Windows.WindowsApprovalCenter approvals, ScreenshotCoordinator screenshots,
-        Laura.Core.Mcp.McpServerStore mcpStore, Laura.Core.Mcp.McpRuntime mcp, OpenAiConversationEngine gpt, OpenAiApiKeyStore openAiKeys, ConversationProviderRouter router)
+        Laura.Core.Mcp.McpServerStore mcpStore, Laura.Core.Mcp.McpRuntime mcp, OpenAiConversationEngine gpt, OpenAiApiKeyStore openAiKeys, ConversationProviderRouter router, IProviderModelCatalog modelCatalogue, ILocalModelManager localModels, ILocalInferenceEngine localInference)
     {
         using var performance = PerformanceTrace.Measure("settings.construct");
         _settings = settings; _keys = keys; _live = live; _ui = ui; _startup = startup; _speech = speech; _applications = applications; _conversation = conversation;
         _gpt = gpt; _openAiKeys = openAiKeys; _router = router;
+        _model = new ProviderModelPicker(modelCatalogue, ui, "gemini", () => string.IsNullOrWhiteSpace(_key.Text) ? _keys.Read() : _key.Text.Trim());
+        _openAiModel = new ProviderModelPicker(modelCatalogue, ui, "openai", () => string.IsNullOrWhiteSpace(_openAiKey.Text) ? _openAiKeys.Read() : _openAiKey.Text.Trim());
         _createdCulture = ui.Culture.Name;
         LauraSettings current = settings.Current;
-        _chatProvider = Theme.Picker(["Gemini Live", "GPT · OpenAI"], current.GenerativeAi.Provider == "openai" ? "GPT · OpenAI" : "Gemini Live");
+        _chatProvider = Theme.Picker(["Gemini Live", "GPT · OpenAI", ui.Get("ui.models.localTitle"), ui.Get("ui.models.localFirst")], "");
+        _chatProvider.SelectedIndex = current.GenerativeAi.Provider switch { "gemini" => 0, "openai" => 1, "local" => 2, _ => 3 };
+        _localModels = new LocalModelSettingsView(localModels, localInference, settings, ui); _cloudFallback.IsToggled = current.GenerativeAi.AllowCloudFallback;
+        _chatProvider.SelectedIndexChanged += (_, _) => RefreshProviderPanels();
+        _cloudFallback.Toggled += (_, _) => RefreshProviderPanels();
         _openAiKey.IsPassword = true; _openAiKey.Placeholder = string.IsNullOrWhiteSpace(openAiKeys.Read()) ? "OpenAI API key" : "••••••••••••••••";
         _openAiModel.Text = current.GenerativeAi.OpenAiModel;
         Title = ui.Get("ui.maui.setup"); BackgroundColor = Theme.Background; NavigationPage.SetHasNavigationBar(this, false);
@@ -132,7 +143,8 @@ public sealed class SetupPage : ContentPage
     {
         var current = _settings.Current;
         _openAiKey.Text = ""; _openAiModel.Text = current.GenerativeAi.OpenAiModel;
-        _chatProvider.SelectedIndex = current.GenerativeAi.Provider == "openai" ? 1 : 0;
+        _chatProvider.SelectedIndex = current.GenerativeAi.Provider switch { "gemini" => 0, "openai" => 1, "local" => 2, _ => 3 };
+        _localModels.Reload(current.GenerativeAi.LocalModel); _cloudFallback.IsToggled = current.GenerativeAi.AllowCloudFallback;
         _openAiKey.Placeholder = string.IsNullOrWhiteSpace(_openAiKeys.Read()) ? "OpenAI API key" : "••••••••••••••••";
         _key.Text = ""; _key.IsPassword = true; _revealKey.Source = Theme.IconSource("eye");
         Theme.DescribeAction(_revealKey, _ui.Get("ui.settings.revealKey")); _result.Text = "";
@@ -243,8 +255,8 @@ public sealed class SetupPage : ContentPage
         var actions = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Star)], ColumnSpacing = 12 };
         actions.Add(ActionButton("ui.maui.importMark", "upload", ImportMarkAsync));
         var remove = ActionButton("ui.maui.removeKey", "trash", RemoveKeyAsync); remove.BackgroundColor = Theme.AssistantSurface; actions.Add(remove, 1);
-        return Panel(Row("ui.ai.provider", "brain", _chatProvider), Notice("ui.ai.providerHelp"),
-            provider, Theme.Caption(_ui.Get("ui.maui.key")), keyField, protectedState, actions,
+        _localConnection = Theme.Stack(_localModels, Row("ui.models.allowCloud", "globe", _cloudFallback), Notice("ui.models.fallbackHelp"));
+        _cloudConnection = Theme.Stack(provider, Theme.Caption(_ui.Get("ui.maui.key")), keyField, protectedState, actions,
             Row("ui.ai.model", "box", _model), Notice("ui.maui.cloudPrivacy"),
             Theme.Label("GPT · OpenAI", 22), _openAiKey, Row("ui.ai.model", "box", _openAiModel),
             ActionButton("ui.ai.removeOpenAiKey", "trash", async () =>
@@ -252,7 +264,19 @@ public sealed class SetupPage : ContentPage
                 await _router.ResetSessionAsync(() => { _openAiKeys.Save(""); return Task.CompletedTask; }).ConfigureAwait(true);
                 _openAiKey.Text = ""; _openAiKey.Placeholder = "OpenAI API key";
             }), Notice("ui.ai.openAiPrivacy"));
+        RefreshProviderPanels();
+        return Panel(Row("ui.ai.provider", "brain", _chatProvider), Notice("ui.ai.providerHelp"), _localConnection, _cloudConnection);
     }
+    /// <summary>Shows the selected provider's configuration while preserving independent saved credentials and model choices.</summary>
+    private void RefreshProviderPanels()
+    {
+        if (_localConnection is null || _cloudConnection is null) { return; }
+        _localConnection.IsVisible = _chatProvider.SelectedIndex >= 2;
+        _cloudConnection.IsVisible = _chatProvider.SelectedIndex < 2 || _chatProvider.SelectedIndex == 3 && _cloudFallback.IsToggled;
+        if (_cloudConnection.IsVisible && _model.IsLoaded) { _ = RefreshCloudModelsAsync(); }
+    }
+    /// <summary>Refreshes only explicitly visible cloud configuration controls without blocking native layout.</summary>
+    private Task RefreshCloudModelsAsync() => Task.WhenAll(_model.RefreshAsync(), _openAiModel.RefreshAsync());
     /// <summary>Builds voice and local wake controls with their actual units and privacy states.</summary>
     private View VoicePanel() => Panel(
         Row("ui.maui.liveVoice", "audio_lines", _voice),
@@ -389,6 +413,15 @@ public sealed class SetupPage : ContentPage
             ReloadFromSettings();
         }
     }
+
+    /// <summary>Shows and checks actual populated cloud pickers using isolated synthetic candidate keys.</summary>
+    internal async Task ShowProviderForSmokeAsync(string provider)
+    {
+        if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Isolated UI diagnostics only."); }
+        _key.Text = "synthetic-google-credential"; _openAiKey.Text = "synthetic-openai-credential";
+        _chatProvider.SelectedIndex = provider == "gemini" ? 0 : 1;
+        await (provider == "gemini" ? _model : _openAiModel).VerifyForSmokeAsync().ConfigureAwait(true);
+    }
     /// <summary>Verifies native tab geometry and draft preservation without cloud or microphone access.</summary>
     public void VerifySettingsForSmoke()
     {
@@ -450,8 +483,8 @@ public sealed class SetupPage : ContentPage
     {
         string? candidate = string.IsNullOrWhiteSpace(_key.Text) ? null : _key.Text.Trim();
         string? gptCandidate = string.IsNullOrWhiteSpace(_openAiKey.Text) ? null : _openAiKey.Text.Trim();
-        string selectedProvider = _chatProvider.SelectedIndex == 1 ? "openai" : "gemini";
-        bool configured = selectedProvider == "openai" ? gptCandidate is not null || !string.IsNullOrWhiteSpace(_openAiKeys.Read()) : candidate is not null || !string.IsNullOrWhiteSpace(_keys.Read());
+        string selectedProvider = _chatProvider.SelectedIndex switch { 0 => "gemini", 1 => "openai", 2 => "local", _ => "auto" };
+        bool configured = selectedProvider is "local" or "auto" || (selectedProvider == "openai" ? gptCandidate is not null || !string.IsNullOrWhiteSpace(_openAiKeys.Read()) : candidate is not null || !string.IsNullOrWhiteSpace(_keys.Read()));
         string gptModel = (_settings.Current.GenerativeAi with { OpenAiModel = _openAiModel.Text ?? "" }).Sanitized().OpenAiModel;
         if (gptCandidate is not null)
         {
@@ -483,7 +516,7 @@ public sealed class SetupPage : ContentPage
             GreetOnStartup = _greeting.IsToggled, AnnounceHourly = _hourly.IsToggled, StartWithWindows = _autoStart.IsToggled,
             Permissions = _permissions.Options, Screenshots = _screenshots.Options,
             Voice = _settings.Current.Voice with { VoiceName = null, Volume = (int)_volume.Value },
-            GenerativeAi = _settings.Current.GenerativeAi with { Enabled = configured, Provider = selectedProvider, Model = _model.Text ?? "", OpenAiModel = gptModel, Persona = (_persona.Text ?? "").ReplaceLineEndings(" "), LiveVoice = _voice.SelectedItem as string ?? "Aoede", ContinuousListening = true, SilenceDurationMs = (int)_silence.Value }
+            GenerativeAi = _settings.Current.GenerativeAi with { Enabled = configured, Provider = selectedProvider, AllowCloudFallback = _cloudFallback.IsToggled, LocalModel = _localModels.ModelId, Model = _model.Text ?? "", OpenAiModel = gptModel, Persona = (_persona.Text ?? "").ReplaceLineEndings(" "), LiveVoice = _voice.SelectedItem as string ?? "Aoede", ContinuousListening = true, SilenceDurationMs = (int)_silence.Value }
         };
         await _router.ResetSessionAsync(async () =>
         {
@@ -493,6 +526,8 @@ public sealed class SetupPage : ContentPage
         }).ConfigureAwait(true);
         if (candidate is not null && _key.Text?.Trim() == candidate) { _key.Text = ""; }
         if (gptCandidate is not null && _openAiKey.Text?.Trim() == gptCandidate) { _openAiKey.Text = ""; }
+        if (candidate is not null) { await _model.RefreshAsync(true).ConfigureAwait(true); }
+        if (gptCandidate is not null) { await _openAiModel.RefreshAsync(true).ConfigureAwait(true); }
         _openAiKey.Placeholder = string.IsNullOrWhiteSpace(_openAiKeys.Read()) ? "OpenAI API key" : "••••••••••••••••";
         _ui.SetCulture(updated.ResolveUiCulture());
         if (_startup.IsEnabled() != updated.StartWithWindows) { _startup.SetEnabled(updated.StartWithWindows); }

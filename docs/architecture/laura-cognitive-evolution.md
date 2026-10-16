@@ -44,6 +44,12 @@ Continuação de 2026-10-14: [auditoria de estabilidade, recuperação adaptativ
 
 Aquisição direta do GitHub e continuação cognitiva implementadas em 2026-10-14: ver [auditoria, arquitetura e evidências](laura-cognitive-orchestration.md). A referência de 330 testes foi confirmada antes das mudanças; a suíte integrada evoluiu para 377. Os diagnósticos antigos de REA com arquivos preparados continuam documentados como aquisição local, separadamente dos novos testes remotos.
 
+## Laura 2.0 native UX verification — 2026-10-16
+
+Provider fields are searchable native pickers with retained IDs, compatibility labels and explicit refresh/error states. `_Output/Validation/Laura2/UiPopulatedProviders/result.txt` verifies populated Gemini/GPT controls, filtering with no matches, selected-ID restoration, independent DPAPI keys and minimum-width EN/PT layouts. The fixture catalogue is synthetic and enabled only by `--ui-smoke`; this proves native controls without claiming access to a real account's available models. Managed local-weight actions and explicit local/cloud selection reuse the existing Save flow and localized theme.
+
+The reactor retains its existing arc geometry. Cached unit paths and canvas transforms remove per-frame arc-path construction; state weights and microphone level follow elapsed-time exponential transitions. Native checks compare equal elapsed time under different frame counts, rapid state changes, reduced motion and full-cycle continuity. `_Output/Validation/Laura2/UiReactorFinal/result.txt` passed with mean full-cycle channel difference 0.0018; rendered Thinking and settings captures were inspected. The timer still pauses off screen. This is renderer evidence, not a measured physical monitor frame-rate guarantee.
+
 ## Fase 0 — auditoria de 2026-10-13
 
 Este trabalho evolui o cérebro existente. Markdown permanece a fonte de verdade; SQLite/FTS5 e vetores são índices descartáveis. As políticas de execução ficam no `PermissionManager`, fora do vault e fora do modelo. A base de permissões e captura está descrita no [relatório de integração](laura-permissions-screenshot-delivery.md), incluindo verificações manuais pendentes.
