@@ -158,6 +158,7 @@ public static class ServiceConfiguration
         services.AddSingleton<WindowsResourceMonitor>();
         services.AddSingleton<WindowsDiskMonitor>();
         services.AddSingleton<WindowsGpuMonitor>();
+        services.AddSingleton<IModelHardwareProbe, WindowsModelHardwareProbe>();
         services.AddSingleton<IAssistantTools, MauiAssistantTools>();
         services.AddSingleton<ReminderScheduler>();
         services.AddSingleton<GreetingComposer>();

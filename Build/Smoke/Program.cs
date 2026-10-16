@@ -28,6 +28,8 @@ using var settings = new SettingsService(new IniSettingsStore(Path.Combine(direc
 await settings.LoadAsync(timeout.Token);
 var memory = new SqliteConversationMemory(Path.Combine(directory, "memory.db"));
 memory.Initialize();
+if (args.Contains("--hardware-smoke", StringComparer.Ordinal))
+{ await HardwareSmoke.RunAsync(directory, timeout.Token); return 0; }
 if (args.Contains("--application-close-smoke", StringComparer.Ordinal))
 { await ApplicationCloseSmoke.RunAsync(timeout.Token); return 0; }
 if (args.Contains("--offline-voice-smoke", StringComparer.Ordinal))

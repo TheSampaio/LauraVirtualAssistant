@@ -20,19 +20,6 @@ public sealed record ModelArtifact(string Id, string Name, Uri Source, long Size
     public string FileExtension => IsSpeechModel ? ".bin" : ".gguf";
 }
 
-/// <summary>Measured CPU/RAM/disk information; unknown GPU values are not guessed.</summary>
-/// <param name="Processors">Logical CPU count.</param>
-/// <param name="TotalRam">Total physical RAM in bytes.</param>
-/// <param name="AvailableRam">Currently available physical RAM in bytes.</param>
-/// <param name="FreeDisk">Available bytes on model storage volume.</param>
-/// <param name="Backend">Packaged acceleration backend.</param>
-public sealed record HardwareProfile(int Processors, long TotalRam, long AvailableRam, long FreeDisk, string Backend)
-{
-    /// <summary>Checks disk and conservative available memory for installation and CPU inference.</summary>
-    public bool CanRun(ModelArtifact model) => model.Size + 64 * 1024 * 1024 < FreeDisk
-        && TotalRam >= model.RecommendedRam && AvailableRam > model.Size + 512 * 1024 * 1024;
-}
-
 /// <summary>Download status, delivered without blocking the caller.</summary>
 /// <param name="BytesReceived">Bytes already stored.</param>
 /// <param name="TotalBytes">Expected total bytes.</param>

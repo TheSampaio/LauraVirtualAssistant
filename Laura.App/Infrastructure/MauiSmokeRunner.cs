@@ -44,9 +44,16 @@ public static class MauiSmokeRunner
                         await setup.VerifySettingsScrollForSmokeAsync(false).ConfigureAwait(true);
                         await setup.ShowProviderForSmokeAsync("gemini").ConfigureAwait(true);
                         await CaptureAsync(window, Path.Combine(directory, "gemini-models-" + culture + "-" + width + ".png")).ConfigureAwait(true);
+                        await setup.ShowProviderForSmokeAsync("local").ConfigureAwait(true);
+                        await CaptureAsync(window, Path.Combine(directory, "local-hardware-top-" + culture + "-" + width + ".png")).ConfigureAwait(true);
+                        await setup.VerifySettingsScrollForSmokeAsync(true, .6).ConfigureAwait(true);
+                        await CaptureAsync(window, Path.Combine(directory, "local-hardware-middle-" + culture + "-" + width + ".png")).ConfigureAwait(true);
+                        await setup.VerifySettingsScrollForSmokeAsync(true).ConfigureAwait(true);
+                        await CaptureAsync(window, Path.Combine(directory, "local-hardware-bottom-" + culture + "-" + width + ".png")).ConfigureAwait(true);
+                        await setup.VerifySettingsScrollForSmokeAsync(false).ConfigureAwait(true);
                     }
                 }
-                await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "Optional GPT and Gemini selection, populated compatible model pickers, search with selection preservation, manual refresh, independent DPAPI credential masking/preservation/removal, missing-key behavior and native EN/PT settings at 1440/720 verified with synthetic keys/catalogue. No cloud, microphone or clipboard access.").ConfigureAwait(true); return;
+                await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "Optional GPT and Gemini selection, populated compatible model pickers, search with selection preservation, manual refresh, independent DPAPI credential masking/preservation/removal, missing-key behavior, real local hardware summaries, explicit smaller-model selection and native EN/PT settings at 1440/720 verified with synthetic keys/catalogue. No weight loading, cloud, microphone or clipboard access.").ConfigureAwait(true); return;
             }
             if (Environment.GetCommandLineArgs().Contains("--voice-cancellation-smoke", StringComparer.Ordinal))
             {

@@ -62,7 +62,7 @@ public sealed class SetupPage : ContentPage
     /// <summary>Creates independent tabs with a fixed save footer and no offline provider controls.</summary>
     public SetupPage(ISettingsService settings, IApiKeyStore keys, GeminiLiveClient live, IUiLocalizer ui,
         IStartupRegistration startup, ISpeechSynthesizer speech, WindowsApplicationCatalog applications, ILocalizer conversation, Laura.App.Platforms.Windows.WindowsApprovalCenter approvals, ScreenshotCoordinator screenshots,
-        Laura.Core.Mcp.McpServerStore mcpStore, Laura.Core.Mcp.McpRuntime mcp, OpenAiConversationEngine gpt, OpenAiApiKeyStore openAiKeys, ConversationProviderRouter router, IProviderModelCatalog modelCatalogue, ILocalModelManager localModels, ILocalInferenceEngine localInference)
+        Laura.Core.Mcp.McpServerStore mcpStore, Laura.Core.Mcp.McpRuntime mcp, OpenAiConversationEngine gpt, OpenAiApiKeyStore openAiKeys, ConversationProviderRouter router, IProviderModelCatalog modelCatalogue, ILocalModelManager localModels, ILocalInferenceEngine localInference, IModelHardwareProbe hardware)
     {
         using var performance = PerformanceTrace.Measure("settings.construct");
         _settings = settings; _keys = keys; _live = live; _ui = ui; _startup = startup; _speech = speech; _applications = applications; _conversation = conversation;
@@ -73,7 +73,7 @@ public sealed class SetupPage : ContentPage
         LauraSettings current = settings.Current;
         _chatProvider = Theme.Picker(["Gemini Live", "GPT · OpenAI", ui.Get("ui.models.localTitle"), ui.Get("ui.models.localFirst")], "");
         _chatProvider.SelectedIndex = current.GenerativeAi.Provider switch { "gemini" => 0, "openai" => 1, "local" => 2, _ => 3 };
-        _localModels = new LocalModelSettingsView(localModels, localInference, settings, ui); _cloudFallback.IsToggled = current.GenerativeAi.AllowCloudFallback;
+        _localModels = new LocalModelSettingsView(localModels, localInference, settings, ui, hardware); _cloudFallback.IsToggled = current.GenerativeAi.AllowCloudFallback;
         _chatProvider.SelectedIndexChanged += (_, _) => RefreshProviderPanels();
         _cloudFallback.Toggled += (_, _) => RefreshProviderPanels();
         _openAiKey.IsPassword = true; _openAiKey.Placeholder = string.IsNullOrWhiteSpace(openAiKeys.Read()) ? "OpenAI API key" : "••••••••••••••••";
@@ -419,7 +419,8 @@ public sealed class SetupPage : ContentPage
     {
         if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Isolated UI diagnostics only."); }
         _key.Text = "synthetic-google-credential"; _openAiKey.Text = "synthetic-openai-credential";
-        _chatProvider.SelectedIndex = provider == "gemini" ? 0 : 1;
+        _chatProvider.SelectedIndex = provider switch { "gemini" => 0, "local" => 2, _ => 1 };
+        if (provider == "local") { await _localModels.VerifyHardwareForSmokeAsync().ConfigureAwait(true); return; }
         await (provider == "gemini" ? _model : _openAiModel).VerifyForSmokeAsync().ConfigureAwait(true);
     }
     /// <summary>Verifies native tab geometry and draft preservation without cloud or microphone access.</summary>
@@ -451,13 +452,13 @@ public sealed class SetupPage : ContentPage
         _nickname.Text = nickname;
     }
     /// <summary>Checks that lower settings remain reachable in the same native scroll viewport.</summary>
-    public async Task VerifySettingsScrollForSmokeAsync(bool bottom)
+    public async Task VerifySettingsScrollForSmokeAsync(bool bottom, double fraction = 1)
     {
         if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Settings verification requires isolated UI smoke mode."); }
         if (_pages[_activeTab] is Border { Content: ScrollView scroll })
         {
             double extent = Math.Max(0, scroll.ContentSize.Height - scroll.Height);
-            double target = bottom ? extent : 0;
+            double target = bottom ? extent * Math.Clamp(fraction, 0, 1) : 0;
             // MAUI does not always emit completion for a ChangeView that leaves the offset unchanged.
             if (Math.Abs(scroll.ScrollY - target) > 1)
             { await scroll.ScrollToAsync(0, target, false).WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(true); }

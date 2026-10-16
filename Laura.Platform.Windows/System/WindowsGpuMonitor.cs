@@ -25,11 +25,11 @@ public sealed class WindowsGpuMonitor : IDisposable
                 _adapter = WindowsGpuAdapter.Discover();
                 _query = new WindowsPerformanceQuery(Engines, DedicatedUsage);
                 _ = _query.Collect();
-                _lastValue = _adapter is null ? null : new(_adapter.Name, null, null, _adapter.DedicatedMemory);
+                _lastValue = _adapter is null ? null : new(_adapter.Name, null, null, _adapter.DedicatedMemory, _adapter.CounterId);
                 return _lastValue;
             }
             if (_adapter is null) { return null; }
-            if (!_query.Collect()) { _lastValue = new(_adapter.Name, null, null, _adapter.DedicatedMemory); return _lastValue; }
+            if (!_query.Collect()) { _lastValue = new(_adapter.Name, null, null, _adapter.DedicatedMemory, _adapter.CounterId); return _lastValue; }
             var engines = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             foreach ((string instance, double value) in _query.Read(Engines))
             {
@@ -41,7 +41,7 @@ public sealed class WindowsGpuMonitor : IDisposable
             }
             double? usage = engines.Count == 0 ? null : Math.Clamp(engines.Values.Max() / 100, 0, 1);
             double[] memory = [.. _query.Read(DedicatedUsage).Where(item => item.Key.StartsWith(_adapter.CounterId + "_", StringComparison.OrdinalIgnoreCase)).Select(item => item.Value)];
-            _lastValue = new(_adapter.Name, usage, memory.Length == 0 ? null : (ulong)memory.Sum(), _adapter.DedicatedMemory);
+            _lastValue = new(_adapter.Name, usage, memory.Length == 0 ? null : (ulong)memory.Sum(), _adapter.DedicatedMemory, _adapter.CounterId);
             return _lastValue;
         }
     }
@@ -50,4 +50,4 @@ public sealed class WindowsGpuMonitor : IDisposable
 }
 
 /// <summary>Contains measurements for one explicitly identified hardware GPU.</summary>
-public sealed record GpuSnapshot(string Name, double? Usage, ulong? UsedDedicatedMemory, ulong TotalDedicatedMemory);
+public sealed record GpuSnapshot(string Name, double? Usage, ulong? UsedDedicatedMemory, ulong TotalDedicatedMemory, string AdapterId = "");

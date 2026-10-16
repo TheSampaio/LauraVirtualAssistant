@@ -37,9 +37,19 @@ internal static class LocalModelSmoke
         Console.WriteLine("Starting native synthetic generation.");
         string? answer = await inference.AskAsync(new("Answer only with the number: what is 2 + 2?", CultureInfo.GetCultureInfo("en-US"), "Synthetic tester") { TurnId = Guid.NewGuid() }, cancellationToken);
         double generateMs = watch.Elapsed.TotalMilliseconds;
+        LocalInferenceMetrics? arithmeticMetrics = inference.LastMetrics;
         int answerChunks = streamed;
         if (string.IsNullOrWhiteSpace(answer) || !answer.Contains('4') || answer.Contains("<think>", StringComparison.Ordinal) || streamed == 0)
         { throw new InvalidOperationException("Local generation did not produce a verified visible streamed answer."); }
+        watch.Restart();
+        string? sustained = await inference.AskAsync(new("Write exactly three paragraphs describing a fictional garden, with at least 120 words total. Use complete sentences and no tools.", CultureInfo.GetCultureInfo("en-US"), "Synthetic tester"), cancellationToken);
+        double sustainedGenerationMs = watch.Elapsed.TotalMilliseconds;
+        LocalInferenceMetrics? sustainedMetrics = inference.LastMetrics;
+        await File.WriteAllTextAsync(Path.Combine(directory, "local-throughput-attempt.json"), JsonSerializer.Serialize(new
+        { arithmeticMetrics, sustainedMetrics, sustainedGenerationMs, sustainedVisibleCharacters = sustained?.Length,
+            status = inference.Status, failure = inference.LastFailure?.Kind.ToString() }, new JsonSerializerOptions { WriteIndented = true }), cancellationToken);
+        if (string.IsNullOrWhiteSpace(sustained) || sustainedMetrics is not { SampledTokens: >= 16, SampledTokensPerSecond: > 0 })
+        { throw new InvalidOperationException("Sustained native throughput was not established by actual decode counters."); }
         string oldText = string.Concat(Enumerable.Repeat("Previous synthetic narrative. ", 1500));
         var history = Enumerable.Range(0, 8).Select(index => new ConversationMessage(index % 2 == 0 ? ConversationMessageSource.UserTyped : ConversationMessageSource.Assistant, oldText, DateTimeOffset.UtcNow)).ToArray();
         string? afterTrimming = await inference.AskAsync(new("Answer only with the number: what is 2 + 2?", CultureInfo.GetCultureInfo("en-US"), "Synthetic tester") { History = history }, cancellationToken);
@@ -67,6 +77,10 @@ internal static class LocalModelSmoke
             answerCharacters = answer.Length, privateBytes = process.PrivateMemorySize64, peakWorkingSetBytes = process.PeakWorkingSet64,
             cpuOnly = true, gpuMeasurements = "not available: no GPU backend tested", cancellationObserved, wholeHistoryTrimmingVerified = true, oversizedInputRejected = contextRejected,
             deadlineCancellationVerified = true, deadlineCancellationMs };
+        await File.WriteAllTextAsync(Path.Combine(directory, "local-throughput.json"), JsonSerializer.Serialize(new
+        { arithmeticMetrics, sustainedMetrics, sustainedGenerationMs, sustainedVisibleCharacters = sustained.Length,
+            counterMeaning = "Nonterminal native sampled tokens per second between first and last sample, including filtered output. Visible chunks and characters are not token counts.",
+            syntheticOnly = true, gpuAccelerationVerified = false }, new JsonSerializerOptions { WriteIndented = true }), cancellationToken);
         await File.WriteAllTextAsync(Path.Combine(directory, "local-benchmark.json"), JsonSerializer.Serialize(benchmark, new JsonSerializerOptions { WriteIndented = true }), cancellationToken);
         await inference.UnloadAsync(cancellationToken);
         if (inference.LoadedModel is not null || inference.Status != "unloaded") { throw new InvalidOperationException("Native model did not unload."); }
