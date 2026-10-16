@@ -2,6 +2,10 @@
 
 ## Laura 2.0 implementation audit — 2026-10-15
 
+### Strict local function envelopes — 2026-10-16
+
+The local parser accepts one complete Qwen3.5 `<tool_call>` / `<function=...>` / `<parameter=...>` envelope, following the official Qwen3.5 template rather than assuming the older JSON-call format. Native registration and parameter schemas remain authoritative. Calls embedded in prose or code fences, duplicate parameters, unknown names/fields, missing required fields, malformed recursive JSON, unsupported schema constraints and excessive output are refused before dispatch. Literal string whitespace is retained; non-string values must match their native JSON type, enum and bounds. The parser neither evaluates argument text nor grants permissions. Eighteen domain tests cover typed, recursive and adversarial cases. Actual model selection reliability and the agent execution loop require separate validation before enabling general local tools.
+
 ### Safe inference failures and initial image routing — 2026-10-16
 
 Conversation providers now expose closed failure metadata instead of reducing every failure to a key/network/quota suggestion. OpenAI reads at most 16 KiB of an HTTP error body and recognizes allowlisted structured codes; messages and arbitrary code strings never enter diagnostics, failure records or spoken output. HTTP 429 without a specific billing code remains an undifferentiated capacity/quota limit. Gemini preserves structured session status through the pending request. Local inference retains integrity, RAM admission and context categories. EN/PT dispatchers describe the confirmed category and warn when tools may already have executed. No failed admitted turn is retried or sent to a different provider. Explicit user cancellation still propagates; a provider deadline returns a timeout outcome.
