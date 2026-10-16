@@ -30,7 +30,7 @@ public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISet
             catch (Exception error) when (error is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException) { }
         }
         string? answer = await conversation.AskAsync(new ConversationTurn(request.RawText, request.Culture, user.DisplayName)
-        { TurnId = request.TurnId, History = history.Where(message => request.TurnId == Guid.Empty || message.TurnId != request.TurnId).TakeLast(8).ToArray(), Image = request.Image }, cancellationToken).ConfigureAwait(false);
+        { TurnId = request.TurnId, ContinuingTaskTurnId = request.ContinuingTaskTurnId, History = history.Where(message => request.TurnId == Guid.Empty || message.TurnId != request.TurnId).TakeLast(8).ToArray(), Image = request.Image }, cancellationToken).ConfigureAwait(false);
         return SkillResponse.Speak(string.IsNullOrWhiteSpace(answer) ? localizer.Get(LocalizationKeys.GenerativeAi.ProviderFailed) : answer);
     }
 }

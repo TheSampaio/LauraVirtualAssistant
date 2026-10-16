@@ -76,6 +76,10 @@ public static class ServiceConfiguration
             settingsPath,
             provider.GetRequiredService<ILogger<IniSettingsStore>>()));
         services.AddSingleton<ISettingsService, SettingsService>();
+        services.AddSingleton<IPrivateDataProtector, WindowsPrivateDataProtector>();
+        services.AddSingleton<ICognitiveTaskJournal>(provider => new FileCognitiveTaskJournal(
+            Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Tasks"), provider.GetRequiredService<IPrivateDataProtector>()));
+        services.AddSingleton<CognitiveTasks>();
         services.AddSingleton<ILocalModelManager>(provider => new LocalModelManager(Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Models"),
             new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, SupportedModels.All));
         services.AddSingleton<LlamaLocalInferenceEngine>();
@@ -224,6 +228,7 @@ public static class ServiceConfiguration
         services.AddSingleton<MainPage>();
         services.AddTransient<SetupPage>();
         services.AddTransient<MemoryPage>();
+        services.AddTransient<TasksPage>();
     }
 
     /// <summary>

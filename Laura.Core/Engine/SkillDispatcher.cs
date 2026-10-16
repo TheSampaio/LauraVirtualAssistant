@@ -176,7 +176,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
 
         if (request.Image is not null && !_conversationEngine.SupportsImages)
         { return SkillResponse.Speak(_localizer.Get(LocalizationKeys.GenerativeAi.ImagesUnsupported)); }
-        var turn = new ConversationTurn(request.RawText, request.Culture, _userContext.DisplayName) { TurnId = request.TurnId, Image = request.Image };
+        var turn = new ConversationTurn(request.RawText, request.Culture, _userContext.DisplayName) { TurnId = request.TurnId, ContinuingTaskTurnId = request.ContinuingTaskTurnId, Image = request.Image };
         if (_memory is not null && _settings.Current.RememberConversations)
         {
             try

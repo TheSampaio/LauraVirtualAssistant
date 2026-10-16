@@ -27,6 +27,7 @@ public sealed class AssistantEngine : IAssistantEngine
     private readonly ILogger<AssistantEngine> _logger;
     private readonly IConversationMemory? _memory;
     private readonly WakeBriefing? _startupBriefing;
+    private readonly CognitiveTasks? _tasks;
     private CancellationTokenSource? _startupCancellation;
     private int _startupScheduled;
     private bool _operational;
@@ -64,6 +65,7 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <param name="logger">Destination for diagnostic logs.</param>
     /// <param name="memory">Optional unified persistent history.</param>
     /// <param name="startupBriefing">Optional verified weather, news, currency and reminder sources for the first opening in this process.</param>
+    /// <param name="tasks">Optional private task checkpoint coordinator for explicit native resumption.</param>
     public AssistantEngine(
         ISpeechSynthesizer synthesizer,
         ISkillDispatcher dispatcher,
@@ -73,7 +75,7 @@ public sealed class AssistantEngine : IAssistantEngine
         GreetingComposer greetingComposer,
         IClock clock,
         ILogger<AssistantEngine> logger,
-        IConversationMemory? memory = null, WakeBriefing? startupBriefing = null)
+        IConversationMemory? memory = null, WakeBriefing? startupBriefing = null, CognitiveTasks? tasks = null)
     {
         ArgumentNullException.ThrowIfNull(synthesizer);
         ArgumentNullException.ThrowIfNull(dispatcher);
@@ -94,6 +96,7 @@ public sealed class AssistantEngine : IAssistantEngine
         _logger = logger;
         _memory = memory;
         _startupBriefing = startupBriefing;
+        _tasks = tasks;
     }
 
     /// <inheritdoc />
@@ -228,6 +231,14 @@ public sealed class AssistantEngine : IAssistantEngine
             { Completion = completion, RequestCancellation = cancellationToken, DisplayText = displayText }, cancellationToken);
     }
     /// <inheritdoc />
+    public async Task ResumeTaskAsync(Guid taskId, CancellationToken cancellationToken = default)
+    {
+        if (_tasks is null) { throw new InvalidOperationException("Task recovery is unavailable."); }
+        var checkpoint = await _tasks.PrepareResumeAsync(taskId, cancellationToken).ConfigureAwait(false);
+        await EnqueueAndWaitAsync(completion => new CommandSubmitted(checkpoint.ResumePrompt())
+        { Completion = completion, RequestCancellation = cancellationToken, DisplayText = checkpoint.Objective, ContinuingTaskTurnId = taskId }, cancellationToken).ConfigureAwait(false);
+    }
+    /// <inheritdoc />
     public Task SubmitVisualCommandAsync(string text, byte[] png, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
@@ -307,8 +318,10 @@ public sealed class AssistantEngine : IAssistantEngine
                     Guid turnId = Guid.NewGuid();
                     _activeTurnId = turnId;
                     PublishConversation(submitted.MessageSource, submitted.DisplayText ?? submitted.Text, turnId);
+                    if (submitted.ContinuingTaskTurnId != Guid.Empty && _tasks?.Current(submitted.ContinuingTaskTurnId) is { } resumed)
+                    { _memory?.SetWorkingContext(new ConversationWorkingContext(resumed.Id, resumed.Objective)); }
                     await ExecuteCommandAsync(submitted.Text,
-                        submitted.DisplayText is null ? SkillRequestSource.Text : SkillRequestSource.Context, request.Token, submitted.Image, turnId).ConfigureAwait(false);
+                        submitted.DisplayText is null ? SkillRequestSource.Text : SkillRequestSource.Context, request.Token, submitted.Image, turnId, submitted.ContinuingTaskTurnId).ConfigureAwait(false);
                     break;
 
                 case SpeechRequested requested:
@@ -377,12 +390,13 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <param name="source">Distinguishes an actionable command from non-actionable briefing data.</param>
     /// <param name="image">Explicit PNG attachment for this interaction, or null for text-only input.</param>
     /// <param name="turnId">Stable identity shared with the published user message.</param>
+    /// <param name="continuingTaskTurnId">Original task identity selected by the native resume action.</param>
     /// <returns>A task completed when the response has finished being spoken.</returns>
-    private async Task ExecuteCommandAsync(string text, SkillRequestSource source, CancellationToken cancellationToken, byte[]? image = null, Guid turnId = default)
+    private async Task ExecuteCommandAsync(string text, SkillRequestSource source, CancellationToken cancellationToken, byte[]? image = null, Guid turnId = default, Guid continuingTaskTurnId = default)
     {
         SetState(AssistantState.Working);
 
-        SkillRequest request = SkillRequest.Create(text, _localizer.Culture, _clock.Now, source) with { Image = image, TurnId = turnId };
+        SkillRequest request = SkillRequest.Create(text, _localizer.Culture, _clock.Now, source) with { Image = image, TurnId = turnId, ContinuingTaskTurnId = continuingTaskTurnId };
 
         bool willUseGenerativeAi = _settings.Current.GenerativeAi.Enabled
             && _dispatcher.CanUseGenerativeFallback(request);
@@ -572,6 +586,8 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <summary>Text command sent by the interface.</summary>
     private sealed record CommandSubmitted(string Text) : EngineMessage
     {
+        /// <summary>Gets a checkpoint selected by the native resume action, never parsed from model text.</summary>
+        public Guid ContinuingTaskTurnId { get; init; }
         /// <summary>Gets the trusted capture origin selected by the native caller.</summary>
         public ConversationMessageSource MessageSource { get; init; } = ConversationMessageSource.UserTyped;
         /// <summary>Gets an explicitly queued image; saved history contains only its question and answer.</summary>

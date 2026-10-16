@@ -70,6 +70,8 @@ public interface IAssistantEngine : IAsyncDisposable
     Task SubmitVoiceCommandAsync(string text, CancellationToken cancellationToken = default) => SubmitCommandAsync(text, cancellationToken);
     /// <summary>Queues briefing data exclusively for generation, bypassing local commands and using a concise history title.</summary>
     Task SubmitContextCommandAsync(string text, string displayText, CancellationToken cancellationToken = default);
+    /// <summary>Resumes a private checkpoint after an explicit native user gesture, without replay or inherited grants.</summary>
+    Task ResumeTaskAsync(Guid taskId, CancellationToken cancellationToken = default) => Task.FromException(new NotSupportedException("Task recovery is unavailable."));
     /// <summary>Queues an explicitly selected PNG alongside its question through the normal conversation and speech flow.</summary>
     Task SubmitVisualCommandAsync(string text, byte[] png, CancellationToken cancellationToken = default) =>
         Task.FromException(new NotSupportedException("This engine does not support visual turns."));

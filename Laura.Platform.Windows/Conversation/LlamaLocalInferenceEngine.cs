@@ -114,7 +114,8 @@ public sealed class LlamaLocalInferenceEngine : ILocalInferenceEngine, IAsyncDis
         {
             lock (_gate) { ObjectDisposedException.ThrowIf(_disposed, this); _generation = generation; }
             using var provider = new ProviderExecutionScope("local");
-            _memory?.SetWorkingContext(new ConversationWorkingContext(turn.TurnId, turn.Prompt));
+            if (turn.ContinuingTaskTurnId == Guid.Empty) { _memory?.SetWorkingContext(new ConversationWorkingContext(turn.TurnId, turn.Prompt)); }
+            else if (_memory?.WorkingContext.TurnId != turn.ContinuingTaskTurnId) { throw new OperationCanceledException("Original task was superseded by a new user turn.", cancellationToken); }
             if (_context is not null)
             { BrainContext recalled = await _context.BuildAsync(turn.Prompt, generation.Token).ConfigureAwait(false); turn = turn with { Memories = recalled.Memories.Length > 0 ? [recalled.Memories] : [] }; }
             await LoadCoreAsync(_settings.Current.GenerativeAi.LocalModel, generation.Token).ConfigureAwait(false);

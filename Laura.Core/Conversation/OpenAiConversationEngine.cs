@@ -57,7 +57,8 @@ public sealed class OpenAiConversationEngine(HttpClient http, ISettingsService s
             {
                 using var provider = new ProviderExecutionScope("openai");
                 operation.Token.ThrowIfCancellationRequested();
-                memory.SetWorkingContext(new ConversationWorkingContext(turn.TurnId, turn.Prompt));
+                if (turn.ContinuingTaskTurnId == Guid.Empty) { memory.SetWorkingContext(new ConversationWorkingContext(turn.TurnId, turn.Prompt)); }
+                else if (memory.WorkingContext.TurnId != turn.ContinuingTaskTurnId) { throw new OperationCanceledException("Original task was superseded by a new user turn.", operation.Token); }
                 using var correlation = LauraDiagnostics.Correlate(memory.WorkingContext.TurnId);
                 using var measurement = LauraDiagnostics.Measure("interaction.openai");
                 BrainContext? recalled = context is null ? null : await context.BuildAsync(turn.Prompt, operation.Token).ConfigureAwait(false);

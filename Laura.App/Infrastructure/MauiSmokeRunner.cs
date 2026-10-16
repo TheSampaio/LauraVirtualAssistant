@@ -20,6 +20,8 @@ public static class MauiSmokeRunner
         VerifyReactorTransitions();
         try
         {
+            if (Environment.GetCommandLineArgs().Contains("--task-recovery-smoke", StringComparer.Ordinal))
+            { await TaskRecoverySmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--chat-diagnostics-smoke", StringComparer.Ordinal))
             { await ChatDiagnosticsSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--gpt-settings-smoke", StringComparer.Ordinal))

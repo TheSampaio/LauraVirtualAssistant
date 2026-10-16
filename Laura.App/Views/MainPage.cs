@@ -58,6 +58,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     private readonly ImageButton _setupButton;
     private readonly Button _approvalsButton;
     private readonly Button _memoryButton;
+    private readonly ImageButton _tasksButton;
     private readonly ImageButton _interruptButton;
     private readonly ImageButton _microphoneButton;
     private readonly ImageButton _sendButton;
@@ -114,6 +115,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed += OnApprovalsChanged;
         UpdateApprovals();
         _memoryButton = Theme.ActionButton("", "brain", OpenBrainAsync);
+        _tasksButton = Theme.IconButton("activity", () => NavigationMotion.PushAsync(Navigation, _services.GetRequiredService<TasksPage>()));
         _interruptButton = Theme.IconButton("square", InterruptAsync);
         _microphoneButton = Theme.IconButton("mic_off", ToggleMicrophoneAsync);
         _sendButton = Theme.IconButton("send", SendAsync, true, CanSend);
@@ -131,7 +133,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
         centerGrid.Add(SectionHeader("audio_lines", _coreTitle)); centerGrid.Add(_reactor, 0, 1);
         var footer = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Auto)], ColumnSpacing = 12 };
         var state = Theme.Stack(_status, _provider); state.Spacing = 4; state.VerticalOptions = LayoutOptions.Center;
-        footer.Add(state); footer.Add(_memoryButton, 1); centerGrid.Add(footer, 0, 2); _center = Theme.Card(centerGrid, 20);
+        footer.Add(state); footer.Add(new HorizontalStackLayout { Spacing = 8, Children = { _tasksButton, _memoryButton } }, 1); centerGrid.Add(footer, 0, 2); _center = Theme.Card(centerGrid, 20);
         _center.BackgroundColor = Theme.Background;
         var chatGrid = new Grid { RowDefinitions = [new(GridLength.Auto), new(GridLength.Star), new(GridLength.Auto)], RowSpacing = 16 };
         var chatHeader = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Auto)] };
@@ -207,6 +209,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _subtitle.Text = _ui.Get("ui.hud.subtitle");
         _monitorTitle.Text = _ui.Get("ui.maui.monitor").ToUpperInvariant(); _coreTitle.Text = _ui.Get("ui.maui.core").ToUpperInvariant(); _activityTitle.Text = _ui.Get("ui.maui.activity").ToUpperInvariant();
         Theme.DescribeAction(_setupButton, _ui.Get("ui.maui.setup")); _memoryButton.Text = _ui.Get("ui.tab.memory");
+        Theme.DescribeAction(_tasksButton, _ui.Get("ui.tasks.title"));
         Theme.DescribeAction(_memoryButton, _ui.Get("ui.tab.memory"));
         Theme.DescribeAction(_interruptButton, _ui.Get("ui.maui.interrupt") + " · Esc");
         Theme.DescribeAction(_monitorButton, _ui.Get(_showMonitor ? "ui.maui.core" : "ui.maui.monitor")); Theme.DescribeAction(_sendButton, _ui.Get("ui.hud.send"));
