@@ -2,6 +2,7 @@
 [CmdletBinding()]
 param(
     [switch]$SkipInstaller,
+    [switch]$Repackage,
     [string]$VcRedistDirectory = (Join-Path $env:ProgramFiles 'Microsoft Visual Studio/18/Community/VC/Redist/MSVC/14.51.36231/x64')
 )
 $ErrorActionPreference = 'Stop'
@@ -9,7 +10,38 @@ $root = Split-Path $PSScriptRoot -Parent
 $distribution = Join-Path $root '_Output/Distribution'
 $publish = Join-Path $distribution 'Laura-win-x64'
 $payload = Join-Path $distribution 'InstallerPayload'
-if (Test-Path -LiteralPath $publish) {
+# Every destructive operation stays under this checkout's owned output, including existing ancestor directories.
+function Assert-OwnedOutput([string]$Path) {
+    $resolved = [IO.Path]::GetFullPath($Path)
+    $allowed = [IO.Path]::GetFullPath((Join-Path $root '_Output')).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    if (!$resolved.StartsWith($allowed, [StringComparison]::OrdinalIgnoreCase)) { throw 'Publish output escaped the owned workspace.' }
+    $ancestor = $resolved
+    while ($ancestor) {
+        $entry = Get-Item -LiteralPath $ancestor -Force -ErrorAction SilentlyContinue
+        if ($entry -and ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Publish output cannot traverse a redirected path.' }
+        if ($ancestor -eq $root) { break }
+        $ancestor = Split-Path $ancestor -Parent
+    }
+    return $resolved
+}
+function Assert-OwnedOutputTree([string]$Path) {
+    $resolved = Assert-OwnedOutput $Path
+    if (Test-Path -LiteralPath $resolved -PathType Container) {
+        $pending = [Collections.Generic.Stack[string]]::new(); $pending.Push($resolved)
+        while ($pending.Count -gt 0) {
+            foreach ($entry in Get-ChildItem -LiteralPath $pending.Pop() -Force) {
+                if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Cannot replace a publish tree containing redirected entries.' }
+                if ($entry.PSIsContainer) { $pending.Push($entry.FullName) }
+            }
+        }
+    }
+    return $resolved
+}
+$distribution = Assert-OwnedOutput $distribution
+$publish = Assert-OwnedOutputTree $publish
+$payload = Assert-OwnedOutput $payload
+if (!$Repackage) { & (Join-Path $PSScriptRoot 'Prepare-CudaRuntime.ps1') }
+if (!$Repackage -and (Test-Path -LiteralPath $publish)) {
     $resolvedPublish = [IO.Path]::GetFullPath($publish)
     $resolvedDistribution = [IO.Path]::GetFullPath($distribution).TrimEnd('\') + '\'
     if (!$resolvedPublish.StartsWith($resolvedDistribution, [StringComparison]::OrdinalIgnoreCase) -or
@@ -19,21 +51,33 @@ if (Test-Path -LiteralPath $publish) {
 New-Item -ItemType Directory -Force -Path $publish, $payload | Out-Null
 Push-Location $root
 try {
-    & dotnet restore Laura.sln --locked-mode
-    if ($LASTEXITCODE -ne 0) { throw 'Locked dependency restore failed.' }
-    & dotnet publish Laura.App/Laura.App.csproj -c Release -f net10.0-windows10.0.19041.0 -r win-x64 --self-contained true --no-restore -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=false -o $publish
-    if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
-    # App-local CRT/OpenMP avoids a separate system-wide prerequisite installation.
-    # The builder must have redistribution rights under the supplied Microsoft terms.
-    $crtInventory = Get-Content -LiteralPath (Join-Path $root 'licenses/vc-runtime-inventory.json') -Raw | ConvertFrom-Json
-    foreach ($component in $crtInventory) {
-        $source = Join-Path $VcRedistDirectory $component.RelativePath
-        if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne $component.Sha256) { throw "VC runtime version/hash mismatch: $source" }
-        Copy-Item -LiteralPath $source -Destination (Join-Path $publish $component.File)
+    if ($Repackage) {
+        # Repackage only an intact verified binary tree; this cannot legitimize changed application binaries.
+        & (Join-Path $PSScriptRoot 'Verify-Package.ps1') -PackageDirectory $publish
+    } else {
+        & dotnet restore Laura.sln --locked-mode
+        if ($LASTEXITCODE -ne 0) { throw 'Locked dependency restore failed.' }
+        & dotnet publish Laura.App/Laura.App.csproj -c Release -f net10.0-windows10.0.19041.0 -r win-x64 --self-contained true --no-restore -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=false -o $publish
+        if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
+        # Native backend packages expose multiple platforms as content; this distribution supports Windows x64 only.
+        $nativeRoot = Join-Path $publish 'runtimes'
+        foreach ($runtime in Get-ChildItem -LiteralPath $nativeRoot -Directory) {
+            if ($runtime.Name -ne 'win-x64') { Remove-Item -LiteralPath (Assert-OwnedOutputTree $runtime.FullName) -Recurse -Force }
+        }
+        # App-local CRT/OpenMP avoids a separate system-wide prerequisite installation.
+        # The builder must have redistribution rights under the supplied Microsoft terms.
+        $crtInventory = Get-Content -LiteralPath (Join-Path $root 'licenses/vc-runtime-inventory.json') -Raw | ConvertFrom-Json
+        foreach ($component in $crtInventory) {
+            $source = Join-Path $VcRedistDirectory $component.RelativePath
+            if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne $component.Sha256) { throw "VC runtime version/hash mismatch: $source" }
+            Copy-Item -LiteralPath $source -Destination (Join-Path $publish $component.File)
+        }
     }
     Copy-Item -LiteralPath (Join-Path $root 'LICENSE'), (Join-Path $root 'THIRD_PARTY_NOTICES.md'), (Join-Path $root 'README.md') -Destination $publish
     Copy-Item -LiteralPath (Join-Path $root 'licenses') -Destination $publish -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $root 'docs') -Destination $publish -Recurse -Force
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Verify-Package.ps1') -Destination $publish
+    & (Join-Path $PSScriptRoot 'Verify-Package.ps1') -PackageDirectory $publish -CreateManifest
     $archive = Join-Path $distribution 'Laura-win-x64.zip'
     Compress-Archive -Path (Join-Path $publish '*') -DestinationPath $archive -Force
     $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
@@ -44,44 +88,7 @@ try {
         Set-Content -LiteralPath (Join-Path $payload 'Install.ps1') -Value ($template.Replace('__PACKAGE_SHA256__', $hash)) -Encoding utf8
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Install.cmd') -Destination $payload -Force
         $installer = Join-Path $distribution 'LauraSetup.exe'
-        $sed = @"
-[Version]
-Class=IEXPRESS
-SEDVersion=3
-[Options]
-PackagePurpose=InstallApp
-ShowInstallProgramWindow=0
-HideExtractAnimation=1
-UseLongFileName=1
-InsideCompressed=0
-CAB_FixedSize=0
-CAB_ResvCodeSigning=0
-RebootMode=N
-InstallPrompt=
-DisplayLicense=
-FinishMessage=
-TargetName=$installer
-FriendlyName=Laura
-AppLaunched=cmd.exe /c Install.cmd
-PostInstallCmd=<None>
-AdminQuietInstCmd=
-UserQuietInstCmd=
-SourceFiles=SourceFiles
-[Strings]
-FILE0=Laura-win-x64.zip
-FILE1=Install.ps1
-FILE2=Install.cmd
-[SourceFiles]
-SourceFiles0=$payload\
-[SourceFiles0]
-%FILE0%=
-%FILE1%=
-%FILE2%=
-"@
-        $sedPath = Join-Path $distribution 'LauraSetup.sed'
-        Set-Content -LiteralPath $sedPath -Value $sed -Encoding ascii
-        $process = Start-Process -FilePath "$env:WINDIR/System32/iexpress.exe" -ArgumentList '/N', '/Q', $sedPath -WindowStyle Hidden -PassThru -Wait
-        if ($process.ExitCode -ne 0 -or !(Test-Path -LiteralPath $installer)) { throw 'Installer packaging failed.' }
+        & (Join-Path $PSScriptRoot 'Build-OfflineInstaller.ps1') -PayloadDirectory $payload -InstallerPath $installer
         $installerHash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
         Add-Content -LiteralPath (Join-Path $distribution 'SHA256SUMS.txt') -Value "$installerHash  LauraSetup.exe" -Encoding ascii
     }
