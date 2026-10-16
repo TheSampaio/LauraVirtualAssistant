@@ -14,6 +14,7 @@ public static class PermissionPolicy
         PermissionOperation.Internal or PermissionOperation.FileReadLocal => PermissionRisk.Low,
         PermissionOperation.WindowManagement when action.AutomaticEligible && action.Resources.Length == 0 && action.Destination.Length == 0 => PermissionRisk.Moderate,
         PermissionOperation.WorkspaceAuthorization when action.Destination.Length > 0 => PermissionRisk.Critical,
+        PermissionOperation.RepositoryStudyAuthorization or PermissionOperation.RepositoryStudyRead when action.Destination.Length > 0 => PermissionRisk.Critical,
         PermissionOperation.FileWrite when action.Resources.Length == 1 && DataExtensions.Contains(Path.GetExtension(action.Resources[0])) => PermissionRisk.Moderate,
         PermissionOperation.WorkspaceNote or PermissionOperation.FileCreateDirectory or PermissionOperation.ClipboardWrite or PermissionOperation.LocalCapture or PermissionOperation.ScreenshotExport or PermissionOperation.BrainAttachment => PermissionRisk.Moderate,
         PermissionOperation.ApplicationLaunch when action.Resources.Length == 1 && action.Destination.Length == 0 => PermissionRisk.Moderate,
@@ -97,11 +98,17 @@ public static class PermissionPolicy
 
     /// <summary>Matches the exact effect, origin and destination. Higher risks never reuse grants.</summary>
     public static bool Matches(PermissionGrant grant, PermissionAction action) => grant.TaskId != Guid.Empty
-        ? grant.Operation == PermissionOperation.WorkspaceAuthorization && action.TaskId == grant.TaskId && !grant.Persistent
+        ? (grant.Operation == PermissionOperation.RepositoryStudyAuthorization
+            ? action.Operation == PermissionOperation.RepositoryStudyRead && action.TaskId == grant.TaskId && !grant.Persistent
+                && grant.Expires > DateTimeOffset.UtcNow && grant.Origin == action.Origin && grant.Destination == action.Destination
+                && grant.Scope == action.ScopeIdentity && (grant.Scope.StartsWith("https://github.com/", StringComparison.Ordinal)
+                    ? action.Resources.Length == 0
+                    : action.Resources.Length > 0 && action.Resources.All(path => Within(path, grant.Scope) && !SensitivePath(path)))
+            : grant.Operation == PermissionOperation.WorkspaceAuthorization && action.TaskId == grant.TaskId && !grant.Persistent
             && grant.Expires > DateTimeOffset.UtcNow && grant.Origin == action.Origin
             && action.Resources.Length > 0 && action.Resources.All(path => Within(path, grant.Scope) && !SensitivePath(path))
             && (action.Operation is PermissionOperation.FileReadLocal or PermissionOperation.FileWrite or PermissionOperation.FileCreateDirectory
-                && action.Destination.Length == 0 || action.Operation == PermissionOperation.FileReadCloud && grant.Destination.Length > 0 && action.Destination == grant.Destination)
+                && action.Destination.Length == 0 || action.Operation == PermissionOperation.FileReadCloud && grant.Destination.Length > 0 && action.Destination == grant.Destination))
         : CanRemember(action)
         && grant.Operation == action.Operation && grant.Origin == action.Origin
         && !(action.Operation == PermissionOperation.ApplicationLaunch && grant.DirectoryScope)

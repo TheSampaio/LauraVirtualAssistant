@@ -1,4 +1,11 @@
 {
+  "ui.tasks.studyDirectories": "{0} inventory directories pending",
+  "ui.tasks.study": "Study coverage",
+  "ui.tasks.studyCoverage": "{0} of {1} eligible files acquired · {2} pending · {3} excluded. Acquisition does not establish comprehension.",
+  "ui.tasks.studyTruncated": "The inventory is partial; additional files may exist.",
+  "ui.permissions.repositoryStudyReview": "Authorize bounded repository text reads and storage of untrusted references in Brain for this task for one hour. No source code, dependency or script will execute. Secrets, protected folders, project edits and arbitrary network access are excluded. Public GitHub studies contact api.github.com.",
+  "ui.permissions.operation.RepositoryStudyAuthorization": "Authorize repository study",
+  "ui.permissions.operation.RepositoryStudyRead": "Read reviewed repository sources",
   "ui.tasks.title": "Tasks",
   "ui.tasks.subtitle": "Progress and recovery from observed operations.",
   "ui.tasks.empty": "No retained tasks.",

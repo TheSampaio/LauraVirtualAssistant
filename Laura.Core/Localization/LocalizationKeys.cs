@@ -185,6 +185,8 @@ public static class LocalizationKeys
     /// <summary>Trusted workspace reviews use the independent interface culture.</summary>
     public static class Permissions
     {
+        /// <summary>Gets the native bounded repository study review text.</summary>
+        public const string RepositoryStudyReview = "ui.permissions.repositoryStudyReview";
         /// <summary>One-hour bounded workspace capability review.</summary>
         public const string WorkspaceReview = "ui.permissions.workspaceReview";
         /// <summary>Actual runtime disclosure destination.</summary>

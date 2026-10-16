@@ -14,6 +14,25 @@ public sealed class CognitiveTaskRecoveryTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "laura-task-recovery-" + Guid.NewGuid().ToString("N"));
     private static readonly HashSet<string> Tools = ["run_program", "recall_memory", "plan_task", "task_status"];
 
+    /// <summary>Allows only explicit native resumption to extend exhausted budgets while retaining cumulative counts and refusing denials.</summary>
+    [Fact]
+    public async Task NativeBudgetExtensionRetainsCountsAndCancelledSafeWorkCanResume()
+    {
+        var journal = new RecordingTaskJournal(); Guid id = Guid.NewGuid();
+        var run = new CognitiveTaskRun("Continue a bounded source study.", Tools, maximumCalls: 1, taskId: id, journal: journal); using var arguments = JsonDocument.Parse("{}");
+        await run.ExecuteAsync("recall_memory", arguments.RootElement, _ => Task.FromResult(new AssistantToolResult("Observed.")), CancellationToken.None);
+        Assert.Equal("blocked", (await run.ExecuteAsync("recall_memory", arguments.RootElement, _ => throw new InvalidOperationException("Budget reset by model."), CancellationToken.None)).Status);
+        await run.SaveAsync(); using var tasks = new CognitiveTasks(journal); var resumed = await tasks.PrepareResumeAsync(id);
+        Assert.Equal(1, resumed.Calls); Assert.Equal(33, resumed.MaximumCalls); Assert.Equal("", resumed.Blocker); Assert.Equal("paused", resumed.State);
+        var restored = new CognitiveTaskRun(resumed.Objective, Tools, taskId: id, journal: journal, restored: resumed);
+        Assert.False((await restored.ExecuteAsync("recall_memory", arguments.RootElement, _ => Task.FromResult(new AssistantToolResult("Fresh evidence.")), CancellationToken.None)).Failed);
+        Guid stoppedId = Guid.NewGuid(); using var stop = new CancellationTokenSource(); var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var work = tasks.ExecuteAsync(new(stoppedId, "Cancel a safe read."), Tools, "recall_memory", arguments.RootElement,
+            async (_, token) => { entered.SetResult(); await Task.Delay(Timeout.Infinite, token); return new("Unreachable."); }, stop.Token);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(3)); tasks.Cancel(stoppedId); await Assert.ThrowsAnyAsync<OperationCanceledException>(() => work);
+        resumed = await tasks.PrepareResumeAsync(stoppedId); Assert.False(resumed.HasUncertainEffect); Assert.Equal("paused", resumed.State);
+    }
+
     /// <summary>Verifies native recovery travels through the engine queue with a new message identity and the original task identity.</summary>
     [Fact]
     public async Task ExplicitEngineResumePreservesTaskIdentityWithoutTurningMetadataIntoUserHistory()

@@ -4,6 +4,7 @@ using Laura.App.Theming;
 using Laura.Core.Abstractions;
 using Laura.Core.Conversation;
 using Laura.Core.Engine;
+using Laura.Core.Brain;
 
 namespace Laura.App.Views;
 
@@ -14,15 +15,16 @@ public sealed class TasksPage : ContentPage
     private readonly IAssistantEngine _engine;
     private readonly ConversationProviderRouter _router;
     private readonly IUiLocalizer _ui;
+    private readonly RepositoryStudy _studies;
     private readonly CollectionView _list = new() { SelectionMode = SelectionMode.None };
     private readonly Label _status = Theme.Label("", 12, Theme.Muted);
     private int _refreshRevision;
     private bool _visible;
 
     /// <summary>Creates the localized task workspace. Args: tasks: Durable coordinator; engine: Existing command queue; router: Actual provider; ui: Interface resources.</summary>
-    public TasksPage(CognitiveTasks tasks, IAssistantEngine engine, ConversationProviderRouter router, IUiLocalizer ui)
+    public TasksPage(CognitiveTasks tasks, IAssistantEngine engine, ConversationProviderRouter router, IUiLocalizer ui, RepositoryStudy studies)
     {
-        _tasks = tasks; _engine = engine; _router = router; _ui = ui; Title = T("title"); BackgroundColor = Theme.Background; NavigationPage.SetHasNavigationBar(this, false);
+        _tasks = tasks; _engine = engine; _router = router; _ui = ui; _studies = studies; Title = T("title"); BackgroundColor = Theme.Background; NavigationPage.SetHasNavigationBar(this, false);
         var heading = Theme.PageHeading(Title, T("subtitle"), "activity", ui.Get("ui.navigation.backToLaura"), () => NavigationMotion.PopAsync(Navigation));
         var root = new Grid { Padding = 24, RowDefinitions = [new(GridLength.Auto), new(GridLength.Auto), new(GridLength.Star)], RowSpacing = 16 };
         root.Add(heading); root.Add(_status, 0, 1); root.Add(_list, 0, 2); Content = root;
@@ -51,12 +53,31 @@ public sealed class TasksPage : ContentPage
         if (task.Operations.Count > 0)
         { var latest = task.Operations[^1]; details.Add(Theme.Label(latest.Tool + " · " + T("state." + latest.Status), 12, Theme.Muted)); }
         var resume = Theme.ActionButton(T("resume"), "play", () => ResumeAsync(task));
-        resume.IsEnabled = (task.State is "paused" or "working" or "operations_completed") && !task.HasUncertainEffect
-            && task.Calls < task.MaximumCalls && task.ElapsedMilliseconds < task.MaximumMilliseconds;
+        resume.IsEnabled = (task.State is "paused" or "working" or "operations_completed" || task.State == "blocked" && task.Blocker is "budget" or "cancelled") && !task.HasUncertainEffect
+            && task.Calls < 256 && task.ElapsedMilliseconds < 3600000;
         var actions = new HorizontalStackLayout { Spacing = 8 };
         actions.Add(resume); actions.Add(Theme.ActionButton(T("cancel"), "square", () => { _tasks.Cancel(task.Id); return Task.CompletedTask; }));
         actions.Add(Theme.ActionButton(T("remove"), "trash", () => RemoveAsync(task.Id))); details.Add(actions);
+        foreach (Guid study in task.RepositoryStudies ?? [])
+        {
+            var coverage = Theme.Label("", 12, Theme.Muted);
+            details.Add(Theme.ActionButton(T("study"), "book_open", () => ShowStudyAsync(study, coverage))); details.Add(coverage);
+        }
         return Theme.Card(details, 16);
+    }
+
+    /// <summary>Shows actual durable repository coverage without waiting on the active model or reading source files.</summary>
+    private async Task ShowStudyAsync(Guid id, Label coverage)
+    {
+        try
+        {
+            var progress = await Task.Run(() => _studies.ReadPrivateProgressAsync(id)).ConfigureAwait(true);
+            coverage.Text = string.Format(_ui.Culture, T("studyCoverage"), progress.AcquiredFiles, progress.InventoryFiles, progress.PendingFiles, progress.ExcludedFiles)
+                + (progress.PendingInventoryDirectories > 0 ? " · " + string.Format(_ui.Culture, T("studyDirectories"), progress.PendingInventoryDirectories) : "")
+                + (progress.InventoryTruncated ? " · " + T("studyTruncated") : "");
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or System.Security.Cryptography.CryptographicException)
+        { coverage.Text = T("loadFailed") + " · " + error.GetType().Name; }
     }
 
     /// <summary>Queues explicit recovery through the actual selected provider and existing speech/history pipeline.</summary>

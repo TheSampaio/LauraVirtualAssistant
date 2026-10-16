@@ -192,6 +192,34 @@ public sealed class PermissionManager : IDisposable
             return Task.FromResult(grant);
         }, cancellationToken);
     }
+    /// <summary>Reviews one task's repository reads, private Brain retention and optional actual provider disclosure. Source code never receives execution authority.</summary>
+    public Task<PermissionGrant> AuthorizeRepositoryStudyAsync(Guid taskId, string source, string destination, CancellationToken cancellationToken = default)
+    {
+        if (taskId == Guid.Empty || destination is not ("" or "api.openai.com" or "generativelanguage.googleapis.com"))
+        { throw new PermissionDeniedException("Repository study requires a trusted task and a known recipient."); }
+        bool remoteSource = source.StartsWith("https://", StringComparison.Ordinal);
+        string scope = remoteSource ? Brain.GitHubRepositoryAddress.Parse(source).Url : Path.GetFullPath(source);
+        if (!remoteSource && (!Directory.Exists(scope) || PermissionPolicy.SensitivePath(scope) || _protectedRoots().Any(path => path.Length > 0 && PermissionPolicy.Within(path, scope))))
+        { throw new PermissionDeniedException("Choose an existing repository outside protected storage and its parents."); }
+        lock (_gate)
+        {
+            var existing = _grants.FirstOrDefault(grant => grant.Operation == PermissionOperation.RepositoryStudyAuthorization
+                && grant.TaskId == taskId && grant.Scope == scope && grant.Destination == destination && grant.Expires > DateTimeOffset.UtcNow && !grant.Persistent);
+            if (existing is not null) { return Task.FromResult(existing); }
+        }
+        var action = new PermissionAction(PermissionOperation.RepositoryStudyAuthorization, "Repository study review",
+            (_ui?.Get(LocalizationKeys.Permissions.RepositoryStudyReview) ?? "Authorize bounded repository text reads and untrusted Brain references for this task for one hour. No source code, dependency or script will execute.")
+                + "\n" + scope + "\n" + (destination.Length > 0 ? _ui?.Get(LocalizationKeys.Permissions.WorkspaceCloudReview, destination) ?? "Selected source text will be disclosed to " + destination : _ui?.Get(LocalizationKeys.Permissions.WorkspaceLocalReview) ?? "Access remains local."),
+            remoteSource ? [] : [scope], parameters: scope, destination: destination, taskId: taskId, scopeIdentity: scope);
+        return ExecuteAsync(action, token =>
+        {
+            token.ThrowIfCancellationRequested();
+            var grant = new PermissionGrant(Guid.NewGuid(), PermissionOperation.RepositoryStudyAuthorization, "Repository study", scope,
+                action.Fingerprint, DateTimeOffset.UtcNow, false, !remoteSource) { TaskId = taskId, Expires = DateTimeOffset.UtcNow.AddHours(1), Destination = destination };
+            lock (_gate) { _grants.Add(grant); } return Task.FromResult(grant);
+        }, cancellationToken);
+    }
+
     /// <summary>Clears all grants and cancels pending operations; settings reset is performed by the local UI.</summary>
     public void Reset()
     {

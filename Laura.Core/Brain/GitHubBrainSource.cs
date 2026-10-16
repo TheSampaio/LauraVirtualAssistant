@@ -9,7 +9,7 @@ using Laura.Core.Abstractions;
 namespace Laura.Core.Brain;
 
 /// <summary>Uses only the official GitHub HTTPS API and verified Git blobs; injected HTTP must disable automatic redirects.</summary>
-public sealed class GitHubBrainSource(HttpClient http) : IRemoteBrainSource, IDisposable
+public sealed partial class GitHubBrainSource(HttpClient http) : IRemoteBrainSource, IRemoteRepositoryInventory, IDisposable
 {
     /// <summary>Builds a credential-free transport with manual redirects, no proxies/cookies and public IP pinning at connection time.</summary>
     public static SocketsHttpHandler CreateHandler() => new()
@@ -126,7 +126,7 @@ public sealed class GitHubBrainSource(HttpClient http) : IRemoteBrainSource, IDi
         for (int redirect = 0; redirect <= 3; redirect++)
         {
             if (destination.Scheme != "https" || destination.Host != "api.github.com" || !destination.IsDefaultPort || destination.UserInfo.Length > 0
-                || !destination.AbsolutePath.StartsWith("/repos/", StringComparison.Ordinal)) { throw new BrainSourceException("Repository redirect destination is prohibited."); }
+                || !destination.AbsolutePath.StartsWith("/repos/", StringComparison.Ordinal)) { throw new BrainSourceException("Repository redirect destination is prohibited.", "endpoint_policy"); }
             budget.Request();
             using var request = new HttpRequestMessage(HttpMethod.Get, destination);
             request.Headers.UserAgent.ParseAdd("Laura-Knowledge/1.0"); request.Headers.Accept.ParseAdd("application/vnd.github+json");
@@ -139,19 +139,19 @@ public sealed class GitHubBrainSource(HttpClient http) : IRemoteBrainSource, IDi
                 string retry = response.Headers.RetryAfter?.Delta is { } delay ? " Retry after " + delay.TotalSeconds.ToString(CultureInfo.InvariantCulture) + " seconds."
                     : response.Headers.TryGetValues("X-RateLimit-Reset", out var values) && long.TryParse(values.FirstOrDefault(), CultureInfo.InvariantCulture, out long seconds)
                         && seconds is > 0 and < 253402300800 ? " Rate-limit reset: " + DateTimeOffset.FromUnixTimeSeconds(seconds).ToString("O", CultureInfo.InvariantCulture) + "." : " Check the GitHub rate-limit window before retrying.";
-                throw new BrainSourceException("GitHub access denied or rate limited." + retry + " No credentials were searched or automatically retried.");
+                throw new BrainSourceException("GitHub access denied or rate limited." + retry + " No credentials were searched or automatically retried.", "rate_limit");
             }
             if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Unauthorized)
-            { throw new BrainSourceException("Repository or reference unavailable. Private repositories require explicit authorized authentication, which is not configured for this adapter."); }
+            { throw new BrainSourceException("Repository or reference unavailable. Private repositories require explicit authorized authentication, which is not configured for this adapter.", "unavailable"); }
             if (!response.IsSuccessStatusCode) { throw new BrainSourceException("GitHub repository request failed: HTTP " + (int)response.StatusCode + "."); }
-            if (response.Content.Headers.ContentLength > maximumBytes) { throw new BrainSourceException("Repository response exceeds its byte limit."); }
+            if (response.Content.Headers.ContentLength > maximumBytes) { throw new BrainSourceException("Repository response exceeds its byte limit.", "response_bound"); }
             await using Stream input = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
             using var output = new MemoryStream(); byte[] buffer = new byte[8192]; int count;
             while ((count = await input.ReadAsync(buffer, timeout.Token).ConfigureAwait(false)) > 0)
-            { budget.Receive(count); if (output.Length + count > maximumBytes) { throw new BrainSourceException("Repository response exceeds its byte limit."); } output.Write(buffer, 0, count); }
+            { budget.Receive(count); if (output.Length + count > maximumBytes) { throw new BrainSourceException("Repository response exceeds its byte limit.", "response_bound"); } output.Write(buffer, 0, count); }
             return JsonDocument.Parse(output.ToArray(), new JsonDocumentOptions { MaxDepth = 32 });
         }
-        throw new BrainSourceException("Repository redirect budget exhausted.");
+        throw new BrainSourceException("Repository redirect budget exhausted.", "redirect_limit");
     }
 
     /// <inheritdoc />

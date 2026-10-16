@@ -26,11 +26,17 @@ Gemini and GPT model controls are searchable native pickers. Discovery uses fixe
 
 Google AI Studio / Gemini Live is the default conversation and voice provider. Open the **gear button → Connection**, paste your key or select **Import key and voice from Mark-LV**, then save. New keys are validated through Live setup before saving; a fixed bullet mask indicates the protected saved key without exposing it. Import reads `config/api_keys.json` without modifying the reference project. Laura stores its copy encrypted with Windows DPAPI for the current Windows account; keys do not enter INI files, logs or release packages.
 
-**Optional GPT:** in Connection, enter your OpenAI API key in the separate **GPT · OpenAI** section, select **GPT · OpenAI** as the provider and save. The independent model defaults to `gpt-5.4-mini` and is editable. GPT supports text streaming, Brain retrieval, the same local tools and native permission checks, plus explicitly authorized images with reviewed models. Its key is protected separately in `openai-key.dat`; it never replaces the Google key. GPT mode is text chat; select Gemini Live for voice, microphone and spoken startup announcements. Switching cancels/drains pending provider work and preserves retained dialogue/Brain; errors never silently switch providers. Technical diagnostics record only safe status codes, counters and timings. See [implementation and validation](docs/architecture/laura-gpt-provider.md).
+**Optional GPT:** in Connection, enter your OpenAI API key in the separate **GPT · OpenAI** section, select **GPT · OpenAI** as the provider and save. The independent model defaults to `gpt-5.4-mini` and is selected through a searchable compatible-model catalogue. GPT supports text streaming, Brain retrieval, the same local tools and native permission checks, plus explicitly authorized images with reviewed models. Its key is protected separately in `openai-key.dat`; it never replaces the Google key. GPT mode is text chat; select Gemini Live for voice, microphone and spoken startup announcements. Switching cancels/drains pending provider work and preserves retained dialogue/Brain; errors never silently switch providers. Technical diagnostics record only safe status codes, counters and timings. See [implementation and validation](docs/architecture/laura-gpt-provider.md).
 
 Laura independently implements the same reviewed Live model identifiers and five native voices as the local reference: `gemini-3.1-flash-live-preview`, fallback `gemini-2.5-flash-native-audio-preview-12-2025`, and **Charon, Puck, Kore, Fenrir, Aoede**. Availability and quotas depend on the Google account. Embedded local inference/Whisper and installed Windows synthesis are separate native adapters; they never replace Gemini's selected voice.
 
 Setup has six tabs: **Connection**, **Voice**, **Preferences**, **Applications**, **Security**, **MCP**, with a fixed Save button. Security preferences can be saved without a cloud key. Voice includes native Gemini voice preview, microphone/output devices, volume and the silence interval used for automatic speech-end detection. Conversation and UI language are independently configurable; **Português (Brasil)** explicitly instructs the model to use Brazilian pronunciation and vocabulary.
+
+## Tasks and repository study
+
+The HUD activity action opens private task progress, stop and explicit resume controls. Checkpoints are protected with Windows DPAPI outside the shared Brain; arguments and full tool output are not retained. A started effect without a confirmed result is never automatically replayed. Resume preserves cumulative progress and reacquires required permissions; a native user can request another bounded slice, up to 256 calls/one hour. Denials and uncertain external effects require inspection or a new explicit task.
+
+Ask Laura to study an absolute local repository path or a public GitHub URL. The incremental coordinator preserves inventory, actual acquisition coverage and source references across batches/restarts. Local batches contain at most 64 files; remote batches at most 24, with separate byte/request limits. GitHub traversal follows immutable nonrecursive subtrees instead of treating a truncated recursive list as a complete project. The initial review is limited to that task, repository and actual disclosure recipient. It never authorizes code execution or project edits. Acquired source text remains untrusted; importing every eligible file does not prove full understanding or a passing build. See [architecture and measured limits](docs/architecture/laura-cognitive-evolution.md).
 
 ## Talk and control
 
@@ -104,7 +110,7 @@ Laura.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/Laura.exe --storage _O
 # Real Live API, silent playback; --vad sends synthetic speech followed by silence.
 dotnet run --project Build/Smoke/Laura.Smoke.csproj -- _Output/GeminiSmoke --gemini --key-file ../Mark-LV/config/api_keys.json --quick --vad
 
-# Verify the Portuguese thinking acknowledgment, one-shot delivery and cancellation with silent playback.
+# Verify silent thinking state and cancellation without an automatic waiting announcement.
 dotnet run --project Build/Smoke/Laura.Smoke.csproj -- _Output/ThinkingVoiceSmoke --gemini --key-file ../Mark-LV/config/api_keys.json --quick --thinking-feedback
 
 # Compare native provider/playback PCM using synthetic speech, volume zero and no microphone.

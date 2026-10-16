@@ -65,7 +65,11 @@ public enum PermissionOperation
     /// <summary>Review a temporary task workspace and its explicit disclosure recipient.</summary>
     WorkspaceAuthorization,
     /// <summary>Create a generated plain-text note in Laura's fixed workspace without accepting a caller-supplied filename.</summary>
-    WorkspaceNote
+    WorkspaceNote,
+    /// <summary>Review bounded repository study, Brain retention and the actual model recipient for one task.</summary>
+    RepositoryStudyAuthorization,
+    /// <summary>Read only a previously reviewed repository scope as untrusted knowledge; never execute source code.</summary>
+    RepositoryStudyRead
 }
 
 /// <summary>Immutable execution identity constructed by trusted adapters, never deserialized from a model.</summary>
@@ -73,16 +77,20 @@ public sealed class PermissionAction
 {
     /// <summary>Snapshots relevant parameters. Only their SHA-256 digest enters the audit/store.</summary>
     public PermissionAction(PermissionOperation operation, string origin, string description,
-        IEnumerable<string>? resources = null, string parameters = "", string destination = "", bool userInitiated = false, bool automaticEligible = false, Guid taskId = default)
+        IEnumerable<string>? resources = null, string parameters = "", string destination = "", bool userInitiated = false, bool automaticEligible = false, Guid taskId = default, string scopeIdentity = "")
     {
         Operation = operation; Origin = origin; Description = description; Destination = destination;
         UserInitiated = userInitiated;
         AutomaticEligible = automaticEligible;
         TaskId = taskId;
+        ScopeIdentity = scopeIdentity;
         Resources = (resources ?? []).ToImmutableArray();
         Fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         { operation, origin, resources = Resources, parameters, destination, userInitiated }))));
+        if (scopeIdentity.Length > 0) { Fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Fingerprint + ":" + scopeIdentity))); }
     }
+    /// <summary>Gets a native repository scope identity; persisted/model content cannot authorize it.</summary>
+    public string ScopeIdentity { get; }
     /// <summary>Gets the code-defined effect.</summary>
     public PermissionOperation Operation { get; }
     /// <summary>Gets the trusted adapter origin.</summary>

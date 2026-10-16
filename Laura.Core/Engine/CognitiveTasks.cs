@@ -17,7 +17,7 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal) : IDisposable
 
     /// <summary>Executes in one task's lane and commits checkpoints around adapter dispatch. Args: working: Trusted input identity; registeredTools: Closed tool registry; name: Registered operation; arguments: Structured bounded arguments; execute: Native adapter; cancellationToken: Caller cancellation. Returns: Actual adapter outcome.</summary>
     public async Task<AssistantToolResult> ExecuteAsync(ConversationWorkingContext working, IReadOnlySet<string> registeredTools,
-        string name, JsonElement arguments, Func<CognitiveTaskRun, CancellationToken, Task<AssistantToolResult>> execute, CancellationToken cancellationToken)
+        string name, JsonElement arguments, Func<CognitiveTaskRun, CancellationToken, Task<AssistantToolResult>> execute, CancellationToken cancellationToken, string initiator = "model")
     {
         bool attributed = working.TurnId != Guid.Empty && !string.IsNullOrWhiteSpace(working.UserText);
         Guid id = attributed ? working.TurnId : Guid.NewGuid();
@@ -36,7 +36,7 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal) : IDisposable
                     taskId: id, journal: attributed ? journal : null, restored: restored, checkpointed: Publish);
             }
             slot.Run.SetActive(true); slot.Active = true; Publish(slot.Run.Checkpoint());
-            AssistantToolResult result = await slot.Run.ExecuteAsync(name, arguments, token => execute(slot.Run, token), operation.Token).ConfigureAwait(false);
+            AssistantToolResult result = await slot.Run.ExecuteAsync(name, arguments, token => execute(slot.Run, token), operation.Token, initiator).ConfigureAwait(false);
             return result;
         }
         finally
@@ -87,19 +87,25 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal) : IDisposable
     public async Task<CognitiveTaskCheckpoint> PrepareResumeAsync(Guid id, CancellationToken cancellationToken = default)
     {
         if (_deleted.ContainsKey(id)) { throw new InvalidOperationException("This task was removed."); }
-        if (_slots.TryGetValue(id, out var slot) && slot.Active) { throw new InvalidOperationException("Task is already executing."); }
-        var checkpoint = await journal.ReadAsync(id, cancellationToken).ConfigureAwait(false) ?? throw new InvalidOperationException("Task checkpoint is unavailable.");
-        if (checkpoint.HasUncertainEffect || checkpoint.State == "blocked" || checkpoint.Calls >= checkpoint.MaximumCalls
-            || checkpoint.ElapsedMilliseconds >= checkpoint.MaximumMilliseconds)
-        { throw new InvalidOperationException("Task requires outcome review or a new explicit objective; safe resumption is unavailable."); }
-        // Recreate the run from committed state; never carry a cancellation token or an execution grant across recovery.
-        if (slot is not null)
+        var slot = _slots.GetOrAdd(id, _ => new Slot());
+        if (!await slot.Gate.WaitAsync(0, cancellationToken).ConfigureAwait(false)) { throw new InvalidOperationException("Task is already executing."); }
+        try
         {
-            if (!await slot.Gate.WaitAsync(0, cancellationToken).ConfigureAwait(false)) { throw new InvalidOperationException("Task is already executing."); }
-            try { slot.Run = null; } finally { slot.Gate.Release(); }
-        }
+        var checkpoint = await journal.ReadAsync(id, cancellationToken).ConfigureAwait(false) ?? throw new InvalidOperationException("Task checkpoint is unavailable.");
+        if (checkpoint.HasUncertainEffect || checkpoint.State == "blocked" && checkpoint.Blocker is not ("budget" or "cancelled"))
+        { throw new InvalidOperationException("Task requires outcome review or a new explicit objective; safe resumption is unavailable."); }
+        int maximumCalls = checkpoint.Calls >= checkpoint.MaximumCalls ? Math.Min(256, checkpoint.MaximumCalls + 32) : checkpoint.MaximumCalls;
+        long maximumMilliseconds = checkpoint.ElapsedMilliseconds >= checkpoint.MaximumMilliseconds ? Math.Min(3600000, checkpoint.MaximumMilliseconds + 360000) : checkpoint.MaximumMilliseconds;
+        if (checkpoint.Calls >= maximumCalls || checkpoint.ElapsedMilliseconds >= maximumMilliseconds) { throw new InvalidOperationException("Task reached its cumulative recovery budget; start a new explicit objective."); }
+        checkpoint = checkpoint with { State = "paused", Blocker = "", MaximumCalls = maximumCalls, MaximumMilliseconds = maximumMilliseconds,
+            Steps = checkpoint.Blocker == "cancelled" ? checkpoint.Steps.Select(step => step.State == "cancelled" ? step with { State = "pending" } : step).ToArray() : checkpoint.Steps };
+        await journal.SaveAsync(checkpoint, cancellationToken).ConfigureAwait(false);
+        // Recreate the run from committed state; never carry a cancellation token or an execution grant across recovery.
+        slot.Run = null; if (slot.Cancellation.IsCancellationRequested) { slot.Cancellation.Dispose(); slot.Cancellation = new(); }
         Publish(checkpoint);
         return checkpoint;
+        }
+        finally { slot.Gate.Release(); }
     }
 
     /// <summary>Gets the current native run for source continuation while the caller owns its task lane.</summary>
@@ -128,7 +134,7 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal) : IDisposable
     private sealed class Slot : IDisposable
     {
         internal readonly SemaphoreSlim Gate = new(1, 1);
-        internal readonly CancellationTokenSource Cancellation = new();
+        internal CancellationTokenSource Cancellation = new();
         internal CognitiveTaskRun? Run;
         internal volatile bool Active;
         /// <inheritdoc />

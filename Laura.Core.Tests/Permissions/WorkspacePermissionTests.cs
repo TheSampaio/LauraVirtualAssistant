@@ -27,6 +27,31 @@ public sealed class WorkspacePermissionTests : IDisposable
     }
     private readonly string _root = Path.Combine(Path.GetTempPath(), "laura-task-permissions-" + Guid.NewGuid().ToString("N"));
 
+    /// <summary>Exercises a read-only repository grant across task, root, recipient, operation and revocation boundaries.</summary>
+    [Fact]
+    public async Task RepositoryStudyReviewCannotAuthorizeEditsCommandsSecretsOtherTasksOrRecipients()
+    {
+        string root = Path.Combine(_root, "Project"); Directory.CreateDirectory(root); Guid task = Guid.NewGuid();
+        using var manager = new PermissionManager(new PermissionStore(Path.Combine(_root, "permissions.json")), () => new());
+        Task<PermissionGrant> review = manager.AuthorizeRepositoryStudyAsync(task, root, "api.openai.com");
+        manager.Decide(Assert.Single(manager.PendingRequests).Id, ApprovalChoice.Once); var grant = await review;
+        Assert.Equal(grant.Id, (await manager.AuthorizeRepositoryStudyAsync(task, root, "api.openai.com")).Id); Assert.Single(manager.Grants);
+        var read = new PermissionAction(PermissionOperation.RepositoryStudyRead, "Repository study", "Read scoped sources", [Path.Combine(root, "main.cs")], destination: "api.openai.com", taskId: task, scopeIdentity: root);
+        Assert.Equal(1, await manager.ExecuteAsync(read, _ => Task.FromResult(1)));
+        foreach (var denied in new[]
+        {
+            new PermissionAction(PermissionOperation.RepositoryStudyRead, read.Origin, "Other task", read.Resources, destination: read.Destination, taskId: Guid.NewGuid(), scopeIdentity: root),
+            new PermissionAction(PermissionOperation.RepositoryStudyRead, read.Origin, "Other recipient", read.Resources, destination: "generativelanguage.googleapis.com", taskId: task, scopeIdentity: root),
+            new PermissionAction(PermissionOperation.RepositoryStudyRead, read.Origin, "Sibling", [Path.Combine(_root, "ProjectSibling", "main.cs")], destination: read.Destination, taskId: task, scopeIdentity: root),
+            new PermissionAction(PermissionOperation.RepositoryStudyRead, read.Origin, "Secret", [Path.Combine(root, ".env")], destination: read.Destination, taskId: task, scopeIdentity: root),
+            new PermissionAction(PermissionOperation.FileWrite, read.Origin, "Edit", read.Resources, taskId: task, scopeIdentity: root),
+            new PermissionAction(PermissionOperation.Process, read.Origin, "Command", read.Resources, taskId: task, scopeIdentity: root),
+        }) { Assert.False(PermissionPolicy.Matches(grant, denied)); }
+        manager.Revoke(grant.Id); var pending = manager.ExecuteAsync<int>(read, _ => throw new InvalidOperationException("Revoked study dispatched."));
+        manager.Decide(Assert.Single(manager.PendingRequests).Id, ApprovalChoice.Deny); await Assert.ThrowsAsync<PermissionDeniedException>(() => pending);
+        using var restarted = new PermissionManager(new PermissionStore(Path.Combine(_root, "permissions.json")), () => new()); Assert.Empty(restarted.Grants);
+    }
+
     [Theory]
     [InlineData(ApprovalMode.Ask)]
     [InlineData(ApprovalMode.Automatic)]

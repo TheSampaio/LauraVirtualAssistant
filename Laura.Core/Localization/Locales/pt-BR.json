@@ -1,4 +1,11 @@
 {
+  "ui.tasks.studyDirectories": "{0} pastas pendentes no inventário",
+  "ui.tasks.study": "Cobertura do estudo",
+  "ui.tasks.studyCoverage": "{0} de {1} arquivos elegíveis adquiridos · {2} pendentes · {3} excluídos. Aquisição não comprova compreensão.",
+  "ui.tasks.studyTruncated": "O inventário é parcial; podem existir outros arquivos.",
+  "ui.permissions.repositoryStudyReview": "Autorizar por uma hora a leitura limitada de textos do repositório e o armazenamento de referências não confiáveis no Brain para esta tarefa. Nenhum código, dependência ou script será executado. Segredos, pastas protegidas, alterações no projeto e rede arbitrária estão excluídos. Estudos públicos do GitHub acessam api.github.com.",
+  "ui.permissions.operation.RepositoryStudyAuthorization": "Autorizar estudo de repositório",
+  "ui.permissions.operation.RepositoryStudyRead": "Ler fontes do repositório autorizado",
   "ui.tasks.title": "Tarefas",
   "ui.tasks.subtitle": "Progresso e retomada a partir de operações observadas.",
   "ui.tasks.empty": "Nenhuma tarefa preservada.",

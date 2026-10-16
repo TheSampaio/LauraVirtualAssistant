@@ -71,6 +71,11 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         Function("study_source", "Study an explicitly requested absolute local text file or narrow repository folder. Requires exact native source/disclosure approval. Imports MD/TXT/JSON and common code formats as untrusted references, identifies source languages and manifest-declared dependencies without installing or executing any code. Returns actual import/exclusion counts; do not claim dependencies are available or scripts were tested.", ["path", "topic"],
             ("path", "STRING", "Absolute local source file or folder"), ("topic", "STRING", "User-requested knowledge topic")),
         Function("list_brain_skills", "Search installed skill metadata by task meaning using descriptions/capabilities and available local hybrid retrieval. Optional query ranks candidates; an empty query lists metadata. Results distinguish review/dependency availability and lexical versus semantic evidence. Full instructions require read_brain_skill. A missing search result is not proof of a missing ability.", [], ("query", "STRING", "Optional task-focused query; match descriptions across languages")),
+        Function("start_repository_study", "Inventory a large local repository or public GitHub URL without executing code. Requests a task-scoped native source/Brain/disclosure review. Returns a stable study ID, cursor and actual coverage. Existing progress survives restart; refresh explicitly re-inventories changes. Acquisition is not comprehension. Continue with continue_repository_study and the actual returned cursor; read cited passages and assess knowledge before claiming understanding.", ["source", "topic"],
+            ("source", "STRING", "Absolute local directory or public GitHub repository URL"), ("topic", "STRING", "Actual requested topic, up to 120 characters"), ("refresh", "BOOLEAN", "Explicitly rescan a changed repository")),
+        Function("continue_repository_study", "Acquire the next bounded batch from a persisted reviewed study using its current cursor. Preserves 64 local/24 remote files, 256 KiB content and separate HTTP/time limits per operation. Returns real source IDs/hashes for interpretation and honest pending/excluded coverage. Never executes source or grants project edits. A stale cursor must be refreshed through repository_study_status.", ["id", "cursor"],
+            ("id", "STRING", "Actual native study ID"), ("cursor", "STRING", "Current cursor returned by study inventory/status/batch")),
+        Function("repository_study_status", "Read persisted repository coverage and the current batch cursor under this task's source/disclosure review. A completed acquisition does not prove comprehension, installed dependencies or a passing build.", ["id"], ("id", "STRING", "Actual native study ID")),
         SkillProposalFunction(),
         Function("read_brain_skill", "Load one relevant skill's instructions by ID or exact name. If disabled or changed, native review asks the user to approve that exact version first. Match descriptions to the task across languages. No scripts or dependencies execute.", ["name"], ("name", "STRING", "Stable ID or exact skill name")),
         Function("read_brain_skill_usage", "Inspect retained native process outcomes attributed to a reviewed skill version in its user turn. Exit code zero does not prove the whole procedure or goal succeeded. Use actual failed observations to investigate before proposing an evidence-grounded revision; never infer causes from exit code alone.", ["name"], ("name", "STRING", "Stable ID or exact skill name")),
@@ -147,7 +152,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                 var next = await tasks.InspectAsync(working.TurnId, task => task.NextSourceOperation(), cancellationToken).ConfigureAwait(false);
                 if (next is null) { break; }
                 AssistantToolResult result = await tasks.ExecuteAsync(working, RegisteredToolNames, next.Name, next.Arguments,
-                    (task, token) => DispatchTaskAsync(task, next.Name, next.Arguments, working, token), cancellationToken).ConfigureAwait(false);
+                    (task, token) => DispatchTaskAsync(task, next.Name, next.Arguments, working, token), cancellationToken, "native_continuation").ConfigureAwait(false);
                 int limit = next.Name == "read_brain_passage" ? 4000 : 2000;
                 observed.Add(new { tool = next.Name, status = result.Status, result = result.Text[..Math.Min(limit, result.Text.Length)], truncated = result.Text.Length > limit, untrustedData = true });
                 if (result.Failed) { break; }
@@ -244,6 +249,8 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (name is "start_repository_study" or "continue_repository_study" or "repository_study_status" && !settings.Current.RememberConversations)
+            { return new("Persistent knowledge is disabled. Enable memory before studying a repository.") { Failed = true, Status = "blocked" }; }
             string action = Value(arguments, "action");
             if (arguments.TryGetProperty("lauraVerifiedTarget", out JsonElement targetData))
             {
@@ -412,6 +419,15 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                 case "study_source":
                     return new(JsonSerializer.Serialize(await services.GetRequiredService<BrainSources>().AcquireAsync(Value(arguments, "path"), Value(arguments, "topic"),
                         MauiToolPermissions.CloudDestination, cancellationToken).ConfigureAwait(false)));
+                case "start_repository_study":
+                    return StudyResult(await services.GetRequiredService<RepositoryStudy>().StartAsync(Value(arguments, "source"), Value(arguments, "topic"),
+                        working.TurnId, MauiToolPermissions.CloudDestination, arguments.TryGetProperty("refresh", out var refresh) && refresh.ValueKind == JsonValueKind.True, cancellationToken).ConfigureAwait(false));
+                case "continue_repository_study":
+                    return StudyResult(await services.GetRequiredService<RepositoryStudy>().ContinueAsync(StudyId(arguments), working.TurnId,
+                        MauiToolPermissions.CloudDestination, Value(arguments, "cursor"), cancellationToken).ConfigureAwait(false));
+                case "repository_study_status":
+                    return StudyResult(await services.GetRequiredService<RepositoryStudy>().StatusAsync(StudyId(arguments), working.TurnId,
+                        MauiToolPermissions.CloudDestination, cancellationToken).ConfigureAwait(false));
                 case "study_github_repository":
                     if (!settings.Current.RememberConversations) { return new("Persistent knowledge is disabled. Enable memory before studying a repository.") { Failed = true }; }
                     string selectedPaths = Value(arguments, "paths", "[]");
@@ -477,12 +493,20 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
         { return new("Action failed: " + error.GetType().Name + ". Do not claim that it succeeded.") { Failed = true }; }
     }
+    /// <summary>Preserves partial acquisition as actual evidence while reporting backend failure independently from authorization.</summary>
+    private static AssistantToolResult StudyResult(RepositoryStudyProgress progress) => new(JsonSerializer.Serialize(progress))
+        { Failed = progress.Failure.Length > 0, Status = progress.Failure.Length > 0 ? "failed" : "success" };
+
+    /// <summary>Rejects invalid model study identifiers as validation failures before any source IO.</summary>
+    private static Guid StudyId(JsonElement arguments) => Guid.TryParse(Value(arguments, "id"), out var id) && id != Guid.Empty ? id
+        : throw new ArgumentException("Use an actual native repository study ID.");
+
     private void TrackLaunch(string name)
     { _startedApplications.Enqueue(name); while (_startedApplications.Count > 100) { _startedApplications.TryDequeue(out _); } }
     /// <summary>Reports known temporary availability from the actual memory, model and configured MCP runtime state.</summary>
     private string CapabilityState(string name)
     {
-        if (name is "study_github_repository" or "recall_memory" && !settings.Current.RememberConversations) { return "disabled_memory"; }
+        if (name is "study_github_repository" or "start_repository_study" or "continue_repository_study" or "repository_study_status" or "recall_memory" && !settings.Current.RememberConversations) { return "disabled_memory"; }
         if (name == "learn_memory" && (!settings.Current.RememberConversations || !settings.Current.Brain.AutoLearn)) { return "disabled_learning"; }
         if (name is "screen_process" or "read_brain_image" && !services.GetRequiredService<IConversationEngine>().SupportsImages) { return "unavailable_model_vision"; }
         if (name == "connect_mcp_server" && services.GetRequiredService<McpRuntime>().States().Count == 0) { return "no_configured_server"; }
