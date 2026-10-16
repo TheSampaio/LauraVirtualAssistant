@@ -81,10 +81,14 @@ public static class PermissionPolicy
             { throw new PermissionDeniedException("Invalid resource path."); }
             if (forbiddenRoots.Any(root => root.Length > 0 && Within(path, root)) && (workspaceRoot is null || !Within(path, workspaceRoot)))
             { throw new PermissionDeniedException("Application security storage is protected."); }
-            for (string? current = path; current is not null; current = Path.GetDirectoryName(current))
+            var ancestors = new Stack<string>();
+            for (string? current = path; current is not null; current = Path.GetDirectoryName(current)) { ancestors.Push(current); }
+            // Inspect each directory entry before touching descendants; a broken or network-backed junction must not trigger target IO first.
+            while (ancestors.TryPop(out string? current))
             {
-                if ((File.Exists(current) || Directory.Exists(current)) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
-                { throw new PermissionDeniedException("Redirected resources are not supported."); }
+                try
+                { if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) { throw new PermissionDeniedException("Redirected resources are not supported."); } }
+                catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { }
             }
             if (action.Operation is PermissionOperation.FileWrite or PermissionOperation.FileCreateDirectory or PermissionOperation.FileCopy or PermissionOperation.FileMove or PermissionOperation.FileTrash or PermissionOperation.ScreenshotExport or PermissionOperation.WorkspaceAuthorization or PermissionOperation.WorkspaceNote)
             {

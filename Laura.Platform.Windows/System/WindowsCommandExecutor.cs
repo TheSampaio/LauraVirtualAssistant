@@ -19,14 +19,27 @@ public sealed class WindowsCommandExecutor(PermissionManager permissions) : ICom
     /// <inheritdoc />
     public async Task<CommandExecutionResult> ExecuteAsync(CommandExecutionRequest request, IProgress<CommandOutput>? progress = null, CancellationToken cancellationToken = default)
     {
-        request = request.Validated();
+        var invocation = PowerShellInvocation.Prepare(request); request = invocation.Request;
+        PermissionPolicy.ValidateResources(new(PermissionOperation.Process, "Native command executor", "Validate process resources before metadata IO",
+            invocation.ScriptPath is { } selectedScript ? [request.Executable, request.WorkingDirectory, selectedScript] : [request.Executable, request.WorkingDirectory]), []);
         if (!File.Exists(request.Executable) || !Directory.Exists(request.WorkingDirectory)) { throw new FileNotFoundException("The executable or working directory is unavailable."); }
+        FileStream? script = null;
+        string? scriptHash = null;
+        if (invocation.ScriptPath is { } scriptPath)
+        {
+            PermissionPolicy.ValidateResources(new(PermissionOperation.Process, "Native command executor", "Validate script identity", [scriptPath]), []);
+            script = new FileStream(scriptPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true);
+        }
+        await using var scriptLifetime = script;
+        if (script is not null) { scriptHash = Convert.ToHexString(await SHA256.HashDataAsync(script, cancellationToken).ConfigureAwait(false)); }
         // Keep executable bytes stable from hashing through native dispatch on Windows.
         await using var image = new FileStream(request.Executable, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true);
         string hash = Convert.ToHexString(await SHA256.HashDataAsync(image, cancellationToken).ConfigureAwait(false));
         var action = new PermissionAction(PermissionOperation.Process, "Native command executor",
-            request.Executable + "\n" + JsonSerializer.Serialize(request.Arguments) + "\n" + request.WorkingDirectory + "\nWorking directory does not restrict process filesystem or network access.",
-            [request.Executable, request.WorkingDirectory], JsonSerializer.Serialize(new { request.Arguments, request.TimeoutSeconds, request.OutputCharacters, hash }),
+            request.Executable + "\n" + JsonSerializer.Serialize(request.Arguments) + "\n" + request.WorkingDirectory + (scriptHash is null ? "" : "\nEntry script SHA-256: " + scriptHash)
+                + "\nWorking directory does not restrict process filesystem or network access. Entry-script identity does not verify imported modules or nested scripts.",
+            invocation.ScriptPath is { } entry ? [request.Executable, request.WorkingDirectory, entry] : [request.Executable, request.WorkingDirectory],
+            JsonSerializer.Serialize(new { request.Arguments, request.TimeoutSeconds, request.OutputCharacters, hash, scriptHash }),
             ProviderExecutionScope.Destination, taskId: request.TaskId);
         return await permissions.ExecuteAsync(action, token => RunAsync(request, progress, token), result => result.Succeeded, cancellationToken).ConfigureAwait(false);
     }

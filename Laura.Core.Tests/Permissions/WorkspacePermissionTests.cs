@@ -27,6 +27,31 @@ public sealed class WorkspacePermissionTests : IDisposable
     }
     private readonly string _root = Path.Combine(Path.GetTempPath(), "laura-task-permissions-" + Guid.NewGuid().ToString("N"));
 
+    /// <summary>Rejects UNC scope reviews before source inventory or filesystem metadata can contact another host.</summary>
+    [Fact]
+    public async Task NetworkTaskScopesCannotTriggerMetadataOrCreatePendingAuthority()
+    {
+        Directory.CreateDirectory(_root); using var manager = new PermissionManager(new PermissionStore(Path.Combine(_root, "permissions.json")), () => new());
+        const string source = @"\\example.invalid\unreachable\Project";
+        await Assert.ThrowsAsync<PermissionDeniedException>(() => manager.AuthorizeWorkspaceAsync(Guid.NewGuid(), source, ""));
+        await Assert.ThrowsAsync<PermissionDeniedException>(() => manager.AuthorizeRepositoryStudyAsync(Guid.NewGuid(), source, ""));
+        Assert.Empty(manager.PendingRequests); Assert.Empty(manager.Grants);
+    }
+
+    /// <summary>Rejects a broken ancestor junction before touching its nonexistent target or considering a child resource safe.</summary>
+    [Fact]
+    public async Task BrokenJunctionAncestorCannotBecomeAnApprovedNewFileTarget()
+    {
+        if (!OperatingSystem.IsWindows()) { return; }
+        Directory.CreateDirectory(_root); string link = Path.Combine(_root, "BrokenLink"), target = Path.Combine(_root, "MissingTarget");
+        var start = new System.Diagnostics.ProcessStartInfo("cmd.exe") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (string argument in new[] { "/c", "mklink", "/J", link, target }) { start.ArgumentList.Add(argument); }
+        using var process = System.Diagnostics.Process.Start(start)!; await process.WaitForExitAsync(); Assert.Equal(0, process.ExitCode);
+        var action = new PermissionAction(PermissionOperation.FileWrite, "Synthetic native adapter", "Create harmless fixture", [Path.Combine(link, "new.txt")]);
+        Assert.Throws<PermissionDeniedException>(() => PermissionPolicy.ValidateResources(action, [])); Assert.False(Directory.Exists(target));
+        Directory.Delete(link);
+    }
+
     /// <summary>Exercises a read-only repository grant across task, root, recipient, operation and revocation boundaries.</summary>
     [Fact]
     public async Task RepositoryStudyReviewCannotAuthorizeEditsCommandsSecretsOtherTasksOrRecipients()

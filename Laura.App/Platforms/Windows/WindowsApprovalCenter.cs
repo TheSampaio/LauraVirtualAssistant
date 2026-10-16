@@ -95,7 +95,7 @@ public sealed class WindowsApprovalCenter(PermissionManager permissions, ISettin
         {
             foreach (var grant in permissions.Grants)
             {
-                _body.Children.Add(Card(WindowsDialogs.Text(T("operation." + grant.Operation)), WindowsDialogs.Text(grant.Scope + "\n" + grant.Origin + " · " + T(grant.Persistent ? "persistent" : "session") + "\n" + grant.Created.LocalDateTime.ToString("g", ui.Culture), 12, true),
+                _body.Children.Add(Card(WindowsDialogs.Text(T("operation." + grant.Operation)), WindowsDialogs.Text(DescribeGrant(grant), 12, true),
                     WindowsDialogs.Button(T("revoke"), () => _ = ChangeAsync(() => permissions.Revoke(grant.Id)))));
             }
             _body.Children.Add(WindowsDialogs.Button(T("reset"), () => _ = RestoreAsync()));
@@ -193,6 +193,13 @@ public sealed class WindowsApprovalCenter(PermissionManager permissions, ISettin
         await ChangeAsync(permissions.Reset).ConfigureAwait(true);
         await settings.UpdateAsync(settings.Current with { Permissions = new() }).ConfigureAwait(true);
     }
+    /// <summary>Shows actual task expiry and disclosure recipient alongside scope so revocation remains understandable.</summary>
+    private string DescribeGrant(PermissionGrant grant) => grant.Scope + "\n" + grant.Origin + " · " + T(grant.Persistent ? "persistent" : "session")
+        + "\n" + grant.Created.LocalDateTime.ToString("g", ui.Culture)
+        + (grant.TaskId == Guid.Empty ? "" : "\n" + T("task") + ": " + grant.TaskId.ToString("D"))
+        + (grant.Expires is { } expires ? "\n" + T("expires") + ": " + expires.LocalDateTime.ToString("g", ui.Culture) : "")
+        + (grant.Destination.Length > 0 ? "\n" + T("destination") + ": " + grant.Destination : "");
+
     /// <inheritdoc />
     public void Dispose()
     {

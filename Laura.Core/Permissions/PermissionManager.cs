@@ -176,6 +176,7 @@ public sealed class PermissionManager : IDisposable
         if (taskId == Guid.Empty || destination is not ("" or "api.openai.com" or "generativelanguage.googleapis.com"))
         { throw new PermissionDeniedException("A workspace requires an active task and a known recipient."); }
         string root = Path.GetFullPath(directory);
+        PermissionPolicy.ValidateResources(new(PermissionOperation.WorkspaceAuthorization, "Workspace task review", "Validate project root before metadata IO", [root]), _protectedRoots(), _workspaceRoot);
         if (!Directory.Exists(root) || PermissionPolicy.SensitivePath(root) || _protectedRoots().Any(path => path.Length > 0 && PermissionPolicy.Within(path, root)))
         { throw new PermissionDeniedException("Choose an existing project directory outside protected storage and its parents."); }
         var action = new PermissionAction(PermissionOperation.WorkspaceAuthorization, "Workspace task review",
@@ -199,6 +200,11 @@ public sealed class PermissionManager : IDisposable
         { throw new PermissionDeniedException("Repository study requires a trusted task and a known recipient."); }
         bool remoteSource = source.StartsWith("https://", StringComparison.Ordinal);
         string scope = remoteSource ? Brain.GitHubRepositoryAddress.Parse(source).Url : Path.GetFullPath(source);
+        if (!remoteSource)
+        {
+            PermissionPolicy.ValidateResources(new(PermissionOperation.RepositoryStudyAuthorization, "Repository study review", "Validate study root before metadata IO", [scope]), _protectedRoots(), _workspaceRoot);
+            if (Path.TrimEndingDirectorySeparator(scope) == Path.TrimEndingDirectorySeparator(Path.GetPathRoot(scope)!)) { throw new PermissionDeniedException("Choose a repository directory rather than an entire filesystem root."); }
+        }
         if (!remoteSource && (!Directory.Exists(scope) || PermissionPolicy.SensitivePath(scope) || _protectedRoots().Any(path => path.Length > 0 && PermissionPolicy.Within(path, scope))))
         { throw new PermissionDeniedException("Choose an existing repository outside protected storage and its parents."); }
         lock (_gate)

@@ -1,4 +1,6 @@
 {
+  "ui.permissions.task": "Task",
+  "ui.permissions.expires": "Expires",
   "ui.tasks.studyDirectories": "{0} inventory directories pending",
   "ui.tasks.study": "Study coverage",
   "ui.tasks.studyCoverage": "{0} of {1} eligible files acquired · {2} pending · {3} excluded. Acquisition does not establish comprehension.",

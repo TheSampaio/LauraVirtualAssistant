@@ -36,6 +36,8 @@ if (args.Contains("--local-model-smoke", StringComparer.Ordinal))
 { await LocalModelSmoke.RunAsync(directory, args.Contains("--download", StringComparer.Ordinal), timeout.Token); return 0; }
 if (args.Contains("--command-smoke", StringComparer.Ordinal))
 { await CommandSmoke.RunAsync(directory, timeout.Token); return 0; }
+if (args.Contains("--powershell-smoke", StringComparer.Ordinal))
+{ await PowerShellSmoke.RunAsync(directory, timeout.Token); return 0; }
 if (args.Contains("--silent-thinking", StringComparer.Ordinal))
 {
     await using var live = new GeminiLiveClient(settings, new ProtectedApiKeyStore(directory), memory, Array.Empty<ISkill>(), new SmokeShell());
