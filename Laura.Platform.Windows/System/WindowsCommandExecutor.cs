@@ -44,20 +44,16 @@ public sealed class WindowsCommandExecutor(PermissionManager permissions) : ICom
         return await permissions.ExecuteAsync(action, token => RunAsync(request, progress, token), result => result.Succeeded, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Drains both streams even after their retention budget is exhausted and kills only this owned process tree on cancellation.</summary>
+    /// <summary>Drains both streams even after retention is exhausted and closes the atomically assigned native job on every exit path.</summary>
     private static async Task<CommandExecutionResult> RunAsync(CommandExecutionRequest request, IProgress<CommandOutput>? progress, CancellationToken cancellationToken)
     {
-        var start = new ProcessStartInfo(request.Executable) { WorkingDirectory = request.WorkingDirectory, UseShellExecute = false, CreateNoWindow = true,
-            RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8 };
-        start.Environment.Clear();
-        foreach (string name in EnvironmentNames) { if (Environment.GetEnvironmentVariable(name) is { } value) { start.Environment[name] = value; } }
-        start.Environment["DOTNET_NOLOGO"] = "1"; start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
-        foreach (string argument in request.Arguments) { start.ArgumentList.Add(argument); }
-        using var process = new Process { StartInfo = start };
+        var environment = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string name in EnvironmentNames) { if (Environment.GetEnvironmentVariable(name) is { } value) { environment[name] = value; } }
+        environment["DOTNET_NOLOGO"] = "1"; environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         long began = Stopwatch.GetTimestamp();
         cancellationToken.ThrowIfCancellationRequested();
-        if (!process.Start()) { throw new InvalidOperationException("The native process did not start."); }
-        int processId = process.Id; process.StandardInput.Close();
+        using var process = OwnedCommandProcess.Start(request, environment);
+        int processId = process.Id;
         var stdout = new StringBuilder(); var stderr = new StringBuilder(); object gate = new(); long sequence = 0;
         int retained = 0; bool truncated = false;
         Task output = DrainAsync(process.StandardOutput, stdout, false), error = DrainAsync(process.StandardError, stderr, true);
@@ -67,17 +63,20 @@ public sealed class WindowsCommandExecutor(PermissionManager permissions) : ICom
         catch (OperationCanceledException)
         {
             status = cancellationToken.IsCancellationRequested ? "cancelled" : "timeout";
-            try { if (!process.HasExited) { process.Kill(entireProcessTree: true); } }
+            try { process.Terminate(); }
             catch (Exception failure) when (failure is Win32Exception or InvalidOperationException) { status = "termination_failed"; }
             try { await process.WaitForExitAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None).ConfigureAwait(false); }
             catch (TimeoutException) { status = "termination_failed"; }
         }
+        // A successful initial process can leave children holding pipes or doing work. They remain exclusively owned.
+        try { process.Terminate(); await process.WaitForEmptyAsync().ConfigureAwait(false); }
+        catch (Exception failure) when (failure is Win32Exception or TimeoutException) { status = "termination_failed"; }
         try { await Task.WhenAll(output, error).WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None).ConfigureAwait(false); }
         catch (Exception failure) when (failure is IOException or TimeoutException)
         { process.StandardOutput.Close(); process.StandardError.Close(); status = "output_incomplete"; }
         TimeSpan elapsed = Stopwatch.GetElapsedTime(began);
         LauraDiagnostics.Record("process.completed", elapsed.TotalMilliseconds, outcome: status, interactionId: request.TaskId);
-        lock (gate) { return new(processId, process.HasExited ? process.ExitCode : null, stdout.ToString(), stderr.ToString(), status, truncated, elapsed); }
+        lock (gate) { return new(processId, process.ExitCode, stdout.ToString(), stderr.ToString(), status, truncated, elapsed); }
 
         // Chunked reads avoid allocating an unbounded line before the retention limit applies.
         async Task DrainAsync(StreamReader reader, StringBuilder destination, bool isError)
