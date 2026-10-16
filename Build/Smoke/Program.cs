@@ -28,13 +28,25 @@ using var settings = new SettingsService(new IniSettingsStore(Path.Combine(direc
 await settings.LoadAsync(timeout.Token);
 var memory = new SqliteConversationMemory(Path.Combine(directory, "memory.db"));
 memory.Initialize();
-if (args.Contains("--cuda-model-smoke", StringComparer.Ordinal) || args.Contains("--cuda-runtime-validation-smoke", StringComparer.Ordinal))
+if (args.Contains("--cuda-model-smoke", StringComparer.Ordinal) || args.Contains("--cuda-runtime-validation-smoke", StringComparer.Ordinal) || args.Contains("--cuda-fallback-smoke", StringComparer.Ordinal))
 {
     int runtime = Array.IndexOf(args, "--cuda-runtime");
     if (runtime < 0 || runtime + 1 >= args.Length || !Path.IsPathFullyQualified(args[runtime + 1])) { throw new ArgumentException("Provide an absolute verified CUDA runtime directory."); }
-    if (args.Contains("--cuda-runtime-validation-smoke", StringComparer.Ordinal))
+    if (args.Contains("--cuda-fallback-smoke", StringComparer.Ordinal))
+    {
+        int scenario = Array.IndexOf(args, "--fallback-case");
+        if (scenario < 0 || scenario + 1 >= args.Length || args[scenario + 1] is not ("missing" or "invalid" or "cpu")) { throw new ArgumentException("Select a reviewed CPU fallback diagnostic."); }
+        await CudaRuntimeValidationSmoke.RunFallbackAsync(directory, args[runtime + 1], args[scenario + 1], timeout.Token);
+    }
+    else if (args.Contains("--cuda-runtime-validation-smoke", StringComparer.Ordinal))
     { await CudaRuntimeValidationSmoke.RunAsync(directory, args[runtime + 1], timeout.Token); }
-    else { await CudaModelSmoke.RunAsync(directory, args[runtime + 1], timeout.Token); }
+    else
+    {
+        int profile = Array.IndexOf(args, "--gpu-layers"); int layers = -1;
+        if (profile >= 0 && (profile + 1 >= args.Length || !int.TryParse(args[profile + 1], out layers) || layers is not (-1 or 16 or 99)))
+        { throw new ArgumentException("Select automatic (-1), reviewed partial (16) or full (99) CUDA diagnostic layers."); }
+        await CudaModelSmoke.RunAsync(directory, args[runtime + 1], timeout.Token, layers);
+    }
     return 0;
 }
 if (args.Contains("--hardware-smoke", StringComparer.Ordinal))

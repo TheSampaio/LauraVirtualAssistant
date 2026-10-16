@@ -9,6 +9,14 @@ public interface ILocalInferenceEngine : IConversationEngine
     string Status { get; }
     /// <summary>Gets the current loaded model, or null.</summary>
     string? LoadedModel { get; }
+    /// <summary>Gets the actually loaded backend, or unloaded when no weights are resident.</summary>
+    string Backend => "unloaded";
+    /// <summary>Gets a closed backend admission or fallback status for native presentation.</summary>
+    string BackendStatus => "none";
+    /// <summary>Gets the actual native offloaded layer count for the resident model.</summary>
+    int OffloadedLayers => 0;
+    /// <summary>Gets measured free device memory before the current weight load, or null when unavailable.</summary>
+    long? FreeGpuMemoryBeforeLoad => null;
     /// <summary>Notifies subscribers of streamed response text.</summary>
     event EventHandler<string>? TokenReceived;
     /// <summary>Reports native weight-loading fraction when supported by the backend.</summary>

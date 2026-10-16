@@ -5,7 +5,7 @@ namespace Laura.Core.Models;
 /// <param name="TotalRam">Total physical RAM in bytes.</param>
 /// <param name="AvailableRam">Currently available physical RAM in bytes.</param>
 /// <param name="FreeDisk">Available bytes on model storage volume.</param>
-/// <param name="Backend">Packaged, active inference backend.</param>
+/// <param name="Backend">Observed native CPU baseline; the resident inference engine reports its actual loaded backend separately.</param>
 public sealed record HardwareProfile(int Processors, long TotalRam, long AvailableRam, long FreeDisk, string Backend)
 {
     /// <summary>Gets the active physical core count across Windows processor groups, or null when unavailable.</summary>

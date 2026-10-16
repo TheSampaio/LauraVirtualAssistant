@@ -11,12 +11,15 @@ public sealed class LocalModelSettingsView : ContentView
     private readonly ILocalInferenceEngine _inference;
     private readonly IUiLocalizer _ui;
     private readonly Picker _model;
+    private readonly Picker _backend;
+    private static readonly int[] GpuProfiles = [-1, 0, 16, 99];
     private readonly ModelArtifact[] _catalogue;
     private readonly Label _state = Theme.Label("", 12, Theme.Muted);
     private readonly Label _hardware = Theme.Label("", 12, Theme.Muted);
     private readonly IModelHardwareProbe _hardwareProbe;
     private HardwareProfile? _profile;
     private CancellationTokenSource? _hardwareOperation;
+    private Task? _hardwareTask;
     private CancellationTokenSource? _operation;
 
     /// <summary>Creates isolated model actions. Args: models: Reviewed downloads; inference: Native lifecycle; settings: Current selection; ui: Central resources.</summary>
@@ -24,8 +27,11 @@ public sealed class LocalModelSettingsView : ContentView
     {
         _models = models; _inference = inference; _ui = ui; _hardwareProbe = hardware; _catalogue = models.Catalog.Where(model => !model.IsSpeechModel).ToArray();
         _model = Theme.Picker(_catalogue.Select(model => model.Name), _catalogue.First(model => model.Id == settings.Current.GenerativeAi.LocalModel).Name);
+        _backend = Theme.Picker(new[] { T("backendAuto"), T("backendCpu"), T("backendPartial"), T("backendFull") }, "");
+        _backend.SelectedIndex = Math.Max(0, Array.IndexOf(GpuProfiles, settings.Current.GenerativeAi.LocalGpuLayers));
         _model.SelectedIndexChanged += (_, _) => Refresh();
-        Content = Theme.Stack(Theme.Label(T("localTitle"), 22), _model, Theme.Label(T("localHelp"), 12, Theme.Muted), _state,
+        Content = Theme.Stack(Theme.Label(T("localTitle"), 22), _model, Theme.Label(T("localHelp"), 12, Theme.Muted),
+            Theme.Label(T("backendSelection"), 14), _backend, Theme.Label(T("backendHelp"), 12, Theme.Muted), _state,
             Theme.ActionButton(T("install"), "upload", InstallAsync), Theme.ActionButton(T("load"), "play", () => RunAsync(token => _inference.LoadAsync(ModelId, token))),
             Theme.ActionButton(T("installSpeech"), "mic", () => RunAsync(token => _models.InstallAsync(SupportedModels.Speech, null, token))),
             Theme.ActionButton(T("unload"), "square", () => RunAsync(_inference.UnloadAsync)),
@@ -39,8 +45,10 @@ public sealed class LocalModelSettingsView : ContentView
 
     /// <summary>Gets the selected reviewed model ID; the existing settings Save action persists it.</summary>
     public string ModelId => _catalogue[Math.Max(0, _model.SelectedIndex)].Id;
+    /// <summary>Gets the explicit native backend draft; Save persists the selected reviewed profile.</summary>
+    public int GpuLayersPreference => GpuProfiles[Math.Max(0, _backend.SelectedIndex)];
     /// <summary>Restores the saved selection when settings reopen.</summary>
-    public void Reload(string modelId) { _model.SelectedIndex = Array.FindIndex(_catalogue, model => model.Id == modelId); Refresh(); }
+    public void Reload(string modelId, int gpuLayers) { _model.SelectedIndex = Array.FindIndex(_catalogue, model => model.Id == modelId); _backend.SelectedIndex = Math.Max(0, Array.IndexOf(GpuProfiles, gpuLayers)); Refresh(); }
 
     /// <summary>Downloads only the selected pinned artifact and preserves the partial file when cancelled.</summary>
     private Task InstallAsync() => RunAsync(token => _models.InstallAsync(_catalogue[Math.Max(0, _model.SelectedIndex)], new Progress<ModelDownloadProgress>(progress =>
@@ -62,12 +70,21 @@ public sealed class LocalModelSettingsView : ContentView
     private void Refresh()
     {
         _state.Text = (_models.GetInstalledModels().Contains(ModelId, StringComparer.Ordinal) ? T("installed") : T("missing"))
-            + " · " + T("state." + _inference.Status) + " · " + T(File.Exists(_models.GetModelPath(SupportedModels.Speech.Id)) ? "speechInstalled" : "speechMissing");
+            + " · " + T("state." + _inference.Status) + " · " + T(File.Exists(_models.GetModelPath(SupportedModels.Speech.Id)) ? "speechInstalled" : "speechMissing")
+            + "\n" + FormatHardware("backendActual", T("backend." + _inference.Backend), _inference.OffloadedLayers)
+            + (_inference.Backend == "unloaded" ? "" : "\n" + T("backendStatus." + _inference.BackendStatus));
         RefreshHardwareSummary();
     }
 
     /// <summary>Observes hardware asynchronously and discards results after navigation or a newer refresh.</summary>
-    private async Task RefreshHardwareAsync()
+    private Task RefreshHardwareAsync()
+    {
+        if (_hardwareTask is { IsCompleted: false } && _hardwareOperation?.IsCancellationRequested == false) { return _hardwareTask; }
+        return _hardwareTask = ObserveHardwareAsync();
+    }
+
+    /// <summary>Runs the shared observation once so page loading and manual refresh cannot cancel one another.</summary>
+    private async Task ObserveHardwareAsync()
     {
         _hardwareOperation?.Cancel(); using var operation = new CancellationTokenSource(); _hardwareOperation = operation;
         _hardware.Text = T("checkingHardware");
@@ -124,13 +141,18 @@ public sealed class LocalModelSettingsView : ContentView
         if (profile.Processors <= 0 || profile.TotalRam <= 0 || _hardware.Text.Contains("ui.models.", StringComparison.Ordinal))
         { throw new InvalidOperationException("Hardware summary contains unavailable measurements or untranslated labels."); }
         int original = _model.SelectedIndex; long originalSize = _catalogue[Math.Max(0, original)].Size;
+        int originalBackend = _backend.SelectedIndex;
         try
         {
             await SelectSmallerModelAsync().ConfigureAwait(true);
+            _backend.SelectedIndex = 1;
+            if (GpuLayersPreference != 0) { throw new InvalidOperationException("Explicit CPU selection was not retained."); }
+            _backend.SelectedIndex = 2;
+            if (GpuLayersPreference != 16) { throw new InvalidOperationException("Reviewed partial offload selection was not retained."); }
             if (_catalogue.Any(model => model.Size < originalSize) && _catalogue[_model.SelectedIndex].Size >= originalSize)
             { throw new InvalidOperationException("The explicit smaller-model action did not select a smaller reviewed artifact."); }
         }
-        finally { _model.SelectedIndex = original; }
+        finally { _model.SelectedIndex = original; _backend.SelectedIndex = originalBackend; }
         return profile;
     }
     /// <summary>Dispatches native loading progress to the control's UI thread.</summary>

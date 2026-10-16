@@ -30,6 +30,7 @@ public sealed class LlamaLocalInferenceEngine : ILocalInferenceEngine, IAsyncDis
     private bool _disposed;
     private string _status = "unloaded";
     private string? _loadedModel;
+    private int _loadedGpuLayers, _loadedPreference;
 
     /// <summary>Initializes native library selection without loading weights or starting any process/server.</summary>
     public LlamaLocalInferenceEngine(ILocalModelManager models, ISettingsService settings, IConversationMemory? memory = null, BrainContextBuilder? context = null, WindowsInferenceBackend? backend = null)
@@ -49,6 +50,14 @@ public sealed class LlamaLocalInferenceEngine : ILocalInferenceEngine, IAsyncDis
     public string Status => Volatile.Read(ref _status);
     /// <inheritdoc />
     public string? LoadedModel => Volatile.Read(ref _loadedModel);
+    /// <inheritdoc />
+    public string Backend => _loadedModel is null ? "unloaded" : _loadedGpuLayers > 0 && OffloadedLayers > 0 ? "cuda12" : "cpu";
+    /// <inheritdoc />
+    public string BackendStatus { get; private set; } = "none";
+    /// <inheritdoc />
+    public int OffloadedLayers => _loadedModel is null ? 0 : _backend?.OffloadedLayers ?? 0;
+    /// <inheritdoc />
+    public long? FreeGpuMemoryBeforeLoad { get; private set; }
     /// <summary>Gets the last raw decoded output character count without exposing hidden or visible model text.</summary>
     public long LastDecodedCharacters { get; private set; }
     /// <summary>Gets measured native sampler counters for the last admitted request, without output bodies or token identities.</summary>
@@ -80,7 +89,9 @@ public sealed class LlamaLocalInferenceEngine : ILocalInferenceEngine, IAsyncDis
     private async Task LoadCoreAsync(string id, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_loadedModel == id && _weights is not null) { _parameters = CreateParameters(_models.GetModelPath(id)); return; }
+        int preference = _settings.Current.GenerativeAi.LocalGpuLayers;
+        if (_loadedModel == id && _weights is not null && _loadedPreference == preference)
+        { _parameters = CreateParameters(_models.GetModelPath(id), _loadedGpuLayers); return; }
         ModelArtifact artifact = _models.Catalog.SingleOrDefault(model => model.Id == id && !model.IsSpeechModel)
             ?? throw new ArgumentException("The selected local model is not reviewed.", nameof(id));
         string path = _models.GetModelPath(id);
@@ -89,18 +100,33 @@ public sealed class LlamaLocalInferenceEngine : ILocalInferenceEngine, IAsyncDis
         await using var image = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true);
         if (image.Length != artifact.Size || !Convert.ToHexString(await SHA256.HashDataAsync(image, cancellationToken).ConfigureAwait(false)).Equals(artifact.Sha256, StringComparison.OrdinalIgnoreCase))
         { _status = "integrity_failed"; throw new IOException("Local model integrity verification failed."); }
+        // Release the previous model after verifying the replacement so admission does not count both models as resident.
+        _weights?.Dispose(); _weights = null; _loadedModel = null; _loadedGpuLayers = 0;
         HardwareProfile hardware = Laura.Platform.Windows.System.WindowsModelHardware.Read(Path.GetDirectoryName(path)!);
         // This is a conservative admission margin, not a benchmarked minimum hardware specification.
         if (!hardware.CanLoad(artifact)) { _status = "memory_pressure"; throw new InvalidOperationException("Insufficient currently available RAM for conservative model loading."); }
-        _weights?.Dispose(); _weights = null; _loadedModel = null;
-        _backend?.Configure(); _parameters = CreateParameters(path);
+        _backend?.Configure(preference != 0);
+        FreeGpuMemoryBeforeLoad = preference == 0 ? null : _backend?.ReadDeviceMemory()?.Free;
+        int layers = ModelOffloadPolicy.SelectLayers(artifact, preference, FreeGpuMemoryBeforeLoad, _backend?.SupportsGpu == true);
+        BackendStatus = preference == 0 ? "cpu_selected" : _backend is null ? "runtime_missing"
+            : _backend.FallbackReason != "none" ? _backend.FallbackReason
+            : layers > 0 ? "ready" : artifact.Id != SupportedModels.Intelligence.Id ? "model_unverified"
+            : FreeGpuMemoryBeforeLoad is null ? "vram_unknown" : "vram_insufficient";
+        _parameters = CreateParameters(path, layers);
         _status = "loading"; long began = Stopwatch.GetTimestamp();
         try
         {
             _backend?.ResetOffloadEvidence();
-            _weights = await LLamaWeights.LoadFromFileAsync(_parameters, cancellationToken, new Progress<float>(value => LoadingProgress?.Invoke(this, value))).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested(); _loadedModel = id; _status = "ready";
-            LauraDiagnostics.Record("local.load", Stopwatch.GetElapsedTime(began).TotalMilliseconds, outcome: "cpu_ready");
+            try { _weights = await LLamaWeights.LoadFromFileAsync(_parameters, cancellationToken, new Progress<float>(value => LoadingProgress?.Invoke(this, value))).ConfigureAwait(false); }
+            catch (Exception error) when (layers > 0 && !cancellationToken.IsCancellationRequested && error is LLama.Exceptions.RuntimeError or InvalidOperationException)
+            {
+                _weights?.Dispose(); _weights = null; layers = 0; BackendStatus = "cpu_after_gpu_failure";
+                _backend?.ResetOffloadEvidence(); _parameters = CreateParameters(path, 0);
+                _weights = await LLamaWeights.LoadFromFileAsync(_parameters, cancellationToken).ConfigureAwait(false);
+            }
+            cancellationToken.ThrowIfCancellationRequested(); _loadedModel = id; _loadedGpuLayers = layers; _loadedPreference = preference; _status = "ready";
+            if (layers > 0 && OffloadedLayers == 0) { _loadedGpuLayers = 0; BackendStatus = "driver_unavailable"; }
+            LauraDiagnostics.Record("local.load", Stopwatch.GetElapsedTime(began).TotalMilliseconds, outcome: Backend == "cuda12" ? "cuda_ready" : "cpu_ready");
         }
         catch
         {
@@ -187,8 +213,9 @@ public sealed class LlamaLocalInferenceEngine : ILocalInferenceEngine, IAsyncDis
     }, cancellationToken);
 
     /// <summary>Creates conservative context parameters independently of already loaded weight resources.</summary>
-    private ModelParams CreateParameters(string path) => new(path) { ContextSize = (uint)_settings.Current.GenerativeAi.LocalContextTokens,
-        GpuLayerCount = _backend?.GpuLayers ?? 0, Threads = Math.Clamp(Environment.ProcessorCount / 2, 1, 8), BatchSize = 128 };
+    private ModelParams CreateParameters(string path, int gpuLayers) => new(path) { ContextSize = (uint)_settings.Current.GenerativeAi.LocalContextTokens,
+        GpuLayerCount = gpuLayers, MainGpu = 0, SplitMode = LLama.Native.GPUSplitMode.None, NoKqvOffload = gpuLayers == 0, OpOffload = gpuLayers > 0,
+        Threads = Math.Clamp(Environment.ProcessorCount / 2, 1, 8), BatchSize = 128 };
 
     /// <inheritdoc />
     public void Cancel() { lock (_gate) { _generation?.Cancel(); } }
@@ -196,7 +223,7 @@ public sealed class LlamaLocalInferenceEngine : ILocalInferenceEngine, IAsyncDis
     public async Task UnloadAsync(CancellationToken cancellationToken)
     {
         Cancel(); await _native.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try { _weights?.Dispose(); _weights = null; _parameters = null; _loadedModel = null; _status = "unloaded"; }
+        try { _weights?.Dispose(); _weights = null; _parameters = null; _loadedModel = null; _loadedGpuLayers = 0; _status = "unloaded"; }
         finally { _native.Release(); }
     }
     /// <inheritdoc />

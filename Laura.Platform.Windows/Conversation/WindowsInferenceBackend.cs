@@ -11,6 +11,7 @@ public sealed class WindowsInferenceBackend(bool cuda, string runtimeDirectory, 
     private static readonly object ConfigurationGate = new();
     private static WindowsInferenceBackend? _configured;
     private readonly List<nint> _runtimeHandles = [];
+    private nint _cudaRuntime;
     private int _offloadedLayers;
     /// <summary>Gets the requested layer offload, after native selection has been configured.</summary>
     public int GpuLayers { get; private set; }
@@ -18,26 +19,40 @@ public sealed class WindowsInferenceBackend(bool cuda, string runtimeDirectory, 
     public int OffloadedLayers => Volatile.Read(ref _offloadedLayers);
     /// <summary>Gets whether the loaded runtime actually supports GPU offload.</summary>
     public bool SupportsGpu { get; private set; }
+    /// <summary>Gets a closed reason when the native loader used CPU instead of the requested acceleration.</summary>
+    public string FallbackReason { get; private set; } = "none";
     /// <summary>Clears evidence before a new native weight load so an earlier model cannot prove a later offload.</summary>
     public void ResetOffloadEvidence() => Volatile.Write(ref _offloadedLayers, 0);
 
     /// <summary>Configures the native loader once, preloading only verified app-local runtime DLLs when CUDA is requested.</summary>
-    public void Configure()
+    public void Configure(bool useGpu = true)
     {
         lock (ConfigurationGate)
         {
             if (_configured is not null)
             {
                 if (!ReferenceEquals(_configured, this)) { throw new InvalidOperationException("The process-wide inference backend is already configured."); }
+                if (cuda && useGpu && !SupportsGpu && FallbackReason == "cpu_selected") { FallbackReason = "restart_required"; }
                 return;
             }
             if (NativeLibraryConfig.LLama.LibraryHasLoaded) { throw new InvalidOperationException("Native inference loaded before backend selection."); }
-            if (cuda) { LoadRedistributables(); }
+            bool tryCuda = cuda && useGpu;
+            if (!useGpu) { FallbackReason = "cpu_selected"; }
+            if (tryCuda)
+            {
+                try { LoadRedistributables(); }
+                catch (Exception error) when (allowCpuFallback && error is FileNotFoundException or DirectoryNotFoundException)
+                { tryCuda = false; FallbackReason = "runtime_missing"; }
+                catch (IOException) when (allowCpuFallback) { tryCuda = false; FallbackReason = "runtime_invalid"; }
+                catch (Exception error) when (allowCpuFallback && error is DllNotFoundException or BadImageFormatException)
+                { tryCuda = false; FallbackReason = "runtime_unavailable"; }
+            }
             NativeLibraryConfig.All.WithLogCallback((_, message) => ObserveOffload(message));
-            NativeLibraryConfig.All.WithCuda(cuda).WithVulkan(false).WithSelectingPolicy(new PackagedNativeLibraryPolicy(cuda, allowCpuFallback));
+            NativeLibraryConfig.All.WithCuda(tryCuda).WithVulkan(false).WithSelectingPolicy(new PackagedNativeLibraryPolicy(tryCuda, allowCpuFallback));
             SupportsGpu = NativeApi.llama_supports_gpu_offload();
-            if (cuda && !SupportsGpu && !allowCpuFallback) { throw new InvalidOperationException("The loaded native runtime did not support required GPU offload."); }
-            GpuLayers = cuda && SupportsGpu ? 99 : 0;
+            if (cuda && useGpu && !SupportsGpu && !allowCpuFallback) { throw new InvalidOperationException("The loaded native runtime did not support required GPU offload."); }
+            GpuLayers = tryCuda && SupportsGpu ? 99 : 0;
+            if (tryCuda && !SupportsGpu) { FallbackReason = "driver_unavailable"; }
             _configured = this;
         }
     }
@@ -51,8 +66,20 @@ public sealed class WindowsInferenceBackend(bool cuda, string runtimeDirectory, 
             using var image = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             if (image.Length != asset.Size || !Convert.ToHexString(SHA256.HashData(image)).Equals(asset.Sha256, StringComparison.OrdinalIgnoreCase))
             { throw new IOException("The app-local CUDA runtime failed integrity verification."); }
-            _runtimeHandles.Add(NativeLibrary.Load(path));
+            nint handle = NativeLibrary.Load(path); _runtimeHandles.Add(handle);
+            if (asset.Name == "cudart64_12.dll") { _cudaRuntime = handle; }
         }
+    }
+
+    /// <summary>Queries the selected CUDA device on the caller's worker; unknown or failed driver observations remain null.</summary>
+    public unsafe (long Free, long Total)? ReadDeviceMemory()
+    {
+        if (!SupportsGpu || GpuLayers == 0 || _cudaRuntime == 0) { return null; }
+        var select = (delegate* unmanaged<int, int>)NativeLibrary.GetExport(_cudaRuntime, "cudaSetDevice");
+        var read = (delegate* unmanaged<nuint*, nuint*, int>)NativeLibrary.GetExport(_cudaRuntime, "cudaMemGetInfo");
+        nuint free = 0, total = 0;
+        if (select(0) != 0 || read(&free, &total) != 0 || free > total || total > long.MaxValue) { return null; }
+        return ((long)free, (long)total);
     }
 
     /// <summary>Accepts only the exact bounded numeric offload diagnostic and discards every other native message.</summary>

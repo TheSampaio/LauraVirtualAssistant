@@ -82,6 +82,7 @@ public static class ServiceConfiguration
         services.AddSingleton<CognitiveTasks>();
         services.AddSingleton<ILocalModelManager>(provider => new LocalModelManager(Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Models"),
             new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, SupportedModels.All));
+        services.AddSingleton(_ => new WindowsInferenceBackend(true, Path.Combine(AppContext.BaseDirectory, "CudaRuntime")));
         services.AddSingleton<LlamaLocalInferenceEngine>();
         services.AddSingleton<ILocalInferenceEngine>(provider => provider.GetRequiredService<LlamaLocalInferenceEngine>());
         services.AddSingleton<IProviderModelCatalog>(provider => Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)

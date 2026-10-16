@@ -8,7 +8,7 @@ namespace Laura.Platform.Windows.System;
 /// <summary>Reads current CPU/RAM/disk capacity without claiming an untested GPU backend or model throughput.</summary>
 public static partial class WindowsModelHardware
 {
-    /// <summary>Samples available memory and the model storage volume. Args: storageDirectory: Model storage. Returns: Actual CPU/RAM/disk snapshot; GPU acceleration is not packaged by this adapter.</summary>
+    /// <summary>Samples available memory and the model storage volume. Args: storageDirectory: Model storage. Returns: Actual host capacity; detected adapters do not imply active acceleration.</summary>
     public static HardwareProfile Read(string storageDirectory)
     {
         var memory = new MemoryStatus { Length = (uint)Marshal.SizeOf<MemoryStatus>() };
@@ -16,7 +16,7 @@ public static partial class WindowsModelHardware
         IReadOnlyList<WindowsGpuAdapter>? adapters = WindowsGpuAdapter.DiscoverAll();
         return new(Environment.ProcessorCount, (long)memory.TotalPhysical, (long)memory.AvailablePhysical,
             new DriveInfo(Path.GetPathRoot(Path.GetFullPath(storageDirectory))!).AvailableFreeSpace,
-            RuntimeInformation.ProcessArchitecture + " CPU · " + (Avx2.IsSupported ? "AVX2" : Avx.IsSupported ? "AVX" : "baseline"))
+            RuntimeInformation.ProcessArchitecture + " CPU baseline · " + (Avx2.IsSupported ? "AVX2" : Avx.IsSupported ? "AVX" : "baseline"))
         {
             PhysicalCores = ReadPhysicalCores(), Architecture = RuntimeInformation.ProcessArchitecture.ToString(),
             Instructions = ReadInstructions(), GpuDiscoveryAvailable = adapters is not null,

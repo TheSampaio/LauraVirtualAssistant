@@ -39,5 +39,13 @@
   <ItemGroup>
     <ProjectReference Include="..\Laura.Core\Laura.Core.csproj" />
   </ItemGroup>
+  <!-- Optional app-local redistributables are prepared explicitly; a source checkout still builds and runs on CPU without them. -->
+  <ItemGroup Condition="Exists('../_Output/Dependencies/Cuda12/runtime-inventory.json')">
+    <Content Include="../_Output/Dependencies/Cuda12/cudart64_12.dll;../_Output/Dependencies/Cuda12/cublas64_12.dll;../_Output/Dependencies/Cuda12/cublasLt64_12.dll;../_Output/Dependencies/Cuda12/cuda_cudart-LICENSE.txt;../_Output/Dependencies/Cuda12/libcublas-LICENSE.txt;../_Output/Dependencies/Cuda12/runtime-inventory.json">
+      <Link>CudaRuntime/%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
 
 </Project>

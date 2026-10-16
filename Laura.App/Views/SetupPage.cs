@@ -144,7 +144,7 @@ public sealed class SetupPage : ContentPage
         var current = _settings.Current;
         _openAiKey.Text = ""; _openAiModel.Text = current.GenerativeAi.OpenAiModel;
         _chatProvider.SelectedIndex = current.GenerativeAi.Provider switch { "gemini" => 0, "openai" => 1, "local" => 2, _ => 3 };
-        _localModels.Reload(current.GenerativeAi.LocalModel); _cloudFallback.IsToggled = current.GenerativeAi.AllowCloudFallback;
+        _localModels.Reload(current.GenerativeAi.LocalModel, current.GenerativeAi.LocalGpuLayers); _cloudFallback.IsToggled = current.GenerativeAi.AllowCloudFallback;
         _openAiKey.Placeholder = string.IsNullOrWhiteSpace(_openAiKeys.Read()) ? "OpenAI API key" : "••••••••••••••••";
         _key.Text = ""; _key.IsPassword = true; _revealKey.Source = Theme.IconSource("eye");
         Theme.DescribeAction(_revealKey, _ui.Get("ui.settings.revealKey")); _result.Text = "";
@@ -517,7 +517,7 @@ public sealed class SetupPage : ContentPage
             GreetOnStartup = _greeting.IsToggled, AnnounceHourly = _hourly.IsToggled, StartWithWindows = _autoStart.IsToggled,
             Permissions = _permissions.Options, Screenshots = _screenshots.Options,
             Voice = _settings.Current.Voice with { VoiceName = null, Volume = (int)_volume.Value },
-            GenerativeAi = _settings.Current.GenerativeAi with { Enabled = configured, Provider = selectedProvider, AllowCloudFallback = _cloudFallback.IsToggled, LocalModel = _localModels.ModelId, Model = _model.Text ?? "", OpenAiModel = gptModel, Persona = (_persona.Text ?? "").ReplaceLineEndings(" "), LiveVoice = _voice.SelectedItem as string ?? "Aoede", ContinuousListening = true, SilenceDurationMs = (int)_silence.Value }
+            GenerativeAi = _settings.Current.GenerativeAi with { Enabled = configured, Provider = selectedProvider, AllowCloudFallback = _cloudFallback.IsToggled, LocalModel = _localModels.ModelId, LocalGpuLayers = _localModels.GpuLayersPreference, Model = _model.Text ?? "", OpenAiModel = gptModel, Persona = (_persona.Text ?? "").ReplaceLineEndings(" "), LiveVoice = _voice.SelectedItem as string ?? "Aoede", ContinuousListening = true, SilenceDurationMs = (int)_silence.Value }
         };
         await _router.ResetSessionAsync(async () =>
         {

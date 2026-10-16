@@ -38,6 +38,8 @@ public sealed record GenerativeAiOptions
     public string LocalModel { get; init; } = "qwen3.5-4b-q4_k_m";
     /// <summary>Gets the conservative native context allocation, bounded independently of the model's advertised maximum.</summary>
     public int LocalContextTokens { get; init; } = 4096;
+    /// <summary>Gets reviewed offload selection: -1 automatic, 0 CPU, 16 partial CUDA, or 99 full CUDA when admitted.</summary>
+    public int LocalGpuLayers { get; init; } = -1;
 
     /// <summary>Gets the native Gemini Live voice, shared with Mark-LV.</summary>
     public string LiveVoice { get; init; } = "Aoede";
@@ -78,6 +80,7 @@ public sealed record GenerativeAiOptions
         Provider = Provider?.Trim().ToLowerInvariant() is "gemini" or "openai" or "local" or "auto" ? Provider.Trim().ToLowerInvariant() : Default.Provider,
         LocalModel = Models.SupportedModels.All.Any(model => !model.IsSpeechModel && model.Id == LocalModel) ? LocalModel : Default.LocalModel,
         LocalContextTokens = Math.Clamp(LocalContextTokens, 1024, 8192),
+        LocalGpuLayers = LocalGpuLayers is -1 or 0 or 16 or 99 ? LocalGpuLayers : -1,
         OpenAiModel = OpenAiModel?.Trim() is { } gpt && Models.ProviderModelCompatibility.ValidIdentifier(gpt) ? gpt : Default.OpenAiModel,
         ContinuousListening = true,
         SilenceDurationMs = Math.Clamp(SilenceDurationMs, 300, 2000),

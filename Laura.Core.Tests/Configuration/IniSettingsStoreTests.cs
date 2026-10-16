@@ -12,7 +12,7 @@ public sealed class IniSettingsStoreTests : IDisposable
     public async Task LocalModelContextAndCloudConsentRoundTripWithoutChangingExplicitProviderSelection()
     {
         var options = new GenerativeAiOptions { Provider = "openai", OpenAiModel = "o3", AllowCloudFallback = true,
-            LocalModel = "qwen2.5-0.5b-instruct-q4_k_m", LocalContextTokens = 2048 }.Sanitized();
+            LocalModel = "qwen2.5-0.5b-instruct-q4_k_m", LocalContextTokens = 2048, LocalGpuLayers = 16 }.Sanitized();
         var store = CreateStore(); await store.SaveAsync(LauraSettings.Default with { GenerativeAi = options });
         Assert.Equal(options, (await store.LoadAsync()).GenerativeAi);
     }

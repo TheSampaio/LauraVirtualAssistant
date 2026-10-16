@@ -179,6 +179,7 @@ public sealed class IniSettingsStore : ISettingsStore
                 OpenAiModel = document.GetString(GenerativeAiSection, "OpenAiModel", defaults.GenerativeAi.OpenAiModel),
                 LocalModel = document.GetString(GenerativeAiSection, "LocalModel", defaults.GenerativeAi.LocalModel),
                 LocalContextTokens = document.GetInt32(GenerativeAiSection, "LocalContextTokens", defaults.GenerativeAi.LocalContextTokens),
+                LocalGpuLayers = document.GetInt32(GenerativeAiSection, "LocalGpuLayers", defaults.GenerativeAi.LocalGpuLayers),
                 Persona = document.GetString(GenerativeAiSection, "Persona", defaults.GenerativeAi.Persona),
                 LiveVoice = document.GetString(GenerativeAiSection, "LiveVoice", defaults.GenerativeAi.LiveVoice),
                 ContinuousListening = document.GetBoolean(GenerativeAiSection, "ContinuousListening", false),
@@ -251,6 +252,7 @@ public sealed class IniSettingsStore : ISettingsStore
         document.Set(GenerativeAiSection, "OpenAiModel", settings.GenerativeAi.OpenAiModel);
         document.Set(GenerativeAiSection, "LocalModel", settings.GenerativeAi.LocalModel);
         document.SetNumber(GenerativeAiSection, "LocalContextTokens", settings.GenerativeAi.LocalContextTokens);
+        document.SetNumber(GenerativeAiSection, "LocalGpuLayers", settings.GenerativeAi.LocalGpuLayers);
         document.Set(GenerativeAiSection, "Persona", settings.GenerativeAi.Persona);
         document.Set(GenerativeAiSection, "LiveVoice", settings.GenerativeAi.LiveVoice);
         document.SetBoolean(GenerativeAiSection, "ContinuousListening", settings.GenerativeAi.ContinuousListening);

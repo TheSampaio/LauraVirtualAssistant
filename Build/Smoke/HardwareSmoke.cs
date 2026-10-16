@@ -16,7 +16,7 @@ internal static class HardwareSmoke
         if (snapshot.Processors <= 0 || snapshot.TotalRam <= 0 || snapshot.AvailableRam <= 0 || snapshot.AvailableRam > snapshot.TotalRam)
         { throw new InvalidOperationException("Native hardware capacity is invalid."); }
         await File.WriteAllTextAsync(Path.Combine(directory, "hardware.json"), JsonSerializer.Serialize(new
-        { hardware = snapshot, backend = "cpu_only", gpuAccelerationVerified = false, minimumRequirementsMeasured = false,
+        { hardware = snapshot, backend = "cpu_baseline_observation", gpuAccelerationVerified = false, minimumRequirementsMeasured = false,
             qwenAdmissionBytes = HardwareProfile.RequiredAvailableRam(SupportedModels.Intelligence), qwenCurrentRamAdmission = snapshot.CanLoad(SupportedModels.Intelligence) },
             new JsonSerializerOptions { WriteIndented = true }), token);
         Console.WriteLine("Native CPU topology, runtime instructions, RAM/disk and DXGI adapter snapshot recorded; unknown GPU counters stay null. No GPU inference claim, weights, microphone or cloud request.");
