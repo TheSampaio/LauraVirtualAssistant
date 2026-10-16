@@ -34,6 +34,7 @@ public sealed class CognitiveTaskRun
     private bool _sourceAssessed;
     private bool _relatedRecalled;
     private readonly HashSet<Guid> _studies = [];
+    private readonly HashSet<Guid> _commandJobs = [];
     private Guid _pendingStudy;
     private string _studyCursor = "";
     private int _studyRemaining;
@@ -56,6 +57,7 @@ public sealed class CognitiveTaskRun
         _blocker = restored.Blocker;
         _steps.AddRange(restored.Steps); _receipts.AddRange(restored.Operations);
         foreach (Guid study in restored.RepositoryStudies ?? []) { _studies.Add(study); }
+        foreach (Guid job in restored.CommandJobs ?? []) { _commandJobs.Add(job); }
         if (_studies.Count > 0) { _pendingStudy = _studies.Last(); _studyRemaining = -1; }
         foreach (var receipt in restored.Operations)
         {
@@ -67,7 +69,7 @@ public sealed class CognitiveTaskRun
 
     /// <summary>Snapshots durable metadata without raw arguments, outputs or execution grants.</summary>
     public CognitiveTaskCheckpoint Checkpoint(string? state = null) => new(_id, objective, _created, DateTimeOffset.UtcNow,
-        state ?? _state, _calls, maximumCalls, (long)Elapsed.TotalMilliseconds, (long)_duration.TotalMilliseconds, _steps.ToArray(), _receipts.ToArray(), _studies.ToArray(), _blocker);
+        state ?? _state, _calls, maximumCalls, (long)Elapsed.TotalMilliseconds, (long)_duration.TotalMilliseconds, _steps.ToArray(), _receipts.ToArray(), _studies.ToArray(), _blocker, _commandJobs.ToArray());
     /// <summary>Gets cumulative active execution time; downtime never consumes the remaining task budget.</summary>
     private TimeSpan Elapsed => TimeSpan.FromMilliseconds(_previousElapsed) + _elapsed.Elapsed;
 
@@ -75,7 +77,7 @@ public sealed class CognitiveTaskRun
     public object Snapshot() => new { id = _id, objective, state = _state, calls = _calls, maximumCalls, elapsedMilliseconds = Elapsed.TotalMilliseconds,
         maximumMilliseconds = _duration.TotalMilliseconds, steps = _steps.ToArray(), observations = _observations.ToArray(),
         sourceAssessmentPending = _sources.Count > 0 && !_sourceAssessed, sourceEvidence = _sources.ToArray(),
-        acquiredSourceCount = _sources.Count, readSourceCount = _readSources.Count, readSourceIds = _readSources.ToArray(), goalVerified = false };
+        acquiredSourceCount = _sources.Count, readSourceCount = _readSources.Count, readSourceIds = _readSources.ToArray(), commandJobs = _commandJobs.ToArray(), goalVerified = false };
 
     /// <summary>Requests only evidence-based remaining operations; native denial, cancellation and budgets stop continuation.</summary>
     public string? PendingContinuation()
@@ -133,6 +135,8 @@ public sealed class CognitiveTaskRun
         Func<CancellationToken, Task<AssistantToolResult>> execute, CancellationToken cancellationToken, string initiator = "model")
     {
         if (!registeredTools.Contains(name)) { return new("Unknown registered capability.") { Failed = true, Status = "blocked" }; }
+        if (name == "start_program" && _commandJobs.Count >= 16)
+        { return new("This task reached its retained background-job limit. Inspect existing results before starting a new explicit task.") { Failed = true, Status = "blocked" }; }
         if (name is not ("task_status" or "list_capabilities") && _state == "blocked")
         { return new("The current task is blocked after a denial, cancellation or exhausted budget. Report the recorded blocker; do not use an alternative effect path.") { Failed = true, Status = "blocked" }; }
         if (_calls >= maximumCalls || Elapsed > _duration)
@@ -167,6 +171,7 @@ public sealed class CognitiveTaskRun
         }
         catch (Exception error) when (error is IOException or HttpRequestException or InvalidOperationException or ArgumentException or JsonException)
         { result = new("Adapter failed: " + error.GetType().Name + ". Retained results are partial; no goal completion is verified.") { Failed = true, Status = "failed" }; }
+        if (name == "start_program" && result.CommandJobId is { } jobId && jobId != Guid.Empty) { _commandJobs.Add(jobId); }
         ObserveSourceWorkflow(name, arguments, result); Record(name, result, initiator);
         string status = result.Status == "success" && result.Failed ? "failed" : result.Status;
         if (status is not ("success" or "failed" or "blocked" or "cancelled" or "pending")) { status = "failed"; }
@@ -211,7 +216,7 @@ public sealed class CognitiveTaskRun
     }
     /// <summary>Identifies only known observational capabilities whose repeat does not duplicate an external mutation.</summary>
     private static bool IsReadOnly(string name) => name is "task_status" or "list_capabilities" or "recall_memory" or "list_brain_skills" or "read_brain_passage" or "system_status" or "list_apps"
-        or "repository_study_status" or "start_repository_study" or "continue_repository_study";
+        or "repository_study_status" or "start_repository_study" or "continue_repository_study" or "program_status";
 
     /// <summary>Derives remaining work from confirmed adapter results, not model text or remote instructions.</summary>
     private void ObserveSourceWorkflow(string name, JsonElement arguments, AssistantToolResult result)

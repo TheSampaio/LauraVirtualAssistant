@@ -20,6 +20,8 @@ public static class MauiSmokeRunner
         VerifyReactorTransitions();
         try
         {
+            if (Environment.GetCommandLineArgs().Contains("--command-jobs-smoke", StringComparer.Ordinal))
+            { await CommandJobsSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--local-tools-smoke", StringComparer.Ordinal))
             { await LocalToolsSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--local-backend-smoke", StringComparer.Ordinal))

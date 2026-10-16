@@ -65,6 +65,10 @@ if (args.Contains("--local-model-smoke", StringComparer.Ordinal))
 { await LocalModelSmoke.RunAsync(directory, args.Contains("--download", StringComparer.Ordinal), timeout.Token); return 0; }
 if (args.Contains("--command-smoke", StringComparer.Ordinal))
 { await CommandSmoke.RunAsync(directory, timeout.Token); return 0; }
+if (args.Contains("--command-jobs-runtime-smoke", StringComparer.Ordinal))
+{ await CommandJobsSmoke.RunAsync(directory, timeout.Token); return 0; }
+if (args.Contains("--command-jobs-sdk-smoke", StringComparer.Ordinal))
+{ await CommandJobsSdkSmoke.RunAsync(directory, timeout.Token); return 0; }
 if (args.Contains("--powershell-smoke", StringComparer.Ordinal))
 { await PowerShellSmoke.RunAsync(directory, timeout.Token); return 0; }
 if (args.Contains("--silent-thinking", StringComparer.Ordinal))

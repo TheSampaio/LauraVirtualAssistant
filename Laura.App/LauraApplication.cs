@@ -176,6 +176,7 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         await services.GetRequiredService<GeminiLiveClient>().ReconfigureAsync().ConfigureAwait(true);
         await services.GetRequiredService<HourlyAnnouncer>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<IAssistantEngine>().StopAsync().ConfigureAwait(true);
+        await services.GetRequiredService<Laura.Core.Execution.CommandJobs>().DisposeAsync().ConfigureAwait(true);
         if (_brainStartup is not null) { await _brainStartup.ConfigureAwait(true); }
         await services.GetRequiredService<Laura.Core.Brain.BrainLearning>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<Laura.Core.Brain.BrainMaintenance>().DisposeAsync().ConfigureAwait(true);

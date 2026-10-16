@@ -16,7 +16,7 @@ internal static class MauiToolPermissions
             "authorize_workspace" or "inspect_brain_maintenance" or "study_github_repository" or "start_repository_study" or "continue_repository_study" or "repository_study_status" or "list_capabilities" or "plan_task" or "task_status" or "assess_source_learning" => PermissionOperation.Internal, // specialized adapters own effect approvals
             "list_mcp_servers" or "connect_mcp_server" or "list_mcp_tools" or "call_mcp_tool" or "disconnect_mcp_server" => PermissionOperation.Internal, // the native MCP runtime gates the exact external effect
             // These dispatch through separately guarded adapters or are internal metadata operations.
-            "run_program" or "open_app" or "run_local_command" or "list_apps" or "system_status" or "stop_listening" or "recall_memory" or "read_brain_passage" or "learn_memory" or "reflect_experience" or "study_source" or "list_brain_skills" or "read_brain_skill" or "read_brain_skill_usage" or "propose_brain_skill" => PermissionOperation.Internal,
+            "start_program" or "program_status" or "stop_program" or "run_program" or "open_app" or "run_local_command" or "list_apps" or "system_status" or "stop_listening" or "recall_memory" or "read_brain_passage" or "learn_memory" or "reflect_experience" or "study_source" or "list_brain_skills" or "read_brain_skill" or "read_brain_skill_usage" or "propose_brain_skill" => PermissionOperation.Internal,
             "save_memory" or "forget_memory" or "shutdown_assistant" => PermissionOperation.SystemSettings,
             "reminder" when action == "list" => PermissionOperation.Internal,
             "reminder" when action is "add" or "cancel" => PermissionOperation.SystemSettings,

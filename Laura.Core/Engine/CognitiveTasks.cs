@@ -6,7 +6,7 @@ using Laura.Core.Conversation;
 namespace Laura.Core.Engine;
 
 /// <summary>Coordinates bounded per-task execution and private checkpoints without serializing unrelated resources.</summary>
-public sealed class CognitiveTasks(ICognitiveTaskJournal journal) : IDisposable
+public sealed class CognitiveTasks(ICognitiveTaskJournal journal, Execution.CommandJobs? commandJobs = null) : IDisposable
 {
     private readonly ConcurrentDictionary<Guid, Slot> _slots = new();
     private readonly ConcurrentDictionary<Guid, CognitiveTaskCheckpoint> _snapshots = new();
@@ -20,6 +20,8 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal) : IDisposable
         string name, JsonElement arguments, Func<CognitiveTaskRun, CancellationToken, Task<AssistantToolResult>> execute, CancellationToken cancellationToken, string initiator = "model")
     {
         bool attributed = working.TurnId != Guid.Empty && !string.IsNullOrWhiteSpace(working.UserText);
+        if (!attributed && name == "start_program")
+        { return new("Background commands require an attributed user objective and native task identity.") { Failed = true, Status = "blocked" }; }
         Guid id = attributed ? working.TurnId : Guid.NewGuid();
         if (_deleted.ContainsKey(id)) { return new("The native user removed this task. Its queued operations cannot recreate it.") { Failed = true, Status = "blocked" }; }
         if (!_slots.ContainsKey(id) && _slots.Count >= 200) { return new("Task retention bound reached. Review retained tasks before creating more work.") { Failed = true, Status = "blocked" }; }
@@ -67,7 +69,7 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal) : IDisposable
 
     /// <summary>Cancels the selected task immediately; other tasks and their permissions remain independent.</summary>
     public void Cancel(Guid id)
-    { if (_slots.TryGetValue(id, out var slot)) { slot.Cancellation.Cancel(); } }
+    { commandJobs?.CancelTask(id); if (_slots.TryGetValue(id, out var slot)) { slot.Cancellation.Cancel(); } }
 
     /// <summary>Removes an inactive task after native confirmation; no model declaration exposes this operation.</summary>
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
@@ -76,6 +78,7 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal) : IDisposable
         if (slot is not null && !await slot.Gate.WaitAsync(0, cancellationToken).ConfigureAwait(false)) { throw new InvalidOperationException("Cancel active work before removing its checkpoint."); }
         try
         {
+            commandJobs?.ForgetTask(id);
             await journal.DeleteAsync(id, cancellationToken).ConfigureAwait(false);
             _deleted[id] = 0;
             _slots.TryRemove(id, out _); _snapshots.TryRemove(id, out _); Changed?.Invoke(this, EventArgs.Empty);

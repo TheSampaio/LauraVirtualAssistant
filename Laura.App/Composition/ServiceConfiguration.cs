@@ -212,6 +212,7 @@ public static class ServiceConfiguration
         services.AddSingleton<ISystemController, WindowsSystemController>();
         services.AddSingleton<IProcessLauncher, WindowsProcessLauncher>();
         services.AddSingleton<ICommandExecutor, WindowsCommandExecutor>();
+        services.AddSingleton<Laura.Core.Execution.CommandJobs>();
         services.AddSingleton<IStartupRegistration, RegistryStartupRegistration>();
     }
 

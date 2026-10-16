@@ -11,6 +11,8 @@ public sealed record CommandExecutionRequest(string Executable, IReadOnlyList<st
     public int OutputCharacters { get; init; } = 32_000;
     /// <summary>Gets the native task identity used for diagnostics, never command authorization.</summary>
     public Guid TaskId { get; init; }
+    /// <summary>Gets whether exact approval must describe a bounded background lifetime.</summary>
+    public bool Background { get; init; }
 
     /// <summary>Validates and snapshots mutable argument collections before review. Returns: Frozen bounded request. Raises: ArgumentException for unsafe or excessive parameters.</summary>
     public CommandExecutionRequest Validated()

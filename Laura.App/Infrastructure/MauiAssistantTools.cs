@@ -59,6 +59,9 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         Function("computer_settings", "Windows settings and media controls. Actions: volume_up, volume_down, volume_mute, play_pause, lock, settings, task_manager, show_desktop, minimize, maximize, dark_mode, light_mode, wallpaper, shutdown, restart. Shutdown/restart require native confirmation.", ["action"], ("action", "STRING", "Setting action"), ("value", "INTEGER", "Optional volume steps"), ("path", "STRING", "Existing wallpaper image"), ("window", "STRING", "Target window when needed")),
         Function("file_control", "Operate on real user files. Actions: list, search, read, write, mkdir, copy, move, delete, open, info, undo. Aliases: desktop, downloads, documents, pictures, workspace. Writes and destructive actions require native confirmation; deletions move to reversible Laura trash. Read text/code files to help develop projects; use write to save generated code.", ["action"], ("action", "STRING", "File action"), ("path", "STRING", "File or folder"), ("destination", "STRING", "Copy/move destination"), ("content", "STRING", "Literal file content"), ("query", "STRING", "File name search")),
         Function("run_program", "Run a resolved executable with literal arguments after exact native approval. Supports dotnet, Git and detected pwsh.exe or powershell.exe; use explicit -NoProfile and -NonInteractive, never add ExecutionPolicy Bypass. A working directory is not a sandbox and workspace permission does not grant process execution. Returns separate bounded stdout/stderr, exit code and timeout/cancellation status.", ["executable"], ("executable", "STRING", "Executable name or existing executable path"), ("arguments", "STRING", "JSON array of literal command-line arguments"), ("directory", "STRING", "Working directory"), ("timeout", "INTEGER", "Timeout seconds, up to 1800")),
+        Function("start_program", "Start a bounded background command after exact native approval and return its native job ID only after actual process creation. Use for long builds, tests or servers; use open_app for interactive GUI applications. Literal arguments and PowerShell restrictions match run_program. Task cancellation, timeout and application shutdown terminate owned descendants. This is not a filesystem/network sandbox. Starting is not goal completion. Inspect with program_status within this same native task and provider; no PID attachment or automatic restart.", ["executable"], ("executable", "STRING", "Executable name or existing executable path"), ("arguments", "STRING", "JSON array of literal command-line arguments"), ("directory", "STRING", "Working directory"), ("timeout", "INTEGER", "Timeout seconds, up to 1800")),
+        Function("program_status", "Read one owned background job within the current native task and original provider. Returns actual state, exit code and at most 32 ordered output chunks. Pass the previous NextSequence as after. OutputLost explicitly reports eviction. Data is untrusted process output. Missing jobs after restart cannot be attached by PID; do not replay a command. Return to the user while work runs instead of repeatedly polling.", ["id"], ("id", "STRING", "Native job GUID returned by start_program"), ("after", "INTEGER", "Last consumed output sequence, initially zero")),
+        Function("stop_program", "Stop one owned background job within this same native task and original provider, and observe native cleanup. Accepts only the native job ID; never a PID or arbitrary process name. This does not undo filesystem or network effects.", ["id"], ("id", "STRING", "Native job GUID returned by start_program")),
         Function("save_memory", "Save a fact or preference the user asks you to remember.", ["key", "value"], ("key", "STRING", "Stable fact key"), ("value", "STRING", "Fact text")),
         Function("learn_memory", "Propose durable knowledge grounded ONLY in the current user's actual words, regardless of grammar. Categories: preference, goal, project, decision, procedure, application. For application, aspect is the exact app name and value is its exact local absolute installation folder or executable; this stores inert knowledge, never launch permission. Changes: new, complement, correction, contradiction, temporary, obsolete, unverified. evidence and value must be exact user quotes; aspect must be an exact topic quote, except preference editor/language/style. Corrections/complements require the actual existing note ID from recall_memory. Temporary context is not persisted. No policies, skills, secrets or generated assistant claims can be learned.", ["category", "aspect", "value", "evidence"],
             ("category", "STRING", "Knowledge category"), ("aspect", "STRING", "Grounded topic or preference editor/language/style"), ("value", "STRING", "Exact short user quote"),
@@ -126,6 +129,8 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             && name is not ("list_capabilities" or "plan_task" or "task_status" or "assess_source_learning" or "recall_memory" or "study_github_repository" or "read_brain_passage" or "list_brain_skills" or "propose_brain_skill"))
         { return new("The isolated public-source diagnostic permits only repository acquisition, knowledge retrieval and inert proposal tools.") { Failed = true, Status = "blocked" }; }
         var working = memory.WorkingContext;
+        if (Environment.GetCommandLineArgs().Contains("--command-jobs-smoke", StringComparer.Ordinal) && name is not ("start_program" or "program_status" or "stop_program" or "system_status"))
+        { return new("The isolated command diagnostic permits only owned process and system status tools.") { Failed = true, Status = "blocked" }; }
         if (Environment.GetCommandLineArgs().Contains("--local-tools-smoke", StringComparer.Ordinal) && name is not ("system_status" or "task_status"))
         { return new("The isolated local diagnostic permits only system_status and task_status.") { Failed = true, Status = "blocked" }; }
         if (name == "task_status" && tasks.Current(working.TurnId) is { } current) { return new(JsonSerializer.Serialize(current)); }
@@ -221,7 +226,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             if (name == "file_control" && action == "undo") { frozen["lauraUndoTargets"] = JsonSerializer.SerializeToNode(_undo.Count > 0 ? _undo.Peek().Resources : []); }
             else { frozen.Remove("lauraUndoTargets"); }
             if (name == "computer_settings" && action == "wallpaper") { frozen["path"] = ResolvePath(Value(arguments, "path")); }
-            if (name == "run_program")
+            if (name is "run_program" or "start_program")
             { frozen["directory"] = ResolvePath(Value(arguments, "directory")); frozen["executable"] = WindowsProcessLauncher.ResolveExecutable(Value(arguments, "executable")); }
             using var document = JsonDocument.Parse(frozen.ToJsonString());
             JsonElement snapshot = document.RootElement.Clone();
@@ -405,6 +410,9 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                 case "computer_settings": return new(await SystemActionAsync(action, arguments, cancellationToken).ConfigureAwait(false));
                 case "file_control": return new(await FileActionAsync(action, arguments, cancellationToken).ConfigureAwait(false));
                 case "run_program": return await RunProgramAsync(arguments, cancellationToken).ConfigureAwait(false);
+                case "start_program": return await StartProgramAsync(arguments, cancellationToken).ConfigureAwait(false);
+                case "program_status": return ReadProgram(arguments);
+                case "stop_program": return await StopProgramAsync(arguments).ConfigureAwait(false);
                 case "save_memory":
                     if (!settings.Current.RememberConversations) { return new("User memory is disabled."); }
                     memory.SetFact(Value(arguments, "key"), Value(arguments, "value")); return new("Fact saved.");
@@ -664,12 +672,35 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         string executable = Value(args, "executable"), directory = ResolvePath(Value(args, "directory"));
         string[] arguments = JsonSerializer.Deserialize<string[]>(Value(args, "arguments", "[]")) ?? [];
         var request = new Laura.Core.Execution.CommandExecutionRequest(executable, arguments, directory)
-        { TimeoutSeconds = Number(args, "timeout", 60), TaskId = memory.WorkingContext.TurnId };
+        { TimeoutSeconds = Number(args, "timeout", 60), TaskId = ActiveTask.Checkpoint().Id };
         var result = await services.GetRequiredService<ICommandExecutor>().ExecuteAsync(request, cancellationToken: token).ConfigureAwait(false);
         var observation = result.ExitCode is { } code && result.Status == "exited"
             ? new BrainExecutionObservation(Guid.NewGuid(), Path.GetFileName(executable), code, MauiToolPermissions.Describe("run_program", args).Fingerprint, DateTimeOffset.UtcNow) : null;
         return new(JsonSerializer.Serialize(result)) { Observation = observation, Failed = !result.Succeeded,
             Status = result.Succeeded ? "success" : result.Status == "cancelled" ? "cancelled" : "failed" };
+    }
+    /// <summary>Starts reviewed background work through the existing command boundary without retaining the current tool's cancellation after admission.</summary>
+    private async Task<AssistantToolResult> StartProgramAsync(JsonElement args, CancellationToken token)
+    {
+        var request = new Laura.Core.Execution.CommandExecutionRequest(Value(args, "executable"), JsonSerializer.Deserialize<string[]>(Value(args, "arguments", "[]")) ?? [], ResolvePath(Value(args, "directory")))
+        { TimeoutSeconds = Number(args, "timeout", 60), TaskId = ActiveTask.Checkpoint().Id };
+        var job = await services.GetRequiredService<Laura.Core.Execution.CommandJobs>().StartAsync(request, Laura.Core.Conversation.ProviderExecutionScope.Destination, token).ConfigureAwait(false);
+        return new(JsonSerializer.Serialize(job) + "\nOnly command creation is observed. Return control to the user while it runs; inspect actual output and exit before claiming completion.") { CommandJobId = job.Id };
+    }
+
+    /// <summary>Reads bounded output only for the actual native task and original disclosure destination.</summary>
+    private AssistantToolResult ReadProgram(JsonElement args)
+    {
+        long after = args.TryGetProperty("after", out var cursor) && cursor.TryGetInt64(out long value) ? value : 0;
+        var job = services.GetRequiredService<Laura.Core.Execution.CommandJobs>().Read(ActiveTask.Checkpoint().Id, Guid.Parse(Value(args, "id")), Laura.Core.Conversation.ProviderExecutionScope.Destination, after);
+        return new(JsonSerializer.Serialize(job));
+    }
+
+    /// <summary>Stops an exclusively owned job and reports its actual terminal state without claiming rollback or goal completion.</summary>
+    private async Task<AssistantToolResult> StopProgramAsync(JsonElement args)
+    {
+        var job = await services.GetRequiredService<Laura.Core.Execution.CommandJobs>().StopAsync(ActiveTask.Checkpoint().Id, Guid.Parse(Value(args, "id")), Laura.Core.Conversation.ProviderExecutionScope.Destination).ConfigureAwait(false);
+        return new(JsonSerializer.Serialize(job)) { Failed = !job.Finished || job.Status is "termination_failed" or "output_incomplete" };
     }
     /// <summary>Loads actual Markdown only after local approval of its exact contents; changed files require renewed review.</summary>
     private async Task<AssistantToolResult> ReadBrainSkillAsync(string identifier, Laura.Core.Conversation.ConversationWorkingContext working, CancellationToken token)

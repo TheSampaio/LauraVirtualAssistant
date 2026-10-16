@@ -5,6 +5,7 @@ using Laura.Core.Abstractions;
 using Laura.Core.Conversation;
 using Laura.Core.Engine;
 using Laura.Core.Brain;
+using Laura.Core.Execution;
 
 namespace Laura.App.Views;
 
@@ -16,15 +17,16 @@ public sealed class TasksPage : ContentPage
     private readonly ConversationProviderRouter _router;
     private readonly IUiLocalizer _ui;
     private readonly RepositoryStudy _studies;
+    private readonly CommandJobs _commandJobs;
     private readonly CollectionView _list = new() { SelectionMode = SelectionMode.None };
     private readonly Label _status = Theme.Label("", 12, Theme.Muted);
     private int _refreshRevision;
     private bool _visible;
 
     /// <summary>Creates the localized task workspace. Args: tasks: Durable coordinator; engine: Existing command queue; router: Actual provider; ui: Interface resources.</summary>
-    public TasksPage(CognitiveTasks tasks, IAssistantEngine engine, ConversationProviderRouter router, IUiLocalizer ui, RepositoryStudy studies)
+    public TasksPage(CognitiveTasks tasks, IAssistantEngine engine, ConversationProviderRouter router, IUiLocalizer ui, RepositoryStudy studies, CommandJobs commandJobs)
     {
-        _tasks = tasks; _engine = engine; _router = router; _ui = ui; _studies = studies; Title = T("title"); BackgroundColor = Theme.Background; NavigationPage.SetHasNavigationBar(this, false);
+        _tasks = tasks; _engine = engine; _router = router; _ui = ui; _studies = studies; _commandJobs = commandJobs; Title = T("title"); BackgroundColor = Theme.Background; NavigationPage.SetHasNavigationBar(this, false);
         var heading = Theme.PageHeading(Title, T("subtitle"), "activity", ui.Get("ui.navigation.backToLaura"), () => NavigationMotion.PopAsync(Navigation));
         var root = new Grid { Padding = 24, RowDefinitions = [new(GridLength.Auto), new(GridLength.Auto), new(GridLength.Star)], RowSpacing = 16 };
         root.Add(heading); root.Add(_status, 0, 1); root.Add(_list, 0, 2); Content = root;
@@ -38,10 +40,10 @@ public sealed class TasksPage : ContentPage
 
     /// <inheritdoc />
     protected override void OnAppearing()
-    { base.OnAppearing(); _visible = true; _tasks.Changed += Changed; _ = RefreshAsync(); }
+    { base.OnAppearing(); _visible = true; _tasks.Changed += Changed; _commandJobs.Changed += Changed; _ = RefreshAsync(); }
     /// <inheritdoc />
     protected override void OnDisappearing()
-    { _visible = false; _refreshRevision++; _tasks.Changed -= Changed; base.OnDisappearing(); }
+    { _visible = false; _refreshRevision++; _tasks.Changed -= Changed; _commandJobs.Changed -= Changed; base.OnDisappearing(); }
 
     /// <summary>Builds one virtualized task row from durable native metadata, without rendering private model reasoning.</summary>
     private View Card(CognitiveTaskCheckpoint task)
@@ -56,12 +58,42 @@ public sealed class TasksPage : ContentPage
         resume.IsEnabled = (task.State is "paused" or "working" or "operations_completed" || task.State == "blocked" && task.Blocker is "budget" or "cancelled") && !task.HasUncertainEffect
             && task.Calls < 256 && task.ElapsedMilliseconds < 3600000;
         var actions = new HorizontalStackLayout { Spacing = 8 };
-        actions.Add(resume); actions.Add(Theme.ActionButton(T("cancel"), "square", () => { _tasks.Cancel(task.Id); return Task.CompletedTask; }));
+        var stop = Theme.ActionButton(T("cancel"), "square", () => { _tasks.Cancel(task.Id); return Task.CompletedTask; }); stop.AutomationId = "StopTask" + task.Id.ToString("N");
+        actions.Add(resume); actions.Add(stop);
         actions.Add(Theme.ActionButton(T("remove"), "trash", () => RemoveAsync(task.Id))); details.Add(actions);
         foreach (Guid study in task.RepositoryStudies ?? [])
         {
             var coverage = Theme.Label("", 12, Theme.Muted);
             details.Add(Theme.ActionButton(T("study"), "book_open", () => ShowStudyAsync(study, coverage))); details.Add(coverage);
+        }
+        var jobs = _commandJobs.List(task.Id).ToDictionary(job => job.Id);
+        foreach (Guid id in (task.CommandJobs ?? []).Concat(jobs.Keys).Distinct())
+        {
+            if (!jobs.TryGetValue(id, out var job)) { details.Add(Theme.Label(T("jobUnavailable"), 12, Theme.Muted)); continue; }
+            string stateKey = job.Status switch
+            {
+                "awaiting_approval" => "jobWaiting", "running" => "jobRunning", "exited" => job.Succeeded ? "jobSucceeded" : "jobFailed",
+                "cancelled" => "state.cancelled", "timeout" => "jobTimeout", "termination_failed" => "jobCleanupFailed", "output_incomplete" => "jobOutputIncomplete",
+                "blocked" => "state.blocked", _ => "state.failed"
+            };
+            details.Add(Theme.Label(string.Format(_ui.Culture, T("jobDetails"), T(stateKey), job.ProcessId, job.Duration.TotalSeconds), 12, Theme.Muted));
+            if (job.ExitCode is { } exitCode) { details.Add(Theme.Label(string.Format(_ui.Culture, T("jobExitCode"), exitCode), 12, Theme.Muted)); }
+            if (job.Truncated) { details.Add(Theme.Label(T("jobOutputTruncated"), 12, Theme.Muted)); }
+            var output = Theme.Label("", 12);
+            var outputViewport = new ScrollView { Content = output, HeightRequest = 180, IsVisible = false };
+            long cursor = 0;
+            var read = Theme.ActionButton(T("jobOutput"), "file_text", () =>
+            {
+                CommandJobSnapshot page;
+                try { page = _commandJobs.ReadForNativeUser(task.Id, id, cursor); }
+                catch (InvalidOperationException) { _status.Text = T("jobUnavailable"); return Task.CompletedTask; }
+                cursor = page.NextSequence;
+                outputViewport.IsVisible = true;
+                output.Text = (page.OutputLost ? T("jobOutputLost") + "\n" : "")
+                    + (page.Output.Count == 0 ? T("jobNoOutput") : T("jobStdout") + "\n" + string.Concat(page.Output.Where(chunk => !chunk.StandardError).Select(chunk => chunk.Text))
+                        + "\n" + T("jobStderr") + "\n" + string.Concat(page.Output.Where(chunk => chunk.StandardError).Select(chunk => chunk.Text)));
+                return Task.CompletedTask;
+            }); read.AutomationId = "CommandOutput" + id.ToString("N"); details.Add(read); details.Add(outputViewport);
         }
         return Theme.Card(details, 16);
     }
@@ -119,6 +151,33 @@ public sealed class TasksPage : ContentPage
         if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Isolated UI diagnostics only."); }
         if (_list.Height < 120 || _list.Width < 280 || Title.StartsWith("ui.", StringComparison.Ordinal) || _list.ItemsSource is not IReadOnlyList<CognitiveTaskCheckpoint> { Count: > 0 })
         { throw new InvalidOperationException("Task workspace lost its usable viewport, localized title or retained task."); }
+    }
+
+    /// <summary>Invokes the actual realized native output/stop button in isolated diagnostics. Args: taskId: Fixture task; jobId: Fixture job; stop: Whether to stop instead of read.</summary>
+    internal async Task InvokeCommandActionForSmokeAsync(Guid taskId, Guid jobId, bool stop)
+    {
+        if (!Environment.GetCommandLineArgs().Contains("--command-jobs-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Command UI diagnostics require their isolated option."); }
+        var items = ((IEnumerable<CognitiveTaskCheckpoint>)_list.ItemsSource).ToArray(); int index = Array.FindIndex(items, item => item.Id == taskId);
+        if (index < 0) { throw new InvalidOperationException("Command task row is unavailable."); }
+        _list.ScrollTo(index, position: ScrollToPosition.Start, animate: false); await Task.Delay(150).ConfigureAwait(true);
+        var list = _list.Handler!.PlatformView as Microsoft.UI.Xaml.Controls.ListViewBase ?? throw new InvalidOperationException("Tasks require a native list.");
+        var row = list.ContainerFromIndex(index) ?? throw new InvalidOperationException("Command task row was not realized.");
+        string target = (stop ? "StopTask" + taskId.ToString("N") : "CommandOutput" + jobId.ToString("N"));
+        var button = Find(row).OfType<Microsoft.UI.Xaml.Controls.Button>().FirstOrDefault(item => Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(item) == target)
+            ?? throw new InvalidOperationException("Command task action was not realized.");
+        var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(button);
+        ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+        await Task.Delay(150).ConfigureAwait(true);
+        if (!stop && !Find(row).OfType<Microsoft.UI.Xaml.Controls.TextBlock>().Any(text => text.Text.Contains("synthetic background tick", StringComparison.Ordinal)))
+        { throw new InvalidOperationException("Native output action did not render the observed fixture stream."); }
+    }
+
+    /// <summary>Enumerates the realized diagnostic row without inspecting any other application's UI.</summary>
+    private static IEnumerable<Microsoft.UI.Xaml.DependencyObject> Find(Microsoft.UI.Xaml.DependencyObject parent)
+    {
+        yield return parent;
+        for (int child = 0; child < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent); child++)
+        { foreach (var descendant in Find(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, child))) { yield return descendant; } }
     }
 
     /// <summary>Coalesces metadata changes on the UI dispatcher without waiting on the active task's execution lane.</summary>

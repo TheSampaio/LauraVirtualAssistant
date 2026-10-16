@@ -21,8 +21,13 @@ internal sealed partial class OwnedCommandProcess : IDisposable
     private OwnedCommandProcess(SafeFileHandle job, SafeProcessHandle process, int id, SafeFileHandle output, SafeFileHandle error)
     {
         _job = job; _process = process; Id = id;
-        StandardOutput = new(new FileStream(output, FileAccess.Read), Encoding.UTF8, true, 1024);
-        StandardError = new(new FileStream(error, FileAccess.Read), Encoding.UTF8, true, 1024);
+        StreamReader? reader = null;
+        try
+        {
+            reader = new(new FileStream(output, FileAccess.Read), Encoding.UTF8, true, 1024);
+            StandardError = new(new FileStream(error, FileAccess.Read), Encoding.UTF8, true, 1024); StandardOutput = reader;
+        }
+        catch { reader?.Dispose(); output.Dispose(); error.Dispose(); throw; }
     }
 
     /// <summary>Creates a child with only its three pipe handles inherited and the job attached before any child instruction. Args: request: Reviewed request; environment: Controlled environment. Returns: Exclusive native lifetime. Raises: Win32Exception on any setup or creation failure.</summary>

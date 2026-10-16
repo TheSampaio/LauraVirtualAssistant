@@ -17,7 +17,7 @@ public sealed class WindowsCommandExecutor(PermissionManager permissions) : ICom
     private static readonly string[] EnvironmentNames = ["SystemRoot", "WINDIR", "PATH", "PATHEXT", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)", "ProgramData", "COMSPEC"];
 
     /// <inheritdoc />
-    public async Task<CommandExecutionResult> ExecuteAsync(CommandExecutionRequest request, IProgress<CommandOutput>? progress = null, CancellationToken cancellationToken = default)
+    public async Task<CommandExecutionResult> ExecuteAsync(CommandExecutionRequest request, IProgress<CommandOutput>? progress = null, Action<int>? started = null, CancellationToken cancellationToken = default)
     {
         var invocation = PowerShellInvocation.Prepare(request); request = invocation.Request;
         PermissionPolicy.ValidateResources(new(PermissionOperation.Process, "Native command executor", "Validate process resources before metadata IO",
@@ -37,15 +37,16 @@ public sealed class WindowsCommandExecutor(PermissionManager permissions) : ICom
         string hash = Convert.ToHexString(await SHA256.HashDataAsync(image, cancellationToken).ConfigureAwait(false));
         var action = new PermissionAction(PermissionOperation.Process, "Native command executor",
             request.Executable + "\n" + JsonSerializer.Serialize(request.Arguments) + "\n" + request.WorkingDirectory + (scriptHash is null ? "" : "\nEntry script SHA-256: " + scriptHash)
-                + "\nWorking directory does not restrict process filesystem or network access. Entry-script identity does not verify imported modules or nested scripts.",
+                + "\nWorking directory does not restrict process filesystem or network access. Entry-script identity does not verify imported modules or nested scripts."
+                + (request.Background ? "\nRun in the background until the reviewed timeout, task cancellation or application shutdown. Owned descendants stop with this command." : ""),
             invocation.ScriptPath is { } entry ? [request.Executable, request.WorkingDirectory, entry] : [request.Executable, request.WorkingDirectory],
-            JsonSerializer.Serialize(new { request.Arguments, request.TimeoutSeconds, request.OutputCharacters, hash, scriptHash }),
+            JsonSerializer.Serialize(new { request.Arguments, request.TimeoutSeconds, request.OutputCharacters, request.Background, hash, scriptHash }),
             ProviderExecutionScope.Destination, taskId: request.TaskId);
-        return await permissions.ExecuteAsync(action, token => RunAsync(request, progress, token), result => result.Succeeded, cancellationToken).ConfigureAwait(false);
+        return await permissions.ExecuteAsync(action, token => RunAsync(request, progress, started, token), result => result.Succeeded, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Drains both streams even after retention is exhausted and closes the atomically assigned native job on every exit path.</summary>
-    private static async Task<CommandExecutionResult> RunAsync(CommandExecutionRequest request, IProgress<CommandOutput>? progress, CancellationToken cancellationToken)
+    private static async Task<CommandExecutionResult> RunAsync(CommandExecutionRequest request, IProgress<CommandOutput>? progress, Action<int>? started, CancellationToken cancellationToken)
     {
         var environment = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (string name in EnvironmentNames) { if (Environment.GetEnvironmentVariable(name) is { } value) { environment[name] = value; } }
@@ -54,6 +55,7 @@ public sealed class WindowsCommandExecutor(PermissionManager permissions) : ICom
         cancellationToken.ThrowIfCancellationRequested();
         using var process = OwnedCommandProcess.Start(request, environment);
         int processId = process.Id;
+        started?.Invoke(processId);
         var stdout = new StringBuilder(); var stderr = new StringBuilder(); object gate = new(); long sequence = 0;
         int retained = 0; bool truncated = false;
         Task output = DrainAsync(process.StandardOutput, stdout, false), error = DrainAsync(process.StandardError, stderr, true);

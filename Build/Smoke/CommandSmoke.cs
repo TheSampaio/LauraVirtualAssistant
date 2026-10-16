@@ -43,7 +43,7 @@ internal static class CommandSmoke
         Environment.SetEnvironmentVariable("LAURA_SMOKE_SECRET", "synthetic-secret-must-not-be-inherited");
         try
         {
-            CommandExecutionResult echoed = await executor.ExecuteAsync(request, progress, cancellationToken);
+            CommandExecutionResult echoed = await executor.ExecuteAsync(request, progress, cancellationToken: cancellationToken);
             if (!echoed.Succeeded || echoed.StandardError != "synthetic stderr" || echoed.ProcessId is null) { throw new InvalidOperationException("Native process exit or stream verification failed."); }
             using var result = JsonDocument.Parse(echoed.StandardOutput);
             if (!result.RootElement.GetProperty("arguments").EnumerateArray().Select(value => value.GetString()).SequenceEqual(literalArguments)
@@ -63,7 +63,7 @@ internal static class CommandSmoke
             foreach (string mode in new[] { "orphan", "tree-wait" })
             {
                 using var childProgress = new ChildRecorder();
-                var tree = await executor.ExecuteAsync(request with { Arguments = [assembly, "--process-fixture", mode], TimeoutSeconds = mode == "orphan" ? 10 : 2 }, childProgress, cancellationToken);
+                var tree = await executor.ExecuteAsync(request with { Arguments = [assembly, "--process-fixture", mode], TimeoutSeconds = mode == "orphan" ? 10 : 2 }, childProgress, cancellationToken: cancellationToken);
                 if (childProgress.Child is null) { throw new InvalidOperationException("Child identity was not retained while its parent remained alive."); }
                 await childProgress.Child.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromSeconds(3), cancellationToken);
                 if (tree.Status != (mode == "orphan" ? "exited" : "timeout") || !childProgress.Child.HasExited)
