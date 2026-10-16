@@ -37,6 +37,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Laura.Smoke" />
     <ProjectReference Include="..\Laura.Core\Laura.Core.csproj" />
   </ItemGroup>
   <!-- Optional app-local redistributables are prepared explicitly; a source checkout still builds and runs on CPU without them. -->

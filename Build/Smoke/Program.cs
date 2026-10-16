@@ -13,6 +13,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 // Explicit smoke tests use isolated storage and never open the microphone.
 if (args.Length > 0 && args[0] == "--process-fixture") { return CommandSmoke.RunFixture(args[1..]); }
+if (args.Length > 0 && args[0] == "--sandbox-fixture")
+{
+    try { return await SandboxSmoke.RunFixtureAsync(args[1..]); }
+    catch (Exception failure) { Console.Error.WriteLine("fixture.failure:" + failure.GetType().Name + ":" + failure.HResult); return 2; }
+}
 if (args.Length > 0 && args[0] == "--window-fixture") { return ApplicationCloseSmoke.RunFixture(args.Length > 1 && args[1] == "hold"); }
 if (args.Length == 2 && args[0] == "--inspect-gui-policy")
 {
@@ -69,6 +74,8 @@ if (args.Contains("--command-jobs-runtime-smoke", StringComparer.Ordinal))
 { await CommandJobsSmoke.RunAsync(directory, timeout.Token); return 0; }
 if (args.Contains("--command-jobs-sdk-smoke", StringComparer.Ordinal))
 { await CommandJobsSdkSmoke.RunAsync(directory, timeout.Token); return 0; }
+if (args.Contains("--sandbox-probe", StringComparer.Ordinal))
+{ await SandboxSmoke.RunAsync(directory, timeout.Token); return 0; }
 if (args.Contains("--powershell-smoke", StringComparer.Ordinal))
 { await PowerShellSmoke.RunAsync(directory, timeout.Token); return 0; }
 if (args.Contains("--silent-thinking", StringComparer.Ordinal))

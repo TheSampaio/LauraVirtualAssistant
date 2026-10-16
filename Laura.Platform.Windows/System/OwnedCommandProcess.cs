@@ -31,27 +31,42 @@ internal sealed partial class OwnedCommandProcess : IDisposable
     }
 
     /// <summary>Creates a child with only its three pipe handles inherited and the job attached before any child instruction. Args: request: Reviewed request; environment: Controlled environment. Returns: Exclusive native lifetime. Raises: Win32Exception on any setup or creation failure.</summary>
-    internal static unsafe OwnedCommandProcess Start(CommandExecutionRequest request, IReadOnlyDictionary<string, string> environment)
+    internal static unsafe OwnedCommandProcess Start(CommandExecutionRequest request, IReadOnlyDictionary<string, string> environment, WindowsSandboxProfile? sandbox = null)
     {
         using var input = CreatePipePair(); using var output = CreatePipePair(); using var error = CreatePipePair();
         Check(SetHandleInformation(input.Write, 1, 0)); Check(SetHandleInformation(output.Read, 1, 0)); Check(SetHandleInformation(error.Read, 1, 0));
         var job = new SafeFileHandle(CreateJobObjectW(0, null), true);
         if (job.IsInvalid) { job.Dispose(); throw new Win32Exception(Marshal.GetLastPInvokeError()); }
         SafeProcessHandle? process = null;
-        nint attributes = 0; bool initialized = false;
+        nint attributes = 0, desktopName = 0; bool initialized = false;
         try
         {
             var limits = new ExtendedLimits { Basic = new BasicLimits { Flags = 0x2000 } }; // KILL_ON_JOB_CLOSE; breakaway is deliberately absent.
             Check(SetInformationJobObject(job, 9, &limits, (uint)sizeof(ExtendedLimits)));
-            nuint size = 0; _ = InitializeProcThreadAttributeList(0, 2, 0, ref size);
+            if (sandbox?.DesktopName is not null)
+            {
+                uint restrictions = 0xFF;
+                Check(SetInformationJobObject(job, 4, &restrictions, (uint)sizeof(uint)));
+                desktopName = Marshal.StringToHGlobalUni(sandbox.DesktopName);
+            }
+            int attributeCount = sandbox is null ? 2 : 3 + (sandbox.LessPrivileged ? 1 : 0) + (sandbox.DisableWin32k ? 1 : 0);
+            nuint size = 0; _ = InitializeProcThreadAttributeList(0, attributeCount, 0, ref size);
             if (size == 0 || size > 65536) { throw new Win32Exception("Invalid native process attribute allocation."); }
             attributes = Marshal.AllocHGlobal(checked((int)size));
-            Check(InitializeProcThreadAttributeList(attributes, 2, 0, ref size)); initialized = true;
+            Check(InitializeProcThreadAttributeList(attributes, attributeCount, 0, ref size)); initialized = true;
             nint* handles = stackalloc nint[3] { input.Read.DangerousGetHandle(), output.Write.DangerousGetHandle(), error.Write.DangerousGetHandle() };
             nint jobValue = job.DangerousGetHandle();
             Check(UpdateProcThreadAttribute(attributes, 0, 0x20002, handles, (nuint)(3 * sizeof(nint)), 0, 0));
             Check(UpdateProcThreadAttribute(attributes, 0, 0x2000D, &jobValue, (nuint)sizeof(nint), 0, 0));
-            var startup = new StartupInfoEx { Startup = new StartupInfo { Size = sizeof(StartupInfoEx), Flags = 0x100,
+            var capabilities = new SecurityCapabilities { Container = sandbox?.Sid ?? 0, Capabilities = sandbox?.Capabilities ?? 0, Count = sandbox?.CapabilityCount ?? 0 };
+            uint allPackagesPolicy = 1; ulong mitigation = 0x10000000;
+            if (sandbox is not null)
+            {
+                Check(UpdateProcThreadAttribute(attributes, 0, 0x20009, &capabilities, (nuint)sizeof(SecurityCapabilities), 0, 0));
+                if (sandbox.LessPrivileged) { Check(UpdateProcThreadAttribute(attributes, 0, 0x2000F, &allPackagesPolicy, (nuint)sizeof(uint), 0, 0)); }
+                if (sandbox.DisableWin32k) { Check(UpdateProcThreadAttribute(attributes, 0, 0x20007, &mitigation, (nuint)sizeof(ulong), 0, 0)); }
+            }
+            var startup = new StartupInfoEx { Startup = new StartupInfo { Size = sizeof(StartupInfoEx), Flags = 0x100, Desktop = desktopName,
                 Input = handles[0], Output = handles[1], Error = handles[2] }, Attributes = attributes };
             string command = Quote(request.Executable) + string.Concat(request.Arguments.Select(argument => " " + Quote(argument)));
             char[] commandBuffer = (command + '\0').ToCharArray();
@@ -72,7 +87,9 @@ internal sealed partial class OwnedCommandProcess : IDisposable
         {
             if (initialized) { DeleteProcThreadAttributeList(attributes); }
             if (attributes != 0) { Marshal.FreeHGlobal(attributes); }
+            if (desktopName != 0) { Marshal.FreeHGlobal(desktopName); }
             GC.KeepAlive(job);
+            GC.KeepAlive(sandbox);
         }
     }
 
@@ -155,6 +172,7 @@ internal sealed partial class OwnedCommandProcess : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)] private struct SecurityAttributes { internal int Size; internal nint Descriptor; internal int Inherit; }
+    [StructLayout(LayoutKind.Sequential)] private struct SecurityCapabilities { internal nint Container, Capabilities; internal uint Count, Reserved; }
     [StructLayout(LayoutKind.Sequential)] private struct ProcessInformation { internal nint Process, Thread; internal int ProcessId, ThreadId; }
     [StructLayout(LayoutKind.Sequential)] private struct StartupInfo
     {
