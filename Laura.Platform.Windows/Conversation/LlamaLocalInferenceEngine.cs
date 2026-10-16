@@ -21,6 +21,7 @@ public sealed class LlamaLocalInferenceEngine : ILocalInferenceEngine, IAsyncDis
     private readonly ISettingsService _settings;
     private readonly IConversationMemory? _memory;
     private readonly BrainContextBuilder? _context;
+    private readonly WindowsInferenceBackend? _backend;
     private readonly SemaphoreSlim _native = new(1, 1);
     private readonly object _gate = new();
     private CancellationTokenSource? _generation;
@@ -31,9 +32,9 @@ public sealed class LlamaLocalInferenceEngine : ILocalInferenceEngine, IAsyncDis
     private string? _loadedModel;
 
     /// <summary>Initializes native library selection without loading weights or starting any process/server.</summary>
-    public LlamaLocalInferenceEngine(ILocalModelManager models, ISettingsService settings, IConversationMemory? memory = null, BrainContextBuilder? context = null)
+    public LlamaLocalInferenceEngine(ILocalModelManager models, ISettingsService settings, IConversationMemory? memory = null, BrainContextBuilder? context = null, WindowsInferenceBackend? backend = null)
     {
-        _models = models; _settings = settings; _memory = memory; _context = context;
+        _models = models; _settings = settings; _memory = memory; _context = context; _backend = backend;
     }
 
     /// <summary>Configures the one process-wide native backend before any native model can load.</summary>
@@ -92,10 +93,11 @@ public sealed class LlamaLocalInferenceEngine : ILocalInferenceEngine, IAsyncDis
         // This is a conservative admission margin, not a benchmarked minimum hardware specification.
         if (!hardware.CanLoad(artifact)) { _status = "memory_pressure"; throw new InvalidOperationException("Insufficient currently available RAM for conservative model loading."); }
         _weights?.Dispose(); _weights = null; _loadedModel = null;
-        _parameters = CreateParameters(path);
+        _backend?.Configure(); _parameters = CreateParameters(path);
         _status = "loading"; long began = Stopwatch.GetTimestamp();
         try
         {
+            _backend?.ResetOffloadEvidence();
             _weights = await LLamaWeights.LoadFromFileAsync(_parameters, cancellationToken, new Progress<float>(value => LoadingProgress?.Invoke(this, value))).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested(); _loadedModel = id; _status = "ready";
             LauraDiagnostics.Record("local.load", Stopwatch.GetElapsedTime(began).TotalMilliseconds, outcome: "cpu_ready");
@@ -186,7 +188,7 @@ public sealed class LlamaLocalInferenceEngine : ILocalInferenceEngine, IAsyncDis
 
     /// <summary>Creates conservative context parameters independently of already loaded weight resources.</summary>
     private ModelParams CreateParameters(string path) => new(path) { ContextSize = (uint)_settings.Current.GenerativeAi.LocalContextTokens,
-        GpuLayerCount = 0, Threads = Math.Clamp(Environment.ProcessorCount / 2, 1, 8), BatchSize = 128 };
+        GpuLayerCount = _backend?.GpuLayers ?? 0, Threads = Math.Clamp(Environment.ProcessorCount / 2, 1, 8), BatchSize = 128 };
 
     /// <inheritdoc />
     public void Cancel() { lock (_gate) { _generation?.Cancel(); } }

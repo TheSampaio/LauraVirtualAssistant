@@ -24,6 +24,8 @@
     <!-- Embedded MIT-licensed llama.cpp binding/backend; the pinned native revision includes Qwen3.5. -->
     <PackageReference Include="LLamaSharp" Version="0.27.0" />
     <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.27.0" />
+    <!-- Pinned Windows CUDA backend; CPU remains packaged for hosts without compatible acceleration. -->
+    <PackageReference Include="LLamaSharp.Backend.Cuda12.Windows" Version="0.27.0" />
     <!-- Offline multilingual ASR, distinct from speech synthesis; both packages are MIT licensed. -->
     <PackageReference Include="Whisper.net" Version="1.9.1" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />

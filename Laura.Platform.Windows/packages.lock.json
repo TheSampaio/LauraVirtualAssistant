@@ -23,6 +23,15 @@
         "resolved": "0.27.0",
         "contentHash": "fZOfnsWKx/kaOqCMSkZ2w5ww++/YGq56T8PWst0KjtmXQBthNAuE11HIaxMK5TBD0EWqoCxqlC8oVCOssF4+MQ=="
       },
+      "LLamaSharp.Backend.Cuda12.Windows": {
+        "type": "Direct",
+        "requested": "[0.27.0, )",
+        "resolved": "0.27.0",
+        "contentHash": "JNxjyN1UmGMDduQkpYyAws9ou+OgN5hFF+9MIkPIU6tkPwZ2zX63wYL2AachalZ2ff4Hob5ZK48Nay8T2tARIQ==",
+        "dependencies": {
+          "LLamaSharp.Backend.Cpu": "0.27.0"
+        }
+      },
       "ModelContextProtocol.Core": {
         "type": "Direct",
         "requested": "[2.2.0, )",

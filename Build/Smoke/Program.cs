@@ -28,6 +28,15 @@ using var settings = new SettingsService(new IniSettingsStore(Path.Combine(direc
 await settings.LoadAsync(timeout.Token);
 var memory = new SqliteConversationMemory(Path.Combine(directory, "memory.db"));
 memory.Initialize();
+if (args.Contains("--cuda-model-smoke", StringComparer.Ordinal) || args.Contains("--cuda-runtime-validation-smoke", StringComparer.Ordinal))
+{
+    int runtime = Array.IndexOf(args, "--cuda-runtime");
+    if (runtime < 0 || runtime + 1 >= args.Length || !Path.IsPathFullyQualified(args[runtime + 1])) { throw new ArgumentException("Provide an absolute verified CUDA runtime directory."); }
+    if (args.Contains("--cuda-runtime-validation-smoke", StringComparer.Ordinal))
+    { await CudaRuntimeValidationSmoke.RunAsync(directory, args[runtime + 1], timeout.Token); }
+    else { await CudaModelSmoke.RunAsync(directory, args[runtime + 1], timeout.Token); }
+    return 0;
+}
 if (args.Contains("--hardware-smoke", StringComparer.Ordinal))
 { await HardwareSmoke.RunAsync(directory, timeout.Token); return 0; }
 if (args.Contains("--application-close-smoke", StringComparer.Ordinal))

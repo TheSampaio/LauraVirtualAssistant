@@ -19,6 +19,8 @@ The HUD bundles selected Lucide SVG icons from https://github.com/lucide-icons/l
 | Windows SDK APIs | target 10.0.19041.0 | Windows platform terms |
 | NAudio.Core / NAudio.WinMM | 2.2.1 | MIT, https://github.com/naudio/NAudio |
 | LLamaSharp / LLamaSharp.Backend.Cpu | 0.27.0 | MIT; embedded llama.cpp at `3f7c29d318e317b63f54c558bc69803963d7d88c`, https://github.com/SciSharp/LLamaSharp |
+| LLamaSharp.Backend.Cuda12.Windows | 0.27.0 | MIT; same pinned native revision; optional app-local CUDA validation, https://github.com/SciSharp/LLamaSharp |
+| NVIDIA CUDA Runtime / cuBLAS | 12.9.79 / 12.9.1.4 | NVIDIA CUDA Toolkit terms; original texts in `licenses/NVIDIA-CUDA-12.9.79-LICENSE.txt` and `licenses/NVIDIA-cuBLAS-12.9.1.4-LICENSE.txt`; pinned DLL/archive hashes in `licenses/cuda12-runtime-inventory.json`. Prepared only by the explicit build helper; no driver or Toolkit installer is bundled. https://developer.download.nvidia.com/compute/cuda/redist/redistrib_12.9.1.json |
 | Whisper.net / Whisper.net.Runtime | 1.9.1 | MIT; local recognition, https://github.com/sandrohanea/whisper.net |
 | Microsoft.Data.Sqlite | 9.0.10 | MIT, https://github.com/dotnet/efcore |
 | Markdig | 1.4.0 | BSD-2-Clause, https://github.com/xoofx/markdig; included license |

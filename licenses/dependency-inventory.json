@@ -18,6 +18,15 @@
     "NugetSHA512": "jxYXaFkxCuE6emsVV3OkOH4hO1U4BmXkzCuXDGX/EUoIN+1+4tjADja63uhaQT5P/lk9JJnl4+y44wDURpwyJQ=="
   },
   {
+    "Package": "LLamaSharp.Backend.Cuda12.Windows",
+    "Version": "0.27.0",
+    "License": "MIT",
+    "Copyright": "Copyright 2023 The llama.cpp Authors. All rights reserved.",
+    "Repository": "",
+    "Commit": "",
+    "NugetSHA512": "50iSnpPmOYFS5NoPdOVEH/7IWVkmLGQfXhrbpFTnm9XAoFmpFC6DW6DeVLcecg5x7KtQUNLt6tPPx8fWdqUK3Q=="
+  },
+  {
     "Package": "LLamaSharp",
     "Version": "0.27.0",
     "License": "MIT",

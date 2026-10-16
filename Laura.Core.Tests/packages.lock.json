@@ -57,11 +57,6 @@
           "SQLitePCLRaw.core": "2.1.10"
         }
       },
-      "Microsoft.Extensions.AI.Abstractions": {
-        "type": "Transitive",
-        "resolved": "10.8.3",
-        "contentHash": "K0B05oApxmviWalNHPMBBcRC7erKiDATz3ENNR/jqTR9JwIwLRefgDhj2jCRwL1aca99pXUe0qyQC73/xIuZig=="
-      },
       "Microsoft.Extensions.DependencyInjection.Abstractions": {
         "type": "Transitive",
         "resolved": "10.0.10",
@@ -103,15 +98,6 @@
         "dependencies": {
           "Microsoft.TestPlatform.ObjectModel": "17.12.0",
           "Newtonsoft.Json": "13.0.1"
-        }
-      },
-      "ModelContextProtocol.Core": {
-        "type": "Transitive",
-        "resolved": "2.2.0",
-        "contentHash": "FeBfXU6T8k+jw4afg4sfxdEX2rL/e5oKOk9ROOGztu9k47+7Bz08sdaToYt2XvMY1opNbwxYQOFMj6wH9TInhA==",
-        "dependencies": {
-          "Microsoft.Extensions.AI.Abstractions": "10.8.3",
-          "Microsoft.Extensions.Logging.Abstractions": "10.0.10"
         }
       },
       "Newtonsoft.Json": {
@@ -203,7 +189,6 @@
           "Microsoft.Data.Sqlite": "[9.0.10, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.10, )",
           "Microsoft.ML.OnnxRuntime": "[1.31.0, )",
-          "ModelContextProtocol.Core": "[2.2.0, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[2.1.12, )",
           "YamlDotNet": "[18.1.0, )"
         }

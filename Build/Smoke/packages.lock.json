@@ -26,6 +26,14 @@
         "resolved": "0.27.0",
         "contentHash": "fZOfnsWKx/kaOqCMSkZ2w5ww++/YGq56T8PWst0KjtmXQBthNAuE11HIaxMK5TBD0EWqoCxqlC8oVCOssF4+MQ=="
       },
+      "LLamaSharp.Backend.Cuda12.Windows": {
+        "type": "Transitive",
+        "resolved": "0.27.0",
+        "contentHash": "JNxjyN1UmGMDduQkpYyAws9ou+OgN5hFF+9MIkPIU6tkPwZ2zX63wYL2AachalZ2ff4Hob5ZK48Nay8T2tARIQ==",
+        "dependencies": {
+          "LLamaSharp.Backend.Cpu": "0.27.0"
+        }
+      },
       "Markdig": {
         "type": "Transitive",
         "resolved": "1.4.0",
@@ -207,6 +215,7 @@
         "dependencies": {
           "LLamaSharp": "[0.27.0, )",
           "LLamaSharp.Backend.Cpu": "[0.27.0, )",
+          "LLamaSharp.Backend.Cuda12.Windows": "[0.27.0, )",
           "Laura.Core": "[1.0.0, )",
           "ModelContextProtocol.Core": "[2.2.0, )",
           "NAudio.Core": "[2.2.1, )",
