@@ -9,6 +9,22 @@ public static class LocalToolCallParser
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
     private static readonly LocalToolResponse Invalid = new(LocalToolResponseKind.Invalid);
 
+    /// <summary>Parses a private agent response: one exact tool envelope or a closed JSON final-answer envelope. Prose never supplies an executable call.</summary>
+    public static LocalToolResponse ParseAgent(string output, IReadOnlyDictionary<string, JsonElement> schemas)
+    {
+        ArgumentNullException.ThrowIfNull(output); ArgumentNullException.ThrowIfNull(schemas);
+        if (output.AsSpan().TrimStart().StartsWith("<tool_call>", StringComparison.Ordinal)) { return Parse(output, schemas); }
+        try
+        {
+            if (output.Length > 65536 || StrictUtf8.GetByteCount(output) > 65536) { return Invalid; }
+            using var document = JsonDocument.Parse(output, new JsonDocumentOptions { MaxDepth = 2 }); var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || root.EnumerateObject().Count() != 1 || !root.TryGetProperty("answer", out var value)
+                || value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString())) { return Invalid; }
+            return new(LocalToolResponseKind.Answer, value.GetString()!);
+        }
+        catch (Exception error) when (error is JsonException or InvalidOperationException or EncoderFallbackException) { return Invalid; }
+    }
+
     /// <summary>Validates one whole call against native schemas. Args: output: Visible model response; schemas: Registered names mapped to native parameter schemas. Returns: An answer, one validated call, or a payload-free refusal.</summary>
     public static LocalToolResponse Parse(string output, IReadOnlyDictionary<string, JsonElement> schemas)
     {
@@ -44,9 +60,13 @@ public static class LocalToolCallParser
             arguments.Add(parameter, argument); text = text[(closing + "</parameter>".Length)..].TrimStart();
         }
         if (!Consume(ref text, "</function>") || !Consume(ref text, "</tool_call>") || !text.IsEmpty) { return Invalid; }
-        JsonElement payload = JsonSerializer.SerializeToElement(arguments);
-        if (StrictUtf8.GetByteCount(payload.GetRawText()) > 32768 || !ToolArgumentSchema.Validate(payload, schema)) { return Invalid; }
-        return new(LocalToolResponseKind.Call, Name: name, Arguments: payload);
+        try
+        {
+            JsonElement payload = JsonSerializer.SerializeToElement(arguments);
+            if (StrictUtf8.GetByteCount(payload.GetRawText()) > 32768 || !ToolArgumentSchema.Validate(payload, schema)) { return Invalid; }
+            return new(LocalToolResponseKind.Call, Name: name, Arguments: payload);
+        }
+        catch (Exception error) when (error is JsonException or InvalidOperationException or EncoderFallbackException) { return Invalid; }
     }
 
     /// <summary>Reads a bounded name from the exact reviewed header without accepting attributes or nested syntax.</summary>

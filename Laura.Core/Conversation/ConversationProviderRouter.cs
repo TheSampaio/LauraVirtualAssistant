@@ -3,7 +3,7 @@ using Laura.Core.Abstractions;
 namespace Laura.Core.Conversation;
 
 /// <summary>Routes explicitly selected providers and drains both before changing settings or clearing dialogue.</summary>
-public sealed class ConversationProviderRouter(ISettingsService settings, IConversationEngine gemini, IConversationEngine openai, ILocalInferenceEngine? local = null) : IConversationEngine, IDisposable
+public sealed class ConversationProviderRouter(ISettingsService settings, IConversationEngine gemini, IConversationEngine openai, IConversationEngine? local = null) : IConversationEngine, IDisposable
 {
     private readonly SemaphoreSlim _requests = new(1, 1), _resets = new(1, 1);
     private readonly object _gate = new();
@@ -28,6 +28,8 @@ public sealed class ConversationProviderRouter(ISettingsService settings, IConve
         && gemini.IsAvailable && gemini.SupportsImages;
     /// <inheritdoc />
     public ConversationFailure? LastFailure { get; private set; }
+    /// <summary>Gets whether the current reviewed local model supports the native structured tool loop.</summary>
+    public bool SupportsLocalTools => local is LocalToolConversationEngine { SupportsTools: true };
     /// <summary>Gets the actual selected runtime location; automatic mode never silently authorizes paid GPT usage.</summary>
     public string ActiveProvider => ReferenceEquals(_active ?? Selected, local) && local is not null ? "local" : ReferenceEquals(_active ?? Selected, openai) ? "openai" : ReferenceEquals(_active ?? Selected, gemini) ? "gemini" : "unavailable";
     /// <inheritdoc />

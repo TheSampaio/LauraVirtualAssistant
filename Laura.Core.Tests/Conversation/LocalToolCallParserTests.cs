@@ -82,4 +82,16 @@ public sealed class LocalToolCallParserTests
 
     /// <summary>Builds one synthetic function envelope with a literal parameter.</summary>
     private static string Call(string parameter, string value) => $"<tool_call>\n<function=probe>\n<parameter={parameter}>\n{value}\n</parameter>\n</function>\n</tool_call>";
+
+    /// <summary>Distinguishes structured answer data from callable syntax and refuses ambiguous final envelopes.</summary>
+    [Fact]
+    public void PrivateAgentAnswersRequireOneClosedStringField()
+    {
+        string literal = "Example only: " + Call("text", "no effect");
+        var answer = LocalToolCallParser.ParseAgent(JsonSerializer.Serialize(new { answer = literal }), Schemas);
+        Assert.Equal(LocalToolResponseKind.Answer, answer.Kind); Assert.Equal(literal, answer.Answer);
+        foreach (string malformed in new[] { "Unstructured prose", "{\"answer\":3}", "{\"answer\":\"\"}", "{\"answer\":\"a\",\"extra\":true}",
+            "{\"answer\":\"a\",\"answer\":\"b\"}", "```json\n{\"answer\":\"a\"}\n```", "{\"answer\":\"a\"} trailing" })
+        { Assert.Equal(LocalToolResponseKind.Invalid, LocalToolCallParser.ParseAgent(malformed, Schemas).Kind); }
+    }
 }

@@ -28,6 +28,8 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
     private IReadOnlySet<string>? _registeredToolNames;
     /// <summary>Reports public-source diagnostic calls only when the explicit isolated smoke option is present.</summary>
     internal event Action<string, JsonElement, AssistantToolResult>? PublicSourceToolObserved;
+    /// <summary>Reports only native name, turn identity and outcome for explicitly isolated local-tool diagnostics, excluding payloads.</summary>
+    internal event Action<string, Guid, string>? LocalSmokeToolObserved;
     private static readonly JsonSerializerOptions SkillProposalJson = new() { PropertyNameCaseInsensitive = true, MaxDepth = 12 };
     private sealed record FileUndo(string[] Resources, Func<Task> Execute);
     private readonly Stack<FileUndo> _undo = new();
@@ -124,11 +126,15 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             && name is not ("list_capabilities" or "plan_task" or "task_status" or "assess_source_learning" or "recall_memory" or "study_github_repository" or "read_brain_passage" or "list_brain_skills" or "propose_brain_skill"))
         { return new("The isolated public-source diagnostic permits only repository acquisition, knowledge retrieval and inert proposal tools.") { Failed = true, Status = "blocked" }; }
         var working = memory.WorkingContext;
+        if (Environment.GetCommandLineArgs().Contains("--local-tools-smoke", StringComparer.Ordinal) && name is not ("system_status" or "task_status"))
+        { return new("The isolated local diagnostic permits only system_status and task_status.") { Failed = true, Status = "blocked" }; }
         if (name == "task_status" && tasks.Current(working.TurnId) is { } current) { return new(JsonSerializer.Serialize(current)); }
         AssistantToolResult result = await tasks.ExecuteAsync(working, RegisteredToolNames, name, arguments,
             (task, token) => DispatchTaskAsync(task, name, arguments, working, token), cancellationToken).ConfigureAwait(false);
             if (Environment.GetCommandLineArgs().Contains("--brain-github-smoke", StringComparer.Ordinal))
             { try { PublicSourceToolObserved?.Invoke(name, arguments, result); } catch (IOException) { } }
+            if (Environment.GetCommandLineArgs().Contains("--local-tools-smoke", StringComparer.Ordinal))
+            { LocalSmokeToolObserved?.Invoke(name, working.TurnId, result.Status); }
             return result;
     }
     /// <inheritdoc />

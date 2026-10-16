@@ -16,6 +16,13 @@ public sealed record ConversationTurn(string Prompt, CultureInfo Culture, string
     /// <summary>Returns prior messages without replaying this turn; identical text from other turns is preserved.</summary>
     public IEnumerable<ConversationMessage> PriorHistory() => History.Where(message => TurnId == Guid.Empty || message.TurnId != TurnId);
 
+    /// <summary>Merges whole retrieved units without replacing supplied evidence or granting skill authority. Args: memories: Complete retrieved factual units; catalogue: Inert skill discovery metadata. Returns: A new turn with distinct complete context units.</summary>
+    public ConversationTurn WithRecalledContext(string memories, string catalogue) => this with
+    {
+        Memories = Memories.Concat(string.IsNullOrEmpty(memories) ? [] : new[] { memories }).Distinct(StringComparer.Ordinal).ToArray(),
+        SkillCatalogue = string.Join("\n", new[] { SkillCatalogue, catalogue }.Where(value => !string.IsNullOrEmpty(value)).Distinct(StringComparer.Ordinal)),
+    };
+
     /// <summary>Gets bounded prior conversation data; never grants execution permissions.</summary>
     public IReadOnlyList<ConversationMessage> History { get; init; } = [];
 

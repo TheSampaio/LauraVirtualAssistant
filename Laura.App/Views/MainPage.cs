@@ -172,6 +172,8 @@ public sealed partial class MainPage : ContentPage, IDisposable
         services.GetRequiredService<OpenAiConversationEngine>().Interrupted += StreamInterrupted;
         services.GetRequiredService<Laura.Platform.Windows.Conversation.LlamaLocalInferenceEngine>().StreamUpdated += ReceiveStream;
         services.GetRequiredService<Laura.Platform.Windows.Conversation.LlamaLocalInferenceEngine>().Interrupted += StreamInterrupted;
+        services.GetRequiredService<LocalToolConversationEngine>().StreamUpdated += ReceiveStream;
+        services.GetRequiredService<LocalToolConversationEngine>().Interrupted += StreamInterrupted;
         services.GetRequiredService<LocalVoiceSession>().Changed += LocalCaptureChanged;
         live.Interrupted += StreamInterrupted;
         live.StatusChanged += (_, state) => MainThread.BeginInvokeOnMainThread(() => SetState(state));
@@ -578,6 +580,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     {
         _services.GetRequiredService<OpenAiConversationEngine>().StreamUpdated -= ReceiveStream; _services.GetRequiredService<OpenAiConversationEngine>().Interrupted -= StreamInterrupted;
         var local = _services.GetRequiredService<Laura.Platform.Windows.Conversation.LlamaLocalInferenceEngine>(); local.StreamUpdated -= ReceiveStream; local.Interrupted -= StreamInterrupted;
+        var localAgent = _services.GetRequiredService<LocalToolConversationEngine>(); localAgent.StreamUpdated -= ReceiveStream; localAgent.Interrupted -= StreamInterrupted;
         var voice = _services.GetRequiredService<LocalVoiceSession>(); voice.Changed -= LocalCaptureChanged; voice.Stop();
         _engine.ConversationMessageReceived -= ReceiveMessage; _live.MessageReceived -= ReceiveMessage; _live.StreamUpdated -= ReceiveStream; _live.Interrupted -= StreamInterrupted;
         _conversationScroll.Dispose(); _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed -= OnApprovalsChanged; _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this);

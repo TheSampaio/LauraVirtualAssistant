@@ -85,6 +85,8 @@ public static class ServiceConfiguration
         services.AddSingleton(_ => new WindowsInferenceBackend(true, Path.Combine(AppContext.BaseDirectory, "CudaRuntime")));
         services.AddSingleton<LlamaLocalInferenceEngine>();
         services.AddSingleton<ILocalInferenceEngine>(provider => provider.GetRequiredService<LlamaLocalInferenceEngine>());
+        services.AddSingleton<ILocalToolInferenceEngine>(provider => provider.GetRequiredService<LlamaLocalInferenceEngine>());
+        services.AddSingleton<LocalToolConversationEngine>();
         services.AddSingleton<IProviderModelCatalog>(provider => Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)
             ? new UiSmokeModelCatalog()
             : new ProviderModelCatalog(new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan },
@@ -153,7 +155,7 @@ public static class ServiceConfiguration
         services.AddSingleton<IBriefingContributor, ReminderBriefingContributor>();
         services.AddSingleton<ClapWakeCoordinator>();
         services.AddSingleton<MarkLvConfigurationImporter>();
-        services.AddSingleton(provider => new ConversationProviderRouter(provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<GeminiLiveClient>(), provider.GetRequiredService<OpenAiConversationEngine>(), provider.GetRequiredService<ILocalInferenceEngine>()));
+        services.AddSingleton(provider => new ConversationProviderRouter(provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<GeminiLiveClient>(), provider.GetRequiredService<OpenAiConversationEngine>(), provider.GetRequiredService<LocalToolConversationEngine>()));
         services.AddSingleton<IConversationEngine>(provider => provider.GetRequiredService<ConversationProviderRouter>());
         services.AddSingleton<WindowsApplicationCatalog>();
         services.AddSingleton<WindowsResourceMonitor>();
