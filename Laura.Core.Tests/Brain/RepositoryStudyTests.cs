@@ -6,6 +6,29 @@ namespace Laura.Core.Tests.Brain;
 
 public sealed partial class BrainTests
 {
+    /// <summary>A changed inventoried source remains pending instead of being silently classified as unsupported content.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ChangedLocalInventoryDoesNotConsumeOrExcludePendingSources(bool changeBytes)
+    {
+        string root = Path.Combine(_root, "ChangedInventory"); Directory.CreateDirectory(root);
+        string path = Path.Combine(root, "A.cs"); await File.WriteAllTextAsync(path, "// original synthetic source");
+        await File.WriteAllTextAsync(Path.Combine(root, "B.cs"), "// pending synthetic source");
+        BrainService brain = Create(); using var permissions = SourcePermissions(); var remote = new RecordedRepositorySource(0);
+        var store = new FileRepositoryStudyStore(Path.Combine(_root, "ChangedInventoryState"), new TestPrivateDataProtector());
+        var studies = new RepositoryStudy(brain, new(brain, permissions, remote), permissions, store, remote); Guid taskId = Guid.NewGuid();
+        var starting = studies.StartAsync(root, "Changed inventory", taskId, ""); await ApproveStudyAsync(permissions, starting); var initial = await starting;
+        if (changeBytes) { await File.WriteAllTextAsync(path, "// materially changed synthetic source with another size"); }
+        else { File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path).AddMinutes(1)); }
+        var stopped = await studies.ContinueAsync(initial.Id, taskId, "", initial.Cursor);
+        Assert.Equal("partial_failure", stopped.State); Assert.Contains("integrity", stopped.Failure, StringComparison.Ordinal);
+        Assert.Equal(2, stopped.PendingFiles); Assert.Equal(0, stopped.ExcludedFiles); Assert.Equal(0, stopped.AcquiredFiles);
+        Assert.Equal(initial.Cursor, stopped.Cursor); Assert.Empty(stopped.Documents);
+        var restarted = new RepositoryStudy(brain, new(brain, permissions, remote), permissions, store, remote);
+        var recovered = await restarted.StatusAsync(initial.Id, taskId, "");
+        Assert.Equal(2, recovered.PendingFiles); Assert.Equal(0, recovered.ExcludedFiles); Assert.Equal(initial.Cursor, recovered.Cursor);
+    }
     /// <summary>Traverses more than 5,000 frozen GitHub files through separate nonrecursive subtree operations and a restarted coordinator.</summary>
     [Fact]
     public async Task GitHubSubtreeInventoryResumesPastTheLegacyRecursiveFileLimit()

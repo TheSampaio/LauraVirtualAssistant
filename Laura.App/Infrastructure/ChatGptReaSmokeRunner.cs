@@ -56,6 +56,8 @@ internal static class ChatGptReaSmokeRunner
         if (checkpoint.Rounds is { } previousRounds)
         { checkpoint = checkpoint with { Rounds = previousRounds with { MaximumCycles = Math.Min(128, previousRounds.Cycles + 3), MaximumActiveMilliseconds = Math.Min(3600000, previousRounds.ActiveMilliseconds + 180000), MaximumProviderCalls = Math.Min(256, previousRounds.ProviderCalls + 20) } }; }
         await services.GetRequiredService<ICognitiveTaskJournal>().SaveAsync(checkpoint).ConfigureAwait(true);
+        if (flags.Contains("--rea-integrity-smoke", StringComparer.Ordinal))
+        { await VerifySourceIntegrityAsync(services, state, checkpoint.Id, directory).ConfigureAwait(true); return; }
         var permissions = services.GetRequiredService<PermissionManager>(); var tasks = services.GetRequiredService<CognitiveTasks>(); var engine = services.GetRequiredService<IAssistantEngine>();
         var tools = (MauiAssistantTools)services.GetRequiredService<IAssistantTools>(); var observed = new List<string>(); var failures = new List<string>();
         void Observe(string name, JsonElement arguments, AssistantToolResult result) { observed.Add(name); if (result.Failed) { failures.Add(name + ":" + result.Status); } }
@@ -113,5 +115,37 @@ internal static class ChatGptReaSmokeRunner
             await MauiSmokeRunner.CaptureAsync(window, Path.Combine(directory, "rea-progress.png")).ConfigureAwait(true);
         }
         finally { tools.IsolatedAgentToolObserved -= Observe; services.GetRequiredService<Laura.Core.Abstractions.IShellController>().Shutdown(); }
+    }
+
+    /// <summary>Checks the actual restored clone against its frozen inventory without model calls, cursor loss or false exclusions.</summary>
+    private static async Task VerifySourceIntegrityAsync(IServiceProvider services, RepositoryStudyState state, Guid taskId, string directory)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30)); var token = timeout.Token;
+        var study = services.GetRequiredService<RepositoryStudy>(); var permissions = services.GetRequiredService<PermissionManager>();
+        try
+        {
+            var before = await study.ReadPrivateProgressAsync(state.Id, token).ConfigureAwait(true);
+            Task<RepositoryStudyProgress> operation = study.ContinueAsync(state.Id, taskId, "api.openai.com", before.Cursor, token);
+            while (!operation.IsCompleted)
+            {
+                foreach (var review in permissions.PendingRequests)
+                {
+                    bool allowed = review.Action.TaskId == taskId && review.Action.Destination == "api.openai.com"
+                        && review.Action.Operation is PermissionOperation.RepositoryStudyAuthorization or PermissionOperation.RepositoryStudyRead
+                        && review.Action.Resources.Length > 0 && review.Action.Resources.All(path => path == state.Source || PermissionPolicy.Within(path, state.Source));
+                    permissions.Decide(review.Id, allowed ? ApprovalChoice.Once : ApprovalChoice.Deny);
+                }
+                await Task.Delay(50, token).ConfigureAwait(true);
+            }
+            var after = await operation.ConfigureAwait(true);
+            bool preserved = before.Cursor == after.Cursor && before.AcquiredFiles == after.AcquiredFiles && before.PendingFiles == after.PendingFiles
+                && before.ExcludedFiles == after.ExcludedFiles && after.Failure.StartsWith("integrity:", StringComparison.Ordinal);
+            await File.WriteAllTextAsync(Path.Combine(directory, "source-integrity.json"), JsonSerializer.Serialize(new { Preserved = preserved,
+                SameStudyId = before.Id == after.Id, SameCursor = before.Cursor == after.Cursor, after.AcquiredFiles, after.PendingFiles, after.ExcludedFiles,
+                after.Failure, NoInferenceRequested = true, NoRepositoryCodeExecuted = true }, EvidenceJson), token).ConfigureAwait(true);
+            await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), preserved ? "PASS: actual stale source inventory preserved acquired/pending/excluded counts and cursor; explicit refresh is required."
+                : "FAIL: source integrity recovery was not verified.", token).ConfigureAwait(true);
+        }
+        finally { services.GetRequiredService<Laura.Core.Abstractions.IShellController>().Shutdown(); }
     }
 }

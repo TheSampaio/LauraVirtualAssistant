@@ -252,7 +252,8 @@ public sealed class RepositoryStudy(BrainService brain, BrainSources sources, Pe
         string path = LocalPath(root, file.Path); PermissionPolicy.ValidateResources(new(PermissionOperation.FileReadLocal, "Repository study reader", "Read inventoried source", [path]), []);
         await using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 8192, FileOptions.Asynchronous | FileOptions.SequentialScan);
         var info = new FileInfo(path);
-        if (input.Length != file.Size || info.Length + ":" + info.LastWriteTimeUtc.Ticks != file.Version) { throw new InvalidDataException("Local source changed since inventory; refresh before acquisition."); }
+        if (input.Length != file.Size || info.Length + ":" + info.LastWriteTimeUtc.Ticks != file.Version)
+        { throw new BrainSourceException("Local source changed since inventory; explicitly refresh the inventory before acquisition. Its pending status was preserved.", "integrity"); }
         byte[] bytes = new byte[file.Size]; await input.ReadExactlyAsync(bytes, cancellationToken).ConfigureAwait(false); return bytes;
     }
     /// <summary>Resolves a validated relative source without permitting directory traversal, alternate streams or sibling scope escapes.</summary>
