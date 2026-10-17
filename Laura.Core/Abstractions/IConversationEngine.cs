@@ -19,6 +19,8 @@ public interface IConversationEngine
     bool SupportsImages => false;
     /// <summary>Gets safe metadata for the last serialized request failure, cleared by the next admitted request.</summary>
     ConversationFailure? LastFailure => null;
+    /// <summary>Returns native continuation metadata for an admitted unfinished protocol exchange, never a new owner objective or grant.</summary>
+    string? PendingRound(Guid taskId) => null;
 
     /// <summary>
     /// Requests an answer from the model.

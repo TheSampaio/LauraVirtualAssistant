@@ -205,6 +205,8 @@ public static class LocalizationKeys
         public const string RequestRejected = "ui.ai.failure.request";
         /// <summary>Identifies exhausted operation budgets.</summary>
         public const string OperationLimit = "ui.ai.failure.limit";
+        /// <summary>A bounded protocol cycle saved its already confirmed tool results for continuation.</summary>
+        public const string TaskCycleSaved = "ui.ai.taskCycleSaved";
         /// <summary>Explains that previous tool effects require inspection before retry.</summary>
         public const string PriorEffects = "ui.ai.failure.priorEffects";
         /// <summary>Refuses an unsupported image before dispatch.</summary>

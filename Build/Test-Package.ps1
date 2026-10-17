@@ -31,13 +31,13 @@ if (Get-ChildItem -LiteralPath $installed -Recurse -File -Filter '*.onnx') { thr
 foreach ($removed in @('System.Windows.Forms.dll', 'System.Speech.dll', 'OllamaSharp.dll', 'LLamaSharp.dll', 'Whisper.net.dll', 'whisper.dll', 'llama.dll', 'sherpa-onnx-c-api.dll', 'Microsoft.ML.OnnxRuntime.dll', 'onnxruntime.dll', 'vcomp140.dll')) {
     if (Get-ChildItem -LiteralPath $installed -Recurse -File -Filter $removed) { throw "Removed integration must not ship: $removed" }
 }
-foreach ($privateFile in @('google-key.dat', 'api_keys.json', 'settings.ini', 'memory.db')) {
+foreach ($privateFile in @('google-key.dat', 'api_keys.json', 'settings.ini', 'memory.db', 'chatgpt-credentials*')) {
     if (Get-ChildItem -LiteralPath $installed -Recurse -File -Filter $privateFile) { throw "Private data must not be part of the distribution: $privateFile" }
 }
 foreach ($component in (Get-Content -LiteralPath (Join-Path $installed 'licenses/vc-runtime-inventory.json') -Raw | ConvertFrom-Json)) {
     if ((Get-FileHash -LiteralPath (Join-Path $installed $component.File) -Algorithm SHA256).Hash -ne $component.Sha256) { throw 'Installed VC runtime integrity failed.' }
 }
-if (Get-ChildItem -LiteralPath $installed -Recurse -File -Filter '*.gguf') { throw 'The Google-only package must not contain local model weights.' }
+if (Get-ChildItem -LiteralPath $installed -Recurse -File -Filter '*.gguf') { throw 'The package must not contain local conversation model weights.' }
 $archive = Join-Path $extract 'Laura-win-x64.zip'
 $original = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
 $expected = (Get-FileHash -LiteralPath (Join-Path $distribution 'Laura-win-x64.zip') -Algorithm SHA256).Hash

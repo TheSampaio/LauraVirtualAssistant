@@ -38,4 +38,6 @@ public sealed record ConversationTurn(string Prompt, CultureInfo Culture, string
     public string ImageMimeType { get; init; } = "image/png";
     /// <summary>Gets a native continuation's original turn identity; it never grants or restores an execution authorization.</summary>
     public Guid ContinuingTaskTurnId { get; init; }
+    /// <summary>Gets a native structured task requirement; ordinary input remains routine regardless of wording.</summary>
+    public CognitiveTaskDemand TaskDemand { get; init; }
 }

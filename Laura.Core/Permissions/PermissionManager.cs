@@ -186,7 +186,7 @@ public sealed class PermissionManager : IDisposable
     /// <summary>Requests one native review of project edits and an optional explicit cloud read recipient. Args: taskId: Trusted active task; directory: Existing project root; destination: Actual provider host. Returns: Revocable session-only grant.</summary>
     public Task<PermissionGrant> AuthorizeWorkspaceAsync(Guid taskId, string directory, string destination, CancellationToken cancellationToken = default)
     {
-        if (taskId == Guid.Empty || destination is not ("" or "generativelanguage.googleapis.com"))
+        if (taskId == Guid.Empty || destination is not ("" or "generativelanguage.googleapis.com" or "api.openai.com"))
         { throw new PermissionDeniedException("A workspace requires an active task and a known recipient."); }
         string root = Path.GetFullPath(directory);
         PermissionPolicy.ValidateResources(new(PermissionOperation.WorkspaceAuthorization, "Workspace task review", "Validate project root before metadata IO", [root]), _protectedRoots(), _workspaceRoot);
@@ -210,7 +210,7 @@ public sealed class PermissionManager : IDisposable
     /// <summary>Reviews one task's repository reads, private Brain retention and optional actual provider disclosure. Source code never receives execution authority.</summary>
     public Task<PermissionGrant> AuthorizeRepositoryStudyAsync(Guid taskId, string source, string destination, CancellationToken cancellationToken = default)
     {
-        if (taskId == Guid.Empty || destination is not ("" or "generativelanguage.googleapis.com"))
+        if (taskId == Guid.Empty || destination is not ("" or "generativelanguage.googleapis.com" or "api.openai.com"))
         { throw new PermissionDeniedException("Repository study requires a trusted task and a known recipient."); }
         bool remoteSource = source.StartsWith("https://", StringComparison.Ordinal);
         string scope = remoteSource ? Brain.GitHubRepositoryAddress.Parse(source).Url : Path.GetFullPath(source);

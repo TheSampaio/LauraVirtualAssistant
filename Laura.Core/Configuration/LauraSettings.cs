@@ -59,6 +59,12 @@ public sealed record LauraSettings
 
     /// <summary>Gets the optional generative-mode configuration.</summary>
     public GenerativeAiOptions GenerativeAi { get; init; } = GenerativeAiOptions.Default;
+    /// <summary>Gets optional account-authorized ChatGPT settings, independent of Gemini voice enablement.</summary>
+    public ChatGptOptions ChatGpt { get; init; } = new();
+    /// <summary>Gets the native manual or explicitly authorized automatic routing mode.</summary>
+    public ConversationProviderSelection ProviderSelection { get; init; }
+    /// <summary>Gets cumulative autonomous task budgets, separate from individual model and tool deadlines.</summary>
+    public CognitiveTaskOptions CognitiveTasks { get; init; } = new();
     /// <summary>Gets the local diagnostic detail threshold; no level includes private payloads.</summary>
     public Microsoft.Extensions.Logging.LogLevel DiagnosticLevel { get; init; } = Microsoft.Extensions.Logging.LogLevel.Information;
 
@@ -118,6 +124,9 @@ public sealed record LauraSettings
             UserNickname = UserNickname.Trim(),
             Voice = Voice.Sanitized(),
             GenerativeAi = GenerativeAi.Sanitized(),
+            ChatGpt = ChatGpt.Sanitized(),
+            CognitiveTasks = CognitiveTasks.Sanitized(),
+            ProviderSelection = Enum.IsDefined(ProviderSelection) ? ProviderSelection : ConversationProviderSelection.Gemini,
             DiagnosticLevel = Enum.IsDefined(DiagnosticLevel) ? DiagnosticLevel : Microsoft.Extensions.Logging.LogLevel.Information,
             Brain = Brain.Sanitized(),
             Permissions = Permissions.Sanitized(),

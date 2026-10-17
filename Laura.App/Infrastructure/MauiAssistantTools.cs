@@ -98,11 +98,22 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         Function("clipboard", "Read or write the clipboard; reading needs native confirmation.", ["action"], ("action", "STRING", "read or write"), ("text", "STRING", "Literal text to copy")),
         Function("reminder", "Add, list or cancel an explicitly requested persistent reminder. Notifications use Gemini while Laura is running. Do not create schedules unless the user requested them.", ["action"], ("action", "STRING", "add, list or cancel"), ("text", "STRING", "Reminder in the user's language"), ("due", "STRING", "ISO 8601 date/time including timezone offset"), ("seconds", "INTEGER", "Alternative relative delay in seconds"), ("id", "STRING", "Identifier to cancel")),
         Function("run_local_command", "Execute existing Laura commands such as time, weather, web/YouTube search, notes, undo, volume and settings. For general app launch use open_app.", ["command"], ("command", "STRING", "Plain local command")),
+        RepositoryAnalysisDeclaration(),
+        Function("repository_learning_status", "Read measured acquisition, indexed source versions and analyzed modules for a current study. Interpretation is separate from verified comprehension, application and validated outcomes. No mastery percentage is invented.", ["id"], ("id", "STRING", "Actual study ID")),
         Function("shutdown_assistant", "Exit Laura only when the user asks to close the assistant.", [])
     } }];
-    internal IReadOnlySet<string> RegisteredToolNames => _registeredToolNames ??= JsonSerializer.SerializeToElement(Declarations).EnumerateArray()
+    /// <inheritdoc />
+    public IReadOnlySet<string> RegisteredToolNames => _registeredToolNames ??= JsonSerializer.SerializeToElement(Declarations).EnumerateArray()
         .Where(group => group.TryGetProperty("functionDeclarations", out _)).SelectMany(group => group.GetProperty("functionDeclarations").EnumerateArray())
         .Select(function => function.GetProperty("name").GetString()!).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>Describes inert, explicitly structured module interpretation with exact literal evidence references.</summary>
+    private static object RepositoryAnalysisDeclaration() => new
+    {
+        name = "record_repository_analysis", description = "Persist a bounded module interpretation in the shared Markdown Brain. Cite 1..8 actually read acquired source IDs/hashes and literal evidence (16..1000 chars each). Summary 40..6000 chars, module 1..120 chars. This records analyzed evidence only; it never proves comprehension, creates execution permission or activates a skill.",
+        parameters = new { type = "OBJECT", properties = new { id = new { type = "STRING" }, module = new { type = "STRING" }, summary = new { type = "STRING" },
+            evidence = new { type = "ARRAY", items = new { type = "OBJECT", properties = new { id = new { type = "STRING" }, hash = new { type = "STRING" }, evidence = new { type = "STRING" } }, required = new[] { "id", "hash", "evidence" } } } }, required = new[] { "id", "module", "summary", "evidence" } }
+    };
 
     /// <summary>Builds a public function schema from supported fields.</summary>
     private static object Function(string name, string description, string[] required, params (string Name, string Type, string Description)[] fields) => new
@@ -129,7 +140,21 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
     /// <inheritdoc />
     public async Task<AssistantToolResult> ExecuteAsync(string name, JsonElement arguments, CancellationToken cancellationToken)
     {
+        bool applicationDiagnostic = Environment.GetCommandLineArgs().Contains("--rea-application-smoke", StringComparer.Ordinal);
+        if (applicationDiagnostic && !(name == "run_program" && ChatGptApplicationSmokeRunner.AllowsInvocation(arguments))
+            && name is not ("read_brain_passage" or "task_status" or "list_capabilities"))
+        { return new("The isolated application diagnostic permits only current public analysis reads and exact numeric synthetic fixture invocations.") { Failed = true, Status = "blocked" }; }
+        if (Environment.GetCommandLineArgs().Contains("--rea-synthesis-smoke", StringComparer.Ordinal)
+            && name is not ("repository_study_status" or "repository_learning_status" or "read_brain_passage" or "recall_memory" or "recent_task_context" or "task_status" or "list_capabilities"))
+        { return new("The isolated synthesis diagnostic permits only existing public repository evidence and status reads.") { Failed = true, Status = "blocked" }; }
         using var provider = new Laura.Core.Conversation.ProviderExecutionScope(Laura.Core.Conversation.ProviderExecutionScope.Provider ?? settings.Current.GenerativeAi.Provider);
+        if (Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal)
+            && !applicationDiagnostic
+            && !(Environment.GetCommandLineArgs().Contains("--rea-continuation-smoke", StringComparer.Ordinal)
+                && name is "plan_task" or "repository_study_status" or "continue_repository_study" or "recent_task_context" or "read_brain_passage" or "recall_memory"
+                    or "list_brain_skills" or "propose_brain_skill" or "assess_source_learning" or "record_repository_analysis" or "repository_learning_status")
+            && name is not ("list_capabilities" or "task_status"))
+        { return new("The isolated ChatGPT connection test permits only capability metadata and current task status.") { Failed = true, Status = "blocked" }; }
         if (Environment.GetCommandLineArgs().Contains("--brain-github-smoke", StringComparer.Ordinal)
             && name is not ("list_capabilities" or "plan_task" or "task_status" or "assess_source_learning" or "recall_memory" or "study_github_repository" or "read_brain_passage" or "list_brain_skills" or "propose_brain_skill"))
         { return new("The isolated public-source diagnostic permits only repository acquisition, knowledge retrieval and inert proposal tools.") { Failed = true, Status = "blocked" }; }
@@ -141,7 +166,8 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             (task, token) => DispatchTaskAsync(task, name, arguments, working, token), cancellationToken).ConfigureAwait(false);
             if (Environment.GetCommandLineArgs().Contains("--brain-github-smoke", StringComparer.Ordinal))
             { try { PublicSourceToolObserved?.Invoke(name, arguments, result); } catch (IOException) { } }
-            if (Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal) && Environment.GetCommandLineArgs().Contains("--agent-rework-smoke", StringComparer.Ordinal))
+            if (Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)
+                && (Environment.GetCommandLineArgs().Contains("--agent-rework-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal)))
             { IsolatedAgentToolObserved?.Invoke(name, arguments, result); }
             return result;
     }
@@ -256,6 +282,13 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             return result;
         }
         catch (PermissionDeniedException) { return new("Operation denied by local authorization. The denied effect was not dispatched; do not retry through another tool.") { Failed = true, Status = "blocked" }; }
+        catch (Exception error) when (error is ArgumentException or IOException && error.Data[nameof(BrainSkillContract)] is BrainSkillContract)
+        {
+            var contract = (BrainSkillContract)error.Data[nameof(BrainSkillContract)]!;
+            Laura.Core.Diagnostics.LauraDiagnostics.Record("brain.skill.proposal_rejected", outcome: contract.ToString());
+            return new("Inert skill proposal rejected by contract: " + contract + ". Provide all required structured fields, supported kind, exact current source IDs/hashes, literal evidence and verifiable outcome criteria. No skill was activated or executed.")
+            { Failed = true, Status = "failed" };
+        }
         catch (System.ComponentModel.Win32Exception error)
         {
             Laura.Core.Diagnostics.LauraDiagnostics.Record("tool.windows_failure", amount: error.NativeErrorCode, outcome: "win32");
@@ -303,6 +336,16 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             }
             switch (name)
             {
+                case "record_repository_analysis":
+                    Guid analysisStudyId = Guid.Parse(Value(arguments, "id"));
+                    await services.GetRequiredService<RepositoryStudy>().StatusAsync(analysisStudyId, ActiveTask.Checkpoint().Id, MauiToolPermissions.CloudDestination, cancellationToken).ConfigureAwait(false);
+                    var citations = arguments.GetProperty("evidence").Deserialize<BrainSkillReference[]>(SkillProposalJson) ?? throw new ArgumentException("Structured module evidence is required.");
+                    BrainNote analysis = await services.GetRequiredService<RepositoryAnalysis>().RecordAsync(new(analysisStudyId, Value(arguments, "module"), Value(arguments, "summary"), citations),
+                        ActiveTask.WasSourceRead, cancellationToken).ConfigureAwait(false);
+                    return new(JsonSerializer.Serialize(new { analysis.Id, analysis.Hash, State = "analyzed", Comprehension = "not_verified", Application = "not_validated" }));
+                case "repository_learning_status":
+                    await services.GetRequiredService<RepositoryStudy>().StatusAsync(Guid.Parse(Value(arguments, "id")), ActiveTask.Checkpoint().Id, MauiToolPermissions.CloudDestination, cancellationToken).ConfigureAwait(false);
+                    return new(JsonSerializer.Serialize(await services.GetRequiredService<RepositoryAnalysis>().StatusAsync(Guid.Parse(Value(arguments, "id")), cancellationToken).ConfigureAwait(false)));
                 case "recent_task_context": return await RecentTaskContextAsync(working, cancellationToken).ConfigureAwait(false);
                 case "clone_repository":
                     var cloneRequest = Laura.Core.Execution.PublicRepositoryClone.Prepare(WindowsProcessLauncher.ResolveExecutable("git"), Value(arguments, "url"), ResolvePath(Value(arguments, "directory")), ActiveTask.Checkpoint().Id);

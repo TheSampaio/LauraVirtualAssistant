@@ -16,7 +16,7 @@ See [current agent execution architecture](docs/architecture/laura-agent-executi
 
 ## Conversation and execution
 
-Gemini Live is the sole conversation and voice provider. Enable it explicitly and configure a protected Google AI Studio key. Old Local, Auto and OpenAI settings migrate to Gemini with cloud conversation disabled until explicitly enabled. Former model downloads can be removed with the dedicated, confirmed cleanup action; unknown or shared files are preserved. Brain uses local FTS5 text search and graph retrieval without model inference or automatic cloud embedding uploads.
+Gemini Live is the default conversation and voice provider. Optional ChatGPT text inference uses official account authorization and eligible plan sharing, with no paid API-key fallback. Both use Laura's native Brain, task checkpoints and permission-guarded tools. See [ChatGPT and bounded task cycles](docs/architecture/laura-chatgpt.md). Old Local, Auto and OpenAI settings migrate to Gemini with cloud conversation disabled until explicitly enabled. Former model downloads can be removed with the dedicated, confirmed cleanup action; unknown or shared files are preserved. Brain uses local FTS5 text search and graph retrieval without model inference or automatic cloud embedding uploads.
 
 Security offers Ask for approval, Approve for me and Full access. Full access requires a native warning confirmation and a separate protected preference. Windows permissions, UAC, cancellation, execution limits and process-tree cleanup still apply. The automatic policy covers bounded workspace actions, verified GUI actions and literal installed-program version queries and structured anonymous public cloning into new directories in the assigned workspace; other effects require native approval.
 
@@ -27,9 +27,9 @@ The structured run_powershell tool uses the same owned native executor as run_pr
 Google AI Studio / Gemini Live is the default conversation and voice provider. Open the **gear button → Connection**, enable Gemini, paste your key and save. New keys are validated through Live setup before saving; a fixed bullet mask indicates the protected saved key without exposing it. Laura stores its copy encrypted with Windows DPAPI for the current Windows account; keys do not enter INI files, logs or release packages.
 
 
-Laura independently implements the same reviewed Live model identifiers and five native voices as the local reference: `gemini-3.1-flash-live-preview`, fallback `gemini-2.5-flash-native-audio-preview-12-2025`, and **Charon, Puck, Kore, Fenrir, Aoede**. Availability and quotas depend on the Google account. Conversation and speech use Gemini Live exclusively.
+Laura independently implements the same reviewed Live model identifiers and five native voices as the local reference: `gemini-3.1-flash-live-preview`, fallback `gemini-2.5-flash-native-audio-preview-12-2025`, and **Charon, Puck, Kore, Fenrir, Aoede**. Availability and quotas depend on the Google account. Voice continues to use Gemini Live; the optional ChatGPT provider handles compatible typed requests.
 
-Setup has six tabs: **Connection**, **Voice**, **Preferences**, **Applications**, **Security**, **MCP**, with a fixed Save button. Security preferences can be saved without a cloud key. Voice includes native Gemini voice preview, microphone/output devices, volume and the silence interval used for automatic speech-end detection. Conversation and UI language are independently configurable; **Português (Brasil)** explicitly instructs the model to use Brazilian pronunciation and vocabulary.
+Setup has seven tabs: **Connection**, **Voice**, **Preferences**, **Applications**, **Security**, **MCP**, **ChatGPT**, with a fixed Save button. Security preferences can be saved without a cloud key. Voice includes native Gemini voice preview, microphone/output devices, volume and the silence interval used for automatic speech-end detection. Conversation and UI language are independently configurable; **Português (Brasil)** explicitly instructs the model to use Brazilian pronunciation and vocabulary.
 
 ## Tasks and repository study
 

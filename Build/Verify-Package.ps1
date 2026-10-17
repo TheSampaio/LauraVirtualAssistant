@@ -8,7 +8,8 @@ $files = @(Get-ChildItem -LiteralPath $packageRoot -Recurse -File -Force)
 if ((Get-Item -LiteralPath $packageRoot -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Package root is redirected.' }
 if (Get-ChildItem -LiteralPath $packageRoot -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }) { throw 'Package contains a redirected entry.' }
 $required = @('Laura.exe', 'Laura.dll', 'Laura.runtimeconfig.json', 'coreclr.dll', 'hostfxr.dll', 'Microsoft.ui.xaml.dll', 'e_sqlite3.dll',
-    'LICENSE', 'THIRD_PARTY_NOTICES.md', 'licenses/dependency-inventory.json', 'licenses/VisualCpp-Runtime-LICENSE.txt')
+    'LICENSE', 'THIRD_PARTY_NOTICES.md', 'licenses/dependency-inventory.json', 'licenses/VisualCpp-Runtime-LICENSE.txt',
+    'Microsoft.IdentityModel.JsonWebTokens.dll', 'Microsoft.IdentityModel.Tokens.dll', 'licenses/Microsoft.IdentityModel-8.16.0-LICENSE.txt')
 foreach ($relative in $required) {
     if (!(Test-Path -LiteralPath (Join-Path $packageRoot $relative) -PathType Leaf)) { throw ('Required package dependency is missing: ' + $relative) }
 }
@@ -23,7 +24,7 @@ foreach ($relative in @('licenses/vc-runtime-inventory.json')) {
 $entries = @($files | Where-Object FullName -ne $manifestPath | ForEach-Object {
     $relative = $_.FullName.Substring($packageRoot.TrimEnd('\', '/').Length + 1).Replace('\', '/')
     if ($_.Extension -eq '.dll' -and $_.Name -match '^(OpenAI|OllamaSharp|LLamaSharp|Whisper|llama|ggml|cudart|cublas|onnxruntime|Microsoft\.ML\.OnnxRuntime|sherpa|System\.Speech)') { throw ('Retired inference dependency found: ' + $relative) }
-    if ($_.Extension -in @('.gguf', '.onnx', '.db', '.task', '.study') -or $_.Name -in @('settings.ini', 'api_keys.json', 'google-key.dat', 'openai-key.dat', 'full-access-consent.dat') -or $relative.StartsWith('.git/')) { throw 'Package unexpectedly contains model weights or private state.' }
+    if ($_.Extension -in @('.gguf', '.onnx', '.db', '.task', '.study') -or $_.Name -like 'chatgpt-credentials*' -or $_.Name -in @('settings.ini', 'api_keys.json', 'google-key.dat', 'openai-key.dat', 'full-access-consent.dat') -or $relative.StartsWith('.git/')) { throw 'Package unexpectedly contains model weights or private state.' }
     [ordered]@{ File = $relative; Size = $_.Length; Sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
 } | Sort-Object { $_.File })
 if ($CreateManifest) {

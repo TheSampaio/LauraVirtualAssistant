@@ -38,7 +38,7 @@ public static class PermissionPolicy
         {
             return action.Origin == "Native command executor" && action.AutomaticEligible && action.TaskId != Guid.Empty
                 && action.Resources.Length is 2 or 3 && workspaceRoot is not null && action.Resources.Skip(1).All(path => Within(path, workspaceRoot) && !SensitivePath(path))
-                && action.Destination is "" or "generativelanguage.googleapis.com";
+                && action.Destination is "" or "generativelanguage.googleapis.com" or "api.openai.com";
         }
         if (options.Mode != ApprovalMode.Automatic || Risk(action) > PermissionRisk.Moderate || action.Destination.Length != 0) { return false; }
         if (action.Operation == PermissionOperation.WindowManagement) { return action.AutomaticEligible; }

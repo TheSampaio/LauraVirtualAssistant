@@ -28,6 +28,8 @@ public sealed class AssistantEngine : IAssistantEngine
     private readonly IConversationMemory? _memory;
     private readonly WakeBriefing? _startupBriefing;
     private readonly CognitiveTasks? _tasks;
+    private readonly IAssistantTools? _taskTools;
+    private readonly IConversationEngine? _conversation;
     private CancellationTokenSource? _startupCancellation;
     private int _startupScheduled;
     private bool _operational;
@@ -67,6 +69,8 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <param name="memory">Optional unified persistent history.</param>
     /// <param name="startupBriefing">Optional verified weather, news, currency and reminder sources for the first opening in this process.</param>
     /// <param name="tasks">Optional private task checkpoint coordinator for explicit native resumption.</param>
+    /// <param name="taskTools">Optional shared native tools for evidence-based cycle continuation.</param>
+    /// <param name="conversation">Optional active provider used to classify a completed cycle.</param>
     public AssistantEngine(
         ISpeechSynthesizer synthesizer,
         ISkillDispatcher dispatcher,
@@ -76,7 +80,8 @@ public sealed class AssistantEngine : IAssistantEngine
         GreetingComposer greetingComposer,
         IClock clock,
         ILogger<AssistantEngine> logger,
-        IConversationMemory? memory = null, WakeBriefing? startupBriefing = null, CognitiveTasks? tasks = null)
+        IConversationMemory? memory = null, WakeBriefing? startupBriefing = null, CognitiveTasks? tasks = null,
+        IAssistantTools? taskTools = null, IConversationEngine? conversation = null)
     {
         ArgumentNullException.ThrowIfNull(synthesizer);
         ArgumentNullException.ThrowIfNull(dispatcher);
@@ -88,6 +93,7 @@ public sealed class AssistantEngine : IAssistantEngine
         ArgumentNullException.ThrowIfNull(logger);
 
         _synthesizer = synthesizer;
+        _taskTools = taskTools; _conversation = conversation;
         _dispatcher = dispatcher;
         _settings = settings;
         _localizer = localizer;
@@ -329,13 +335,15 @@ public sealed class AssistantEngine : IAssistantEngine
                     SetState(AssistantState.Ready);
                     break;
                 case CommandSubmitted submitted:
+                    if (submitted.Automatic && _tasks?.Current(submitted.ContinuingTaskTurnId)?.Rounds is { CanContinue: false }) { break; }
                     Guid turnId = Guid.NewGuid();
                     _activeTurnId = turnId;
-                    PublishConversation(submitted.MessageSource, submitted.DisplayText ?? submitted.Text, turnId);
+                    if (!submitted.Automatic) { PublishConversation(submitted.MessageSource, submitted.DisplayText ?? submitted.Text, turnId); }
                     if (submitted.ContinuingTaskTurnId != Guid.Empty && _tasks?.Current(submitted.ContinuingTaskTurnId) is { } resumed)
                     { _memory?.SetWorkingContext(new ConversationWorkingContext(resumed.Id, resumed.Objective)); }
                     await ExecuteCommandAsync(submitted.Text,
                         submitted.DisplayText is null ? SkillRequestSource.Text : SkillRequestSource.Context, request.Token, submitted.Image, turnId, submitted.ContinuingTaskTurnId).ConfigureAwait(false);
+                    await ScheduleContinuationAsync(submitted.ContinuingTaskTurnId != Guid.Empty ? submitted.ContinuingTaskTurnId : turnId, request.Token).ConfigureAwait(false);
                     break;
 
                 case SpeechRequested requested:
@@ -396,6 +404,25 @@ public sealed class AssistantEngine : IAssistantEngine
             _activeTurnId = Guid.Empty;
             message.Completion?.TrySetResult();
         }
+    }
+
+    /// <summary>Queues one verified remaining stage at the tail so new owner messages can run between bounded model rounds.</summary>
+    private async Task ScheduleContinuationAsync(Guid taskId, CancellationToken token)
+    {
+        if (_tasks is null || _taskTools is null || _conversation is null || _tasks.Current(taskId) is not { Rounds: { } rounds } checkpoint
+            || rounds.Paused || rounds.Canceled || checkpoint.HasUncertainEffect || checkpoint.State == "blocked"
+            || _conversation.LastFailure is { Kind: not ConversationFailureKind.Timeout }) { return; }
+        using var recipient = new ProviderExecutionScope(rounds.Provider);
+        if (!rounds.CanContinue)
+        {
+            string? remaining = _conversation.PendingRound(taskId) ?? await _tasks.InspectAsync(taskId, task => task.PendingContinuation(), token).ConfigureAwait(false);
+            await _tasks.SetContinuationAsync(taskId, remaining is not null, token).ConfigureAwait(false); return;
+        }
+        string? pending = _conversation.PendingRound(taskId) ?? await _taskTools.PendingTaskContinuationAsync(token).ConfigureAwait(false);
+        if (!await _tasks.SetContinuationAsync(taskId, pending is not null, token).ConfigureAwait(false) || pending is null) { return; }
+        var next = new CommandSubmitted(pending) { ContinuingTaskTurnId = taskId, Automatic = true, Generation = Volatile.Read(ref _conversationGeneration) };
+        bool queued = _messages.Writer.TryWrite(next);
+        Diagnostics.LauraDiagnostics.Record("task.continuation", outcome: queued ? "queued" : "queue_full_paused", taskId: taskId);
     }
 
     /// <summary>
@@ -616,6 +643,8 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <summary>Text command sent by the interface.</summary>
     private sealed record CommandSubmitted(string Text) : EngineMessage
     {
+        /// <summary>Gets whether native remaining work, rather than another owner message, scheduled this cycle.</summary>
+        public bool Automatic { get; init; }
         /// <summary>Gets a checkpoint selected by the native resume action, never parsed from model text.</summary>
         public Guid ContinuingTaskTurnId { get; init; }
         /// <summary>Gets the trusted capture origin selected by the native caller.</summary>

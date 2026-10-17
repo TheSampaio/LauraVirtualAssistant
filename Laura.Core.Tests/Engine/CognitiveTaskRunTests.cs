@@ -8,6 +8,16 @@ namespace Laura.Core.Tests.Engine;
 public sealed class CognitiveTaskRunTests
 {
     private static readonly HashSet<string> Tools = ["recall_memory", "study_github_repository", "list_brain_skills", "propose_brain_skill", "plan_task", "task_status", "list_capabilities", "run_program"];
+    /// <summary>Reading study coverage cannot create a background acquisition objective or continue unrelated work.</summary>
+    [Fact]
+    public async Task StatusQuestionCannotStartAutomaticAcquisition()
+    {
+        var tools = new HashSet<string>(Tools) { "repository_study_status", "continue_repository_study" };
+        var task = new CognitiveTaskRun("Report the existing study coverage.", tools);
+        var progress = new AssistantToolResult(JsonSerializer.Serialize(new { Id = Guid.NewGuid(), PendingFiles = 3000, Cursor = "current", Documents = Array.Empty<object>(), Failure = "" }));
+        await task.ExecuteAsync("repository_study_status", JsonSerializer.SerializeToElement(new { }), _ => Task.FromResult(progress), CancellationToken.None);
+        Assert.Null(task.PendingContinuation()); Assert.Null(task.NextSourceOperation()); Assert.Empty(task.Checkpoint().RepositoryStudies!);
+    }
 
     /// <summary>Keeps adapter refusals consistent in returned model results and durable task receipts, even when an adapter omitted its status label.</summary>
     [Fact]

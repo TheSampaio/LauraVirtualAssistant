@@ -13,6 +13,7 @@ internal static class MauiToolPermissions
         string action = Text(args, "action");
         PermissionOperation operation = name switch
         {
+            "record_repository_analysis" or "repository_learning_status" => PermissionOperation.Internal,
             "clone_repository" or "authorize_workspace" or "inspect_brain_maintenance" or "study_github_repository" or "start_repository_study" or "continue_repository_study" or "repository_study_status" or "list_capabilities" or "plan_task" or "task_status" or "recent_task_context" or "assess_source_learning" => PermissionOperation.Internal, // specialized adapters own effect approvals
             "list_mcp_servers" or "connect_mcp_server" or "list_mcp_tools" or "call_mcp_tool" or "disconnect_mcp_server" => PermissionOperation.Internal, // the native MCP runtime gates the exact external effect
             // These dispatch through separately guarded adapters or are internal metadata operations.
@@ -54,7 +55,7 @@ internal static class MauiToolPermissions
         // Literal argument data is shown for processes/input only; it is never persisted or read aloud.
         string detail = operation switch
         {
-            PermissionOperation.Process => Text(args, "executable") + "\n" + Text(args, "arguments") + "\n" + Text(args, "directory"),
+            PermissionOperation.Process => Text(args, "executable") + "\n" + JsonSerializer.Serialize(Laura.Core.Execution.StructuredProcessParameters.Arguments(args)) + "\n" + Text(args, "directory"),
             PermissionOperation.DesktopInput => Text(args, "window") + "\n" + args.GetRawText(),
             PermissionOperation.FileWrite => Text(args, "content"),
             _ when name is "save_memory" or "forget_memory" => Text(args, "key") + "\n" + Text(args, "value"),

@@ -53,17 +53,20 @@ public sealed class SetupPage : ContentPage
     private readonly ScreenshotSettingsView _screenshots;
     private readonly WindowsFullAccessPreference _fullAccessPreference;
     private readonly LegacyProviderCleanup _legacyCleanup;
+    private readonly ChatGptSettingsView _chatGpt;
 
     /// <summary>Creates independent tabs with a fixed save footer and no offline provider controls.</summary>
     public SetupPage(ISettingsService settings, IApiKeyStore keys, GeminiLiveClient live, IUiLocalizer ui,
         IStartupRegistration startup, ISpeechSynthesizer speech, WindowsApplicationCatalog applications, ILocalizer conversation, Laura.App.Platforms.Windows.WindowsApprovalCenter approvals, ScreenshotCoordinator screenshots,
-        Laura.Core.Mcp.McpServerStore mcpStore, Laura.Core.Mcp.McpRuntime mcp, ConversationProviderRouter router, IProviderModelCatalog modelCatalogue, WindowsFullAccessPreference fullAccessPreference, LegacyProviderCleanup legacyCleanup)
+        Laura.Core.Mcp.McpServerStore mcpStore, Laura.Core.Mcp.McpRuntime mcp, ConversationProviderRouter router, IProviderModelCatalog modelCatalogue, WindowsFullAccessPreference fullAccessPreference, LegacyProviderCleanup legacyCleanup,
+        IChatGptConnection chatGpt)
     {
         using var performance = PerformanceTrace.Measure("settings.construct");
         _settings = settings; _keys = keys; _live = live; _ui = ui; _startup = startup; _speech = speech; _applications = applications; _conversation = conversation;
         _router = router;
         _fullAccessPreference = fullAccessPreference;
         _legacyCleanup = legacyCleanup;
+        _chatGpt = new ChatGptSettingsView(chatGpt, ui, settings.Current);
         _model = new ProviderModelPicker(modelCatalogue, ui, "gemini", () => string.IsNullOrWhiteSpace(_key.Text) ? _keys.Read() : _key.Text.Trim());
         _createdCulture = ui.Culture.Name;
         LauraSettings current = settings.Current;
@@ -106,11 +109,11 @@ public sealed class SetupPage : ContentPage
         _revealKey.IsEnabled = false;
         _permissions = new(settings, ui, approvals);
         _screenshots = new(settings, ui, screenshots);
-        _pages = [ConnectionPanel(), VoicePanel(), PreferencesPanel(), ApplicationsPanel(), Panel(_permissions), Panel(new McpSettingsView(mcpStore, mcp, ui))];
-        string[] names = ["ui.maui.connectionTab", "ui.tab.voice", "ui.maui.preferencesTab", "ui.maui.appsTab", "ui.permissions.tab", "ui.mcp.title"];
-        string[] icons = ["link", "mic", "settings_2", "layout_grid", "shield_check", "network"];
+        _pages = [ConnectionPanel(), VoicePanel(), PreferencesPanel(), ApplicationsPanel(), Panel(_permissions), Panel(new McpSettingsView(mcpStore, mcp, ui)), Panel(_chatGpt)];
+        string[] names = ["ui.maui.connectionTab", "ui.tab.voice", "ui.maui.preferencesTab", "ui.maui.appsTab", "ui.permissions.tab", "ui.mcp.title", "ui.chatgpt.tab"];
+        string[] icons = ["link", "mic", "settings_2", "layout_grid", "shield_check", "network", "brain"];
         _tabs = names.Select((name, index) => ActionButton(name, icons[index], () => { SelectTab(index); return Task.CompletedTask; })).ToArray();
-        _tabLayout = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star)], ColumnSpacing = 8, RowSpacing = 8 };
+        _tabLayout = new Grid { ColumnDefinitions = new ColumnDefinitionCollection(Enumerable.Range(0, _tabs.Length).Select(_ => new ColumnDefinition(GridLength.Star)).ToArray()), ColumnSpacing = 8, RowSpacing = 8 };
         for (int index = 0; index < _tabs.Length; index++) { _tabLayout.Add(_tabs[index], index); }
         _result.IsVisible = false; _result.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(Label.Text)) { _result.IsVisible = !string.IsNullOrEmpty(_result.Text); } };
         var footer = Theme.Stack(_result, ActionButton("ui.maui.save", "save", async () => { await SaveAsync().ConfigureAwait(true); }, true));
@@ -132,6 +135,7 @@ public sealed class SetupPage : ContentPage
     public void ReloadFromSettings()
     {
         var current = _settings.Current;
+        _chatGpt.Reload(current);
         _cloudEnabled.IsToggled = current.GenerativeAi.Enabled;
         _key.Text = ""; _key.IsPassword = true; _revealKey.Source = Theme.IconSource("eye");
         Theme.DescribeAction(_revealKey, _ui.Get("ui.settings.revealKey")); _result.Text = "";
@@ -305,9 +309,10 @@ public sealed class SetupPage : ContentPage
         bool compact = Width < 900;
         if (_compact == compact) { return; }
         _compact = compact;
-        _tabLayout.ColumnDefinitions = compact ? [new(GridLength.Star), new(GridLength.Star), new(GridLength.Star)] : [new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star), new(GridLength.Star)];
-        _tabLayout.RowDefinitions = compact ? [new(GridLength.Auto), new(GridLength.Auto)] : [new(GridLength.Auto)];
-        for (int index = 0; index < _tabs.Length; index++) { Grid.SetColumn(_tabs[index], compact ? index % 3 : index); Grid.SetRow(_tabs[index], compact ? index / 3 : 0); }
+        int columns = compact ? 3 : _tabs.Length;
+        _tabLayout.ColumnDefinitions = new ColumnDefinitionCollection(Enumerable.Range(0, columns).Select(_ => new ColumnDefinition(GridLength.Star)).ToArray());
+        _tabLayout.RowDefinitions = new RowDefinitionCollection(Enumerable.Range(0, (_tabs.Length + columns - 1) / columns).Select(_ => new RowDefinition(GridLength.Auto)).ToArray());
+        for (int index = 0; index < _tabs.Length; index++) { Grid.SetColumn(_tabs[index], index % columns); Grid.SetRow(_tabs[index], index / columns); }
         foreach (var (row, control, toggle) in _responsiveRows)
         {
             row.ColumnDefinitions = compact || toggle ? [new(GridLength.Auto), new(GridLength.Star), new(GridLength.Auto)] : [new(GridLength.Auto), new(new GridLength(250)), new(GridLength.Star)];
@@ -432,6 +437,7 @@ public sealed class SetupPage : ContentPage
         }
         LauraSettings updated = _settings.Current with
         {
+            ChatGpt = _chatGpt.Options, ProviderSelection = _chatGpt.Selection,
             Culture = _culture.SelectedItem as string ?? "pt-BR", UiCulture = _uiCulture.SelectedItem as string ?? "pt-BR",
             UserNickname = _nickname.Text ?? "", MicrophoneMuted = _muted.IsToggled, RememberConversations = _remember.IsToggled,
             ClapWakeEnabled = _clapWake.IsToggled, ClapWakeSensitivity = (int)_clapSensitivity.Value,

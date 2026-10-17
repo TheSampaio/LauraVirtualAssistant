@@ -14,6 +14,11 @@ public sealed record ConversationFailure(ConversationFailureKind Kind, bool Effe
         ConversationFailureKind kind = code switch
         {
             "invalid_api_key" or "API_KEY_INVALID" or "API_KEY_EXPIRED" => ConversationFailureKind.Authentication,
+            "subscription_sharing_usage_limit_exceeded" => ConversationFailureKind.UsageLimit,
+            "subscription_sharing_user_not_eligible" or "chatpass_v2_scope_not_authorized" or "chatpass_v2_invalid_authorization_context" => ConversationFailureKind.AccessDenied,
+            "subscription_sharing_invalid_user" => ConversationFailureKind.Authentication,
+            "subscription_sharing_usage_unavailable" or "subscription_sharing_user_unavailable" => ConversationFailureKind.Unavailable,
+            "subscription_sharing_unsupported_capability" => ConversationFailureKind.UnsupportedInput,
             "insufficient_quota" or "billing_hard_limit_reached" or "organization_usage_limit_exceeded" or "billing_quota_exceeded" => ConversationFailureKind.UsageLimit,
             "rate_limit_exceeded" or "slow_down" => ConversationFailureKind.CapacityLimit,
             "model_not_found" => ConversationFailureKind.ModelUnavailable,

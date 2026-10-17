@@ -69,6 +69,8 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
             ISettingsService settings = services.GetRequiredService<ISettingsService>();
             services.GetRequiredService<RuntimeDiagnosticContext>();
             using (PerformanceTrace.Measure("startup.settings")) { await settings.LoadAsync().ConfigureAwait(true); }
+            try { await services.GetRequiredService<IChatGptConnection>().ReadAsync().ConfigureAwait(true); }
+            catch (Laura.Core.ChatGpt.ChatGptConnectionException) { }
             if (settings.Current.Permissions.Mode == Laura.Core.Permissions.ApprovalMode.FullAccess
                 && !services.GetRequiredService<Laura.Platform.Windows.System.WindowsFullAccessPreference>().IsConfirmed())
             {

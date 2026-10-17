@@ -20,6 +20,14 @@ public static class MauiSmokeRunner
         VerifyReactorTransitions();
         try
         {
+            if (Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal) && Environment.GetCommandLineArgs().Contains("--rea-application-smoke", StringComparer.Ordinal))
+            { await ChatGptApplicationSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal) && Environment.GetCommandLineArgs().Contains("--rea-continuation-smoke", StringComparer.Ordinal))
+            { await ChatGptReaSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal))
+            { await ChatGptLiveSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--chatgpt-ui-smoke", StringComparer.Ordinal))
+            { await ChatGptUiSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--agent-rework-smoke", StringComparer.Ordinal))
             { await AgentReworkSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--command-jobs-smoke", StringComparer.Ordinal))

@@ -5,7 +5,8 @@ namespace Laura.Core.Engine;
 /// <summary>Private durable task state, with result hashes rather than document bodies, command output or arguments.</summary>
 public sealed record CognitiveTaskCheckpoint(Guid Id, string Objective, DateTimeOffset Created, DateTimeOffset Updated,
     string State, int Calls, int MaximumCalls, long ElapsedMilliseconds, long MaximumMilliseconds,
-    IReadOnlyList<CognitiveTaskStep> Steps, IReadOnlyList<CognitiveOperationReceipt> Operations, IReadOnlyList<Guid>? RepositoryStudies = null, string Blocker = "", IReadOnlyList<Guid>? CommandJobs = null)
+    IReadOnlyList<CognitiveTaskStep> Steps, IReadOnlyList<CognitiveOperationReceipt> Operations, IReadOnlyList<Guid>? RepositoryStudies = null, string Blocker = "", IReadOnlyList<Guid>? CommandJobs = null,
+    CognitiveRoundProgress? Rounds = null)
 {
     /// <summary>Gets whether an operation might have occurred without a committed result.</summary>
     public bool HasUncertainEffect => Operations.Any(operation => operation.Status is "started" or "pending" && operation.MayHaveEffects);
@@ -13,6 +14,7 @@ public sealed record CognitiveTaskCheckpoint(Guid Id, string Objective, DateTime
     /// <summary>Validates checkpoint bounds and identities before restoring data; no stored name grants a capability.</summary>
     public CognitiveTaskCheckpoint Validated()
     {
+        Rounds?.Validated();
         if (Id == Guid.Empty || string.IsNullOrWhiteSpace(Objective) || Objective.Length > 4000 || Calls is < 0 or > 256
             || MaximumCalls is < 1 or > 256 || Calls > MaximumCalls || ElapsedMilliseconds < 0 || MaximumMilliseconds is < 1 or > 3600000
             || Steps is null || Operations is null || Steps.Count > 16 || Operations.Count > 256 || Operations.Count > Calls

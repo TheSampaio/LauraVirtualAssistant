@@ -19,7 +19,10 @@ public sealed partial class BrainSkills
             BrainNote? actual = brain.Snapshot.Notes.FirstOrDefault(note => note.IsKnowledge && note.Id == source.Id && note.Hash == source.Hash);
             if (actual is null || brain.Snapshot.Issues.Any(issue => issue.Path == actual.Path && issue.Code == "conflicting_id")
                 || source.Evidence.Length < 8 || !actual.Body.Contains(source.Evidence, StringComparison.Ordinal))
-            { throw new IOException("Procedural evidence must cite an exact current knowledge version and literal source text."); }
+            {
+                var error = new IOException("Procedural evidence must cite an exact current knowledge version and literal source text.");
+                error.Data[nameof(BrainSkillContract)] = BrainSkillContract.CurrentLiteralSource; throw error;
+            }
         }
         foreach (BrainSkillReference component in definition.Components)
         {
@@ -91,19 +94,22 @@ public sealed partial class BrainSkills
     {
         if (string.IsNullOrWhiteSpace(name) || name.Length > 100 || string.IsNullOrWhiteSpace(description) || description.Length > 240
             || definition.Kind is not ("guidance" or "native" or "mcp" or "code" or "composition") || string.IsNullOrWhiteSpace(definition.Purpose) || definition.Purpose.Length > 1000)
-        { throw new ArgumentException("A procedure requires bounded identity, description, purpose and a supported kind."); }
+        { throw ProposalContract(BrainSkillContract.Identity, "A procedure requires bounded identity, description, purpose and a supported kind."); }
         foreach ((string fieldName, IReadOnlyList<string>? list) in new[] { ("useWhen", definition.UseWhen), ("prerequisites", definition.Prerequisites),
             ("dependencies", definition.Dependencies), ("tools", definition.Tools), ("permissions", definition.Permissions), ("steps", definition.Steps),
             ("limitations", definition.Limitations), ("successCriteria", definition.SuccessCriteria), ("failureBehavior", definition.FailureBehavior), ("capabilities", definition.Capabilities) })
-        { if (list is null || list.Count > 16 || list.Any(value => string.IsNullOrWhiteSpace(value) || value.Length > 1000)) { throw new ArgumentException("Procedure field '" + fieldName + "' must be an explicit array with at most 16 bounded non-empty values. Empty arrays are allowed for optional requirements."); } }
+        { if (list is null || list.Count > 16 || list.Any(value => string.IsNullOrWhiteSpace(value) || value.Length > 1000)) { throw ProposalContract(BrainSkillContract.StructuredLists, "Procedure field '" + fieldName + "' must be an explicit array with at most 16 bounded non-empty values. Empty arrays are allowed for optional requirements."); } }
         if (definition.Kind == "guidance" && (definition.Tools.Count > 0 || definition.Dependencies.Count > 0 || definition.Components?.Count > 0))
-        { throw new ArgumentException("Guidance-only proposals require empty tools, dependencies and components. Use native, mcp or code for external procedures; missing dependencies block activation, not draft creation."); }
+        { throw ProposalContract(BrainSkillContract.GuidanceKind, "Guidance-only proposals require empty tools, dependencies and components. Use native, mcp or code for external procedures; missing dependencies block activation, not draft creation."); }
         if (definition.UseWhen.Count == 0 || definition.Steps.Count == 0 || definition.Limitations.Count == 0 || definition.SuccessCriteria.Count == 0 || definition.FailureBehavior.Count == 0
             || definition.Capabilities.Count == 0 || definition.Sources is null || definition.Sources.Count is < 1 or > 8 || definition.Components is null || definition.Components.Count > 4
             || definition.Sources.Concat(definition.Components).Any(source => source is null || string.IsNullOrEmpty(source.Id) || source.Id.Length > 100
                 || source.Hash is not { Length: 64 } || source.Evidence is null || source.Evidence.Length > 1000)
             || (definition.Kind == "guidance" && (definition.Tools.Count > 0 || definition.Dependencies.Count > 0 || definition.Components.Count > 0))
             || (definition.Kind == "composition" && definition.Components.Count == 0))
-        { throw new ArgumentException("A procedure requires bounded evidence, steps, capabilities, limits and verifiable outcome criteria."); }
+        { throw ProposalContract(BrainSkillContract.EvidenceAndOutcomes, "A procedure requires bounded evidence, steps, capabilities, limits and verifiable outcome criteria."); }
     }
+    /// <summary>Attaches only a closed validation category while preserving the existing exception contract.</summary>
+    private static ArgumentException ProposalContract(BrainSkillContract contract, string message)
+    { var error = new ArgumentException(message); error.Data[nameof(BrainSkillContract)] = contract; return error; }
 }

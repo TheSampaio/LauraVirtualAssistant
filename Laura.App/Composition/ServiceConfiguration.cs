@@ -112,6 +112,7 @@ public static class ServiceConfiguration
         services.AddSingleton<IRepositoryStudyStore>(provider => new FileRepositoryStudyStore(
             Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "RepositoryStudies"), provider.GetRequiredService<IPrivateDataProtector>()));
         services.AddSingleton<RepositoryStudy>();
+        services.AddSingleton<RepositoryAnalysis>();
         services.AddSingleton(provider => new Laura.Core.Mcp.McpServerStore(Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Security", "mcp-servers.json")));
         services.AddSingleton(provider => new Laura.Core.Mcp.McpRuntime(provider.GetRequiredService<Laura.Core.Mcp.McpServerStore>(), provider.GetRequiredService<PermissionManager>(), WindowsMcpSession.ConnectAsync));
         services.AddSingleton(provider => new BrainSkills(provider.GetRequiredService<BrainService>(), provider.GetRequiredService<ISettingsService>(),
@@ -127,6 +128,18 @@ public static class ServiceConfiguration
         string credentialDirectory = storageDirectory is not null && (Environment.GetCommandLineArgs().Contains("--permissions-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--screenshot-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--brain-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--agent-live-smoke", StringComparer.Ordinal))
             ? Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())! : Path.GetDirectoryName(settingsPath)!;
         services.AddSingleton<IApiKeyStore>(_ => new ProtectedApiKeyStore(credentialDirectory));
+        string chatGptDirectory = storageDirectory is not null && Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal)
+            ? Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())! : Path.GetDirectoryName(settingsPath)!;
+        services.AddSingleton(provider => new ChatGptCredentialStore(Path.Combine(chatGptDirectory, "Credentials"),
+            provider.GetRequiredService<IPrivateDataProtector>()));
+        services.AddSingleton<IChatGptBrowserAuthorization, ChatGptBrowserAuthorization>();
+        services.AddSingleton(_ => new ChatGptIdTokenValidator(new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan }));
+        services.AddSingleton(provider => new ChatGptConnection(
+            new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan },
+            provider.GetRequiredService<ChatGptCredentialStore>(), provider.GetRequiredService<IChatGptBrowserAuthorization>(), provider.GetRequiredService<ChatGptIdTokenValidator>()));
+        services.AddSingleton<IChatGptConnection>(provider => provider.GetRequiredService<ChatGptConnection>());
+        services.AddSingleton<IChatGptInference>(provider => provider.GetRequiredService<ChatGptConnection>());
+        services.AddSingleton<ChatGptConversationEngine>();
         services.AddSingleton(_ => new UserFileWorkspace(Path.Combine(Path.GetDirectoryName(settingsPath)!, "Workspace")));
 
         services.AddSingleton<ILocalizer>(provider => new JsonLocalizer(
@@ -150,7 +163,7 @@ public static class ServiceConfiguration
         services.AddSingleton<IBriefingContributor, ReminderBriefingContributor>();
         services.AddSingleton<ClapWakeCoordinator>();
         services.AddSingleton<MarkLvConfigurationImporter>();
-        services.AddSingleton(provider => new ConversationProviderRouter(provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<GeminiLiveClient>()));
+        services.AddSingleton(provider => new ConversationProviderRouter(provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<GeminiLiveClient>(), provider.GetRequiredService<ChatGptConversationEngine>()));
         services.AddSingleton<IConversationEngine>(provider => provider.GetRequiredService<ConversationProviderRouter>());
         services.AddSingleton<WindowsApplicationCatalog>();
         services.AddSingleton<WindowsResourceMonitor>();

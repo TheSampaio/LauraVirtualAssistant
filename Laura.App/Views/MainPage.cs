@@ -20,6 +20,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     private readonly ISettingsService _settings;
     private readonly IUiLocalizer _ui;
     private readonly GeminiLiveClient _live;
+    private readonly ChatGptConversationEngine _chatGpt;
     private readonly AssistantCoreDrawable _core = new();
     private readonly GraphicsView _reactor;
     private readonly Grid _body = new() { ColumnSpacing = 16, RowSpacing = 16 };
@@ -89,6 +90,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     {
         using var performance = PerformanceTrace.Measure("hud.construct");
         _services = services; _engine = engine; _settings = settings; _ui = ui; _live = live; _resources = resources; _clapListener = clapListener;
+        _chatGpt = services.GetRequiredService<ChatGptConversationEngine>();
         _conversations = services.GetRequiredService<ConversationActions>();
         _returnLatest = Theme.IconButton("chevron_down", FollowLatestAsync);
         _returnLatest.IsVisible = false; _returnLatestHost.Add(_returnLatest);
@@ -168,6 +170,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
         engine.StateChanged += (_, state) => MainThread.BeginInvokeOnMainThread(() => SetState(state.ToString()));
         live.MessageReceived += ReceiveMessage;
         live.StreamUpdated += ReceiveStream;
+        _chatGpt.StreamUpdated += ReceiveStream;
         live.Interrupted += StreamInterrupted;
         live.StatusChanged += (_, state) => MainThread.BeginInvokeOnMainThread(() => SetState(state));
         settings.Changed += (_, _) => MainThread.BeginInvokeOnMainThread(Reload);
@@ -540,6 +543,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     public void Dispose()
     {
         _engine.ConversationMessageReceived -= ReceiveMessage; _live.MessageReceived -= ReceiveMessage; _live.StreamUpdated -= ReceiveStream; _live.Interrupted -= StreamInterrupted;
+        _chatGpt.StreamUpdated -= ReceiveStream;
         _conversationScroll.Dispose(); _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed -= OnApprovalsChanged; _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this);
     }
 }

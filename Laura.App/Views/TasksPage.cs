@@ -17,6 +17,7 @@ public sealed class TasksPage : ContentPage
     private readonly ConversationProviderRouter _router;
     private readonly IUiLocalizer _ui;
     private readonly RepositoryStudy _studies;
+    private readonly RepositoryAnalysis _analysis;
     private readonly CommandJobs _commandJobs;
     private readonly CollectionView _list = new() { SelectionMode = SelectionMode.None };
     private readonly Label _status = Theme.Label("", 12, Theme.Muted);
@@ -24,9 +25,9 @@ public sealed class TasksPage : ContentPage
     private bool _visible;
 
     /// <summary>Creates the localized task workspace. Args: tasks: Durable coordinator; engine: Existing command queue; router: Actual provider; ui: Interface resources.</summary>
-    public TasksPage(CognitiveTasks tasks, IAssistantEngine engine, ConversationProviderRouter router, IUiLocalizer ui, RepositoryStudy studies, CommandJobs commandJobs)
+    public TasksPage(CognitiveTasks tasks, IAssistantEngine engine, ConversationProviderRouter router, IUiLocalizer ui, RepositoryStudy studies, CommandJobs commandJobs, RepositoryAnalysis analysis)
     {
-        _tasks = tasks; _engine = engine; _router = router; _ui = ui; _studies = studies; _commandJobs = commandJobs; Title = T("title"); BackgroundColor = Theme.Background; NavigationPage.SetHasNavigationBar(this, false);
+        _tasks = tasks; _engine = engine; _router = router; _ui = ui; _studies = studies; _analysis = analysis; _commandJobs = commandJobs; Title = T("title"); BackgroundColor = Theme.Background; NavigationPage.SetHasNavigationBar(this, false);
         var heading = Theme.PageHeading(Title, T("subtitle"), "activity", ui.Get("ui.navigation.backToLaura"), () => NavigationMotion.PopAsync(Navigation));
         var root = new Grid { Padding = 24, RowDefinitions = [new(GridLength.Auto), new(GridLength.Auto), new(GridLength.Star)], RowSpacing = 16 };
         root.Add(heading); root.Add(_status, 0, 1); root.Add(_list, 0, 2); Content = root;
@@ -52,14 +53,23 @@ public sealed class TasksPage : ContentPage
         var details = Theme.Stack(Theme.Label(task.Objective, 16), Theme.Label(state + " · " + string.Format(System.Globalization.CultureInfo.CurrentCulture, T("calls"), task.Calls, task.MaximumCalls), 12, Theme.Muted),
             Theme.Label(task.Updated.ToLocalTime().ToString("g", _ui.Culture), 11, Theme.Muted));
         foreach (var step in task.Steps) { details.Add(Theme.Label(step.Number + ". " + step.Tool + " · " + T("state." + step.State), 12)); }
+        if (task.Rounds is { } rounds)
+        {
+            details.Add(Theme.Label(string.Format(_ui.Culture, T("cycles"), rounds.Cycles, rounds.MaximumCycles, rounds.ProviderCalls, rounds.MaximumProviderCalls), 12, Theme.Muted));
+            details.Add(Theme.Label(string.Format(_ui.Culture, T("provider"), rounds.Provider.Length > 0 ? rounds.Provider : T("unknown"), rounds.Model.Length > 0 ? rounds.Model : T("unknown")), 12, Theme.Muted));
+            details.Add(Theme.Label(string.Format(_ui.Culture, T("activeBudget"), rounds.ActiveMilliseconds / 1000, rounds.MaximumActiveMilliseconds / 1000, rounds.Recoveries, rounds.MaximumRecoveries), 12, Theme.Muted));
+            if (rounds.Paused) { details.Add(Theme.Label(T("ownerPaused"), 12)); }
+            if (rounds.Canceled) { details.Add(Theme.Label(T("ownerCanceled"), 12)); }
+            if (rounds.NeedsContinuation && !rounds.CanContinue) { details.Add(Theme.Label(T("budgetPaused"), 12)); }
+        }
         if (task.Operations.Count > 0)
         { var latest = task.Operations[^1]; details.Add(Theme.Label(latest.Tool + " · " + T("state." + latest.Status), 12, Theme.Muted)); }
         var resume = Theme.ActionButton(T("resume"), "play", () => ResumeAsync(task));
-        resume.IsEnabled = (task.State is "paused" or "working" or "operations_completed" || task.State == "blocked" && task.Blocker is "budget" or "cancelled") && !task.HasUncertainEffect
-            && task.Calls < 256 && task.ElapsedMilliseconds < 3600000;
+        resume.IsEnabled = (task.State is "paused" or "working" or "operations_completed" || task.State == "blocked" && task.Blocker is "budget" or "cancelled" or "repetition") && !task.HasUncertainEffect
+            && task.Calls < 256 && task.ElapsedMilliseconds < 3600000 && task.Rounds?.Outcome != "running";
         var actions = new HorizontalStackLayout { Spacing = 8 };
-        var stop = Theme.ActionButton(T("cancel"), "square", () => { _tasks.Cancel(task.Id); return Task.CompletedTask; }); stop.AutomationId = "StopTask" + task.Id.ToString("N");
-        actions.Add(resume); actions.Add(stop);
+        var stop = Theme.ActionButton(T("cancel"), "square", () => _tasks.PauseAsync(task.Id, cancel: true)); stop.AutomationId = "StopTask" + task.Id.ToString("N");
+        actions.Add(resume); actions.Add(Theme.ActionButton(T("pause"), "pause", () => _tasks.PauseAsync(task.Id))); actions.Add(stop);
         actions.Add(Theme.ActionButton(T("remove"), "trash", () => RemoveAsync(task.Id))); details.Add(actions);
         foreach (Guid study in task.RepositoryStudies ?? [])
         {
@@ -104,9 +114,12 @@ public sealed class TasksPage : ContentPage
         try
         {
             var progress = await Task.Run(() => _studies.ReadPrivateProgressAsync(id)).ConfigureAwait(true);
+            var learning = await Task.Run(() => _analysis.StatusAsync(id)).ConfigureAwait(true);
             coverage.Text = string.Format(_ui.Culture, T("studyCoverage"), progress.AcquiredFiles, progress.InventoryFiles, progress.PendingFiles, progress.ExcludedFiles)
                 + (progress.PendingInventoryDirectories > 0 ? " · " + string.Format(_ui.Culture, T("studyDirectories"), progress.PendingInventoryDirectories) : "")
-                + (progress.InventoryTruncated ? " · " + T("studyTruncated") : "");
+                + (progress.InventoryTruncated ? " · " + T("studyTruncated") : "")
+                + "\n" + string.Format(_ui.Culture, T("learningStages"), learning.Indexed, learning.AnalyzedModules.Count, learning.AnalyzedModules.Count(module => module.CurrentEvidence))
+                + (learning.AnalyzedModules.Count == 0 ? "" : "\n" + string.Join(" · ", learning.AnalyzedModules.Select(module => module.Module)));
         }
         catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or System.Security.Cryptography.CryptographicException)
         { coverage.Text = T("loadFailed") + " · " + error.GetType().Name; }

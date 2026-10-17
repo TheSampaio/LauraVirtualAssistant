@@ -20,6 +20,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     private const string Endpoint = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
     private readonly ISettingsService _settings;
     private readonly IApiKeyStore _keys;
+    private InferenceDeadline? _textDeadline;
     private readonly IConversationMemory _memory;
     private readonly IReadOnlyList<ISkill> _skills;
     private readonly IShellController _shell;
@@ -184,7 +185,8 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
         Session? requestSession = null;
         LastFailure = null;
         long initialDispatches = Interlocked.Read(ref _toolDispatches);
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var timeout = new InferenceDeadline(_settings.Current.GenerativeAi.Timeout, cancellationToken);
+        Volatile.Write(ref _textDeadline, timeout);
         try
         {
             using var provider = new ProviderExecutionScope("gemini");
@@ -213,7 +215,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
             session.HasHistory = true;
             timeout.CancelAfter(_settings.Current.GenerativeAi.Timeout);
             string answer = await completion.Task.WaitAsync(timeout.Token).ConfigureAwait(false);
-            for (int continuations = 0; _tools is not null && continuations < 4; continuations++)
+            for (int continuations = 0; turn.TurnId == Guid.Empty && _tools is not null && continuations < 4; continuations++)
             {
                 string? pendingWork = await _tools.PendingTaskContinuationAsync(timeout.Token).ConfigureAwait(false);
                 if (pendingWork is null) { break; }
@@ -250,7 +252,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
                 with { EffectsMayHaveRun = Interlocked.Read(ref _toolDispatches) != initialDispatches };
             LauraDiagnostics.Record("provider.failure", outcome: LastFailure.Kind.ToString()); requestSession?.Abort(); ReportStatus("Ready"); return null;
         }
-        finally { if (IsThinking) { ReportStatus("Ready"); } _requests.Release(); }
+        finally { Volatile.Write(ref _textDeadline, null); if (IsThinking) { ReportStatus("Ready"); } _requests.Release(); }
     }
     /// <summary>Checks exact bytes/destination immediately around the network send for direct and tool-prepared visual turns.</summary>
     private async Task SendVisualAsync(Session session, ConversationTurn turn, CancellationToken cancellationToken)
@@ -632,6 +634,9 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     /// <summary>Runs one recognized skill directly so a tool cannot recursively invoke Gemini.</summary>
     private async Task<AssistantToolResult> ExecuteToolAsync(string name, JsonElement args, CancellationToken cancellationToken)
     {
+        using var waiting = Volatile.Read(ref _textDeadline)?.SuspendForTool();
+        using var toolDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        toolDeadline.CancelAfter(TimeSpan.FromSeconds(_settings.Current.CognitiveTasks.ToolTimeoutSeconds)); cancellationToken = toolDeadline.Token;
         Interlocked.Increment(ref _toolDispatches);
         using var provider = new ProviderExecutionScope("gemini");
         using var correlation = LauraDiagnostics.Correlate(_memory.WorkingContext.TurnId);

@@ -7,7 +7,8 @@ namespace Laura.Core.Engine;
 
 /// <summary>Routes natural-language requests through the selected provider and its shared native tools.</summary>
 public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISettingsService settings, IUserContext user,
-    IConversationMemory memory, ILocalizer localizer, SkillDispatcher? localDispatcher = null) : ISkillDispatcher
+    IConversationMemory memory, ILocalizer localizer, SkillDispatcher? localDispatcher = null, CognitiveTasks? tasks = null, IAssistantTools? tools = null,
+    ConversationProviderRouter? routing = null) : ISkillDispatcher
 {
     private bool UseLocalDispatcher => localDispatcher is not null && !conversation.IsAvailable;
     /// <inheritdoc />
@@ -28,8 +29,38 @@ public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISet
             try { history = memory.ReadRecent(9); }
             catch (Exception error) when (error is InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException) { }
         }
-        string? answer = await conversation.AskAsync(new ConversationTurn(request.RawText, request.Culture, user.DisplayName)
-        { TurnId = request.TurnId, ContinuingTaskTurnId = request.ContinuingTaskTurnId, History = history.Where(message => request.TurnId == Guid.Empty || message.TurnId != request.TurnId).TakeLast(8).ToArray(), Image = request.Image }, cancellationToken).ConfigureAwait(false);
+        Guid taskId = request.ContinuingTaskTurnId != Guid.Empty ? request.ContinuingTaskTurnId : request.TurnId;
+        bool tracked = tasks is not null && tools is not null && taskId != Guid.Empty;
+        string objective = request.ContinuingTaskTurnId != Guid.Empty ? memory.WorkingContext.UserText : request.RawText;
+        if (tracked && !await tasks!.BeginCycleAsync(new(taskId, objective), tools!.RegisteredToolNames, settings.Current.CognitiveTasks, cancellationToken).ConfigureAwait(false))
+        { return SkillResponse.Speak(new ConversationFailure(ConversationFailureKind.OperationLimit).Describe(localizer)); }
+        using var operation = tracked ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, tasks!.CycleCancellation(taskId))
+            : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (tracked && tasks!.Current(taskId)?.Rounds is { } admitted)
+        {
+            operation.CancelAfter(TimeSpan.FromMilliseconds(Math.Max(1, admitted.MaximumActiveMilliseconds - admitted.ActiveMilliseconds)));
+        }
+        long started = System.Diagnostics.Stopwatch.GetTimestamp(); string? answer = null; bool canceled = false;
+        try
+        {
+            if (tracked && !await tasks!.AdmitInferenceAsync(taskId, operation.Token).ConfigureAwait(false))
+            { return SkillResponse.Speak(new ConversationFailure(ConversationFailureKind.OperationLimit).Describe(localizer)); }
+            var checkpoint = tracked ? tasks!.Current(taskId) : null;
+            CognitiveTaskDemand demand = checkpoint?.RepositoryStudies is { Count: > 0 } && checkpoint.Rounds?.Cycles > 1 ? CognitiveTaskDemand.Analysis : CognitiveTaskDemand.Routine;
+            answer = await conversation.AskAsync(new ConversationTurn(request.RawText, request.Culture, user.DisplayName)
+            { TurnId = request.TurnId, ContinuingTaskTurnId = request.ContinuingTaskTurnId, TaskDemand = demand,
+                History = history.Where(message => request.TurnId == Guid.Empty || message.TurnId != request.TurnId).TakeLast(8).ToArray(), Image = request.Image }, operation.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { canceled = true; throw; }
+        finally
+        {
+            if (tracked)
+            {
+                string provider = routing?.ActiveProvider ?? "gemini";
+                await tasks!.EndCycleAsync(taskId, (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds, provider,
+                    provider == "chatgpt" ? settings.Current.ChatGpt.Model : settings.Current.GenerativeAi.Model, conversation.LastFailure, canceled).ConfigureAwait(false);
+            }
+        }
         return SkillResponse.Speak(string.IsNullOrWhiteSpace(answer) ? (conversation.LastFailure ?? new(ConversationFailureKind.Unknown)).Describe(localizer) : answer);
     }
 }

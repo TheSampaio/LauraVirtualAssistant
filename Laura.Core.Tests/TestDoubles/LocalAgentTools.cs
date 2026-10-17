@@ -12,7 +12,7 @@ internal sealed class LocalAgentTools : IAssistantTools
     internal AssistantToolResult Result { get; set; } = new("Observed fixture value: 731.");
     internal Func<CancellationToken, Task<AssistantToolResult>>? Execute { get; set; }
     /// <inheritdoc />
-    public object[] Declarations { get; } = [new { functionDeclarations = new[] { new { name = "probe", description = "Read one synthetic fixture value.",
+    public object[] Declarations { get; } = [new { googleSearch = new { } }, new { functionDeclarations = new[] { new { name = "probe", description = "Read one synthetic fixture value.",
         parameters = new { type = "OBJECT", properties = new { text = new { type = "STRING" } }, required = new[] { "text" } } } } }];
     /// <inheritdoc />
     public bool IsRegisteredTool(string name) => name == "probe";

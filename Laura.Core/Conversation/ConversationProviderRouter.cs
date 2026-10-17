@@ -1,23 +1,28 @@
 using Laura.Core.Abstractions;
+using Laura.Core.Configuration;
+using Laura.Core.Diagnostics;
 
 namespace Laura.Core.Conversation;
 
 /// <summary>Guards explicitly enabled Gemini requests and drains work before changing settings or clearing dialogue.</summary>
-public sealed class ConversationProviderRouter(ISettingsService settings, IConversationEngine gemini) : IConversationEngine, IDisposable
+public sealed class ConversationProviderRouter(ISettingsService settings, IConversationEngine gemini, IConversationEngine? chatGpt = null) : IConversationEngine, IDisposable
 {
     private readonly SemaphoreSlim _requests = new(1, 1), _resets = new(1, 1);
     private readonly object _gate = new();
     private CancellationTokenSource _lifetime = new();
     private bool _resetting, _disposed;
-    private IConversationEngine? Selected => settings.Current.GenerativeAi.Enabled ? gemini : null;
+    private string _activeProvider = "gemini";
+    private IConversationEngine? Selected => settings.Current.ProviderSelection == ConversationProviderSelection.ChatGpt ? chatGpt : settings.Current.GenerativeAi.Enabled ? gemini : null;
     /// <inheritdoc />
     public bool IsAvailable { get { lock (_gate) { return !_resetting && !_disposed && Selected?.IsAvailable == true; } } }
     /// <inheritdoc />
-    public bool SupportsImages => IsAvailable && gemini.SupportsImages;
+    public bool SupportsImages => IsAvailable && Selected?.SupportsImages == true;
     /// <inheritdoc />
     public ConversationFailure? LastFailure { get; private set; }
     /// <summary>Gets the sole configured conversation provider without enabling cloud access.</summary>
-    public string ActiveProvider => Selected is null ? "unavailable" : "gemini";
+    public string ActiveProvider => Selected is null ? "unavailable" : settings.Current.ProviderSelection == ConversationProviderSelection.ChatGpt ? "chatgpt" : _activeProvider;
+    /// <inheritdoc />
+    public string? PendingRound(Guid taskId) => _activeProvider == "chatgpt" ? chatGpt?.PendingRound(taskId) : gemini.PendingRound(taskId);
     /// <inheritdoc />
     public async Task<string?> AskAsync(ConversationTurn turn, CancellationToken cancellationToken = default)
     {
@@ -33,7 +38,13 @@ public sealed class ConversationProviderRouter(ISettingsService settings, IConve
             try
             {
                 operation.Token.ThrowIfCancellationRequested(); LastFailure = null;
-                IConversationEngine? selected = Selected;
+                bool automaticChatGpt = settings.Current.ProviderSelection == ConversationProviderSelection.Automatic
+                    && settings.Current.ChatGpt is { Enabled: true, AllowAutomatic: true, ShareContext: true, IncludedPlanOnly: true }
+                    && turn.TaskDemand is CognitiveTaskDemand.Planning or CognitiveTaskDemand.Analysis or CognitiveTaskDemand.Synthesis
+                    && chatGpt?.IsAvailable == true && turn.Image is null;
+                IConversationEngine? selected = automaticChatGpt ? chatGpt : Selected;
+                _activeProvider = ReferenceEquals(selected, chatGpt) && selected is not null ? "chatgpt" : "gemini";
+                LauraDiagnostics.Record("provider.selected", outcome: _activeProvider, taskId: turn.ContinuingTaskTurnId != Guid.Empty ? turn.ContinuingTaskTurnId : turn.TurnId);
                 if (turn.Image is not null && selected?.SupportsImages != true)
                 {
                     LastFailure = new(ConversationFailureKind.UnsupportedInput); return null;
@@ -61,7 +72,11 @@ public sealed class ConversationProviderRouter(ISettingsService settings, IConve
         {
             lock (_gate) { ObjectDisposedException.ThrowIf(_disposed, this); _resetting = true; _lifetime.Cancel(); }
             await _requests.WaitAsync().ConfigureAwait(false);
-            try { await gemini.ResetSessionAsync(clearHistory).ConfigureAwait(false); }
+            try
+            {
+                if (chatGpt is not null) { await chatGpt.ResetSessionAsync().ConfigureAwait(false); }
+                await gemini.ResetSessionAsync(clearHistory).ConfigureAwait(false);
+            }
             finally
             {
                 lock (_gate) { _lifetime.Dispose(); _lifetime = new(); _resetting = false; }

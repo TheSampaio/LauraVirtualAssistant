@@ -180,6 +180,22 @@ public sealed class IniSettingsStore : ISettingsStore
                 ContinuousListening = document.GetBoolean(GenerativeAiSection, "ContinuousListening", false),
                 SilenceDurationMs = document.GetInt32(GenerativeAiSection, "SilenceDurationMs", defaults.GenerativeAi.SilenceDurationMs),
             },
+            ChatGpt = new ChatGptOptions
+            {
+                Enabled = document.GetBoolean("ChatGPT", "Enabled", false), Model = document.GetString("ChatGPT", "Model", ""),
+                ShareContext = document.GetBoolean("ChatGPT", "ShareContext", false), AllowAutomatic = document.GetBoolean("ChatGPT", "AllowAutomatic", false),
+                IncludedPlanOnly = document.GetBoolean("ChatGPT", "IncludedPlanOnly", false),
+                Registration = Guid.TryParse(document.GetString("ChatGPT", "Registration", ""), out var registration) && registration != Guid.Empty ? registration : null
+            },
+            ProviderSelection = Enum.TryParse<ConversationProviderSelection>(document.GetString("ChatGPT", "Selection", "Gemini"), out var selection) ? selection : ConversationProviderSelection.Gemini,
+            CognitiveTasks = new CognitiveTaskOptions
+            {
+                MaximumCycles = document.GetInt32("CognitiveTasks", "MaximumCycles", 32), ActiveMinutes = document.GetInt32("CognitiveTasks", "ActiveMinutes", 10),
+                MaximumToolCalls = document.GetInt32("CognitiveTasks", "MaximumToolCalls", 128), MaximumRecoveries = document.GetInt32("CognitiveTasks", "MaximumRecoveries", 2),
+                MaximumResultMegabytes = document.GetInt32("CognitiveTasks", "MaximumResultMegabytes", 16),
+                MaximumProviderCalls = document.GetInt32("CognitiveTasks", "MaximumProviderCalls", 64), IdleMinutes = document.GetInt32("CognitiveTasks", "IdleMinutes", 1440),
+                ToolTimeoutSeconds = document.GetInt32("CognitiveTasks", "ToolTimeoutSeconds", 120)
+            },
         };
     }
 
@@ -240,6 +256,15 @@ public sealed class IniSettingsStore : ISettingsStore
         document.SetNumber(VoiceSection, "Volume", settings.Voice.Volume);
 
         document.SetBoolean(GenerativeAiSection, "Enabled", settings.GenerativeAi.Enabled);
+        document.SetBoolean("ChatGPT", "Enabled", settings.ChatGpt.Enabled); document.Set("ChatGPT", "Model", settings.ChatGpt.Model);
+        document.SetBoolean("ChatGPT", "ShareContext", settings.ChatGpt.ShareContext); document.SetBoolean("ChatGPT", "AllowAutomatic", settings.ChatGpt.AllowAutomatic);
+        document.SetBoolean("ChatGPT", "IncludedPlanOnly", settings.ChatGpt.IncludedPlanOnly); document.Set("ChatGPT", "Selection", settings.ProviderSelection.ToString());
+        document.Set("ChatGPT", "Registration", settings.ChatGpt.Registration?.ToString("N") ?? "");
+        document.SetNumber("CognitiveTasks", "MaximumCycles", settings.CognitiveTasks.MaximumCycles); document.SetNumber("CognitiveTasks", "ActiveMinutes", settings.CognitiveTasks.ActiveMinutes);
+        document.SetNumber("CognitiveTasks", "MaximumToolCalls", settings.CognitiveTasks.MaximumToolCalls); document.SetNumber("CognitiveTasks", "MaximumRecoveries", settings.CognitiveTasks.MaximumRecoveries);
+        document.SetNumber("CognitiveTasks", "MaximumResultMegabytes", settings.CognitiveTasks.MaximumResultMegabytes);
+        document.SetNumber("CognitiveTasks", "MaximumProviderCalls", settings.CognitiveTasks.MaximumProviderCalls); document.SetNumber("CognitiveTasks", "IdleMinutes", settings.CognitiveTasks.IdleMinutes);
+        document.SetNumber("CognitiveTasks", "ToolTimeoutSeconds", settings.CognitiveTasks.ToolTimeoutSeconds);
         document.SetNumber("Diagnostics", "MinimumLevel", (int)settings.DiagnosticLevel);
         document.Set(GenerativeAiSection, "Provider", settings.GenerativeAi.Provider);
         document.Set(GenerativeAiSection, "Model", settings.GenerativeAi.Model);

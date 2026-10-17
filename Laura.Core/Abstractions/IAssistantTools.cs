@@ -7,6 +7,13 @@ public interface IAssistantTools
 {
     /// <summary>Gets the public function schemas for available adapters.</summary>
     object[] Declarations { get; }
+    /// <summary>Gets the closed registry used to validate task plans; schemas remain inert metadata.</summary>
+    IReadOnlySet<string> RegisteredToolNames => Declarations.SelectMany(declaration =>
+    {
+        var group = JsonSerializer.SerializeToElement(declaration);
+        return group.TryGetProperty("functionDeclarations", out var functions) ? functions.EnumerateArray().Select(item => item.Clone())
+            : group.TryGetProperty("name", out _) ? new[] { group } : Enumerable.Empty<JsonElement>();
+    }).Select(function => function.GetProperty("name").GetString()!).ToHashSet(StringComparer.Ordinal);
     /// <summary>Identifies fixed registered names for payload-free diagnostics; unknown remote strings must not become log labels.</summary>
     bool IsRegisteredTool(string name) => false;
     /// <summary>Executes one structured action with native confirmation where required.</summary>
