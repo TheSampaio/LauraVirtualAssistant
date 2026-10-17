@@ -71,6 +71,7 @@ internal static class ChatGptSmoke
         checks.Add("cancel_stops_inference"); handler.ResponseMode = "completed";
         await ExpireAsync(store, token); handler.RefreshInvalid = true;
         await RejectAsync(() => connection.ModelsAsync(token), "invalid_grant");
+        Require(!connection.IsAvailable, "invalid_refresh_immediately_unavailable");
         Require((await connection.ReadAsync(token)).Status == "disconnected", "invalid_refresh_clears"); checks.Add("terminal_refresh_clears_tokens_retains_registration");
         handler.RefreshInvalid = false; await connection.SignInAsync(active, token); var disconnected = await connection.DisconnectAsync(token);
         Require(disconnected.Status == "disconnected" && disconnected.Active == active && handler.Revocations == 1, "revoke"); checks.Add("remote_revocation_and_local_logout");

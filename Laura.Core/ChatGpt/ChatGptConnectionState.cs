@@ -2,7 +2,7 @@ namespace Laura.Core.ChatGpt;
 
 /// <summary>Safe native connection metadata; no tokens, prompts or Brain content are included.</summary>
 public sealed record ChatGptConnectionState(Guid? Active, IReadOnlyList<ChatGptAccount> Accounts, string Status,
-    string Error = "", int? HttpStatus = null, string VerifiedModel = "");
+    string Error = "", int? HttpStatus = null, string VerifiedModel = "", bool IncludedPlanOnlyConfirmed = false);
 
 /// <summary>A local registration label and verified identity display, distinct even for identical emails.</summary>
 public sealed record ChatGptAccount(Guid Id, string Email, bool SignedIn, bool PlanAuthorized);

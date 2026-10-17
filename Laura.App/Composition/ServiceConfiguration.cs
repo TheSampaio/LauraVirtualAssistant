@@ -67,6 +67,11 @@ public static class ServiceConfiguration
         services.AddSingleton<IUserContext, UserContext>();
 
         string settingsPath = storageDirectory is null ? IniSettingsStore.GetDefaultFilePath() : Path.Combine(storageDirectory, "settings.ini");
+        // Diagnostics use only Laura's existing protected credentials, never fixture copies or model-provided paths.
+        string credentialDirectory = storageDirectory is not null && (Environment.GetCommandLineArgs().Contains("--permissions-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--screenshot-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--brain-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--agent-live-smoke", StringComparer.Ordinal))
+            ? Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())! : Path.GetDirectoryName(settingsPath)!;
+        string chatGptDirectory = storageDirectory is not null && Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal)
+            ? Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())! : Path.GetDirectoryName(settingsPath)!;
         services.AddSingleton(new AssistantStorage(Path.GetDirectoryName(Path.GetFullPath(settingsPath))!));
         services.AddSingleton(_ => new WindowsFullAccessPreference(Path.GetDirectoryName(Path.GetFullPath(settingsPath))!));
         services.AddSingleton(_ => new LegacyProviderCleanup(Path.GetDirectoryName(Path.GetFullPath(settingsPath))!));
@@ -95,7 +100,8 @@ public static class ServiceConfiguration
                     ? options with { Mode = ApprovalMode.Ask } : options;
             },
             () => new[] { provider.GetRequiredService<AssistantStorage>().Directory,
-                provider.GetRequiredService<ISettingsService>().Current.Brain.Directory }.Where(path => !string.IsNullOrWhiteSpace(path)),
+                provider.GetRequiredService<ISettingsService>().Current.Brain.Directory, Path.Combine(chatGptDirectory, "Credentials"),
+                Path.Combine(credentialDirectory, "google-key.dat"), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "LauraCredentialBroker") }.Where(path => !string.IsNullOrWhiteSpace(path)),
             Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Workspace"), provider.GetRequiredService<IUiLocalizer>()));
         services.AddSingleton<SqliteConversationMemory>(_ => new SqliteConversationMemory(
             Path.Combine(Path.GetDirectoryName(settingsPath)!, "memory.db")));
@@ -124,21 +130,16 @@ public static class ServiceConfiguration
         services.AddSingleton<BrainContextBuilder>();
         services.AddSingleton<BrainMaintenance>();
         services.AddSingleton<IConversationMemory>(provider => provider.GetRequiredService<BrainConversationMemory>());
-        // Explicit live diagnostics read the already protected credential in-process; it is neither printed nor copied into fixtures.
-        string credentialDirectory = storageDirectory is not null && (Environment.GetCommandLineArgs().Contains("--permissions-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--screenshot-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--brain-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--agent-live-smoke", StringComparer.Ordinal))
-            ? Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())! : Path.GetDirectoryName(settingsPath)!;
         services.AddSingleton<IApiKeyStore>(_ => new ProtectedApiKeyStore(credentialDirectory));
-        string chatGptDirectory = storageDirectory is not null && Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal)
-            ? Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())! : Path.GetDirectoryName(settingsPath)!;
         services.AddSingleton(provider => new ChatGptCredentialStore(Path.Combine(chatGptDirectory, "Credentials"),
             provider.GetRequiredService<IPrivateDataProtector>()));
-        services.AddSingleton<IChatGptBrowserAuthorization, ChatGptBrowserAuthorization>();
-        services.AddSingleton(_ => new ChatGptIdTokenValidator(new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan }));
-        services.AddSingleton(provider => new ChatGptConnection(
-            new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan },
-            provider.GetRequiredService<ChatGptCredentialStore>(), provider.GetRequiredService<IChatGptBrowserAuthorization>(), provider.GetRequiredService<ChatGptIdTokenValidator>()));
-        services.AddSingleton<IChatGptConnection>(provider => provider.GetRequiredService<ChatGptConnection>());
-        services.AddSingleton<IChatGptInference>(provider => provider.GetRequiredService<ChatGptConnection>());
+        services.AddSingleton(provider => new ChatGptBrokerClient(provider.GetRequiredService<ChatGptCredentialStore>(), Path.Combine(chatGptDirectory, "Credentials")));
+        services.AddSingleton<UiSmokeChatGptConnection>();
+        bool offlineChatGptSmoke = Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)
+            && !Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal);
+        services.AddSingleton<IChatGptConnection>(provider => offlineChatGptSmoke ? provider.GetRequiredService<UiSmokeChatGptConnection>() : provider.GetRequiredService<ChatGptBrokerClient>());
+        services.AddSingleton<IChatGptInference>(provider => offlineChatGptSmoke ? provider.GetRequiredService<UiSmokeChatGptConnection>() : provider.GetRequiredService<ChatGptBrokerClient>());
+        services.AddSingleton<IChatGptBrokerSetup>(_ => new ChatGptBrokerSetup(AppContext.BaseDirectory));
         services.AddSingleton<ChatGptConversationEngine>();
         services.AddSingleton(_ => new UserFileWorkspace(Path.Combine(Path.GetDirectoryName(settingsPath)!, "Workspace")));
 
@@ -163,7 +164,7 @@ public static class ServiceConfiguration
         services.AddSingleton<IBriefingContributor, ReminderBriefingContributor>();
         services.AddSingleton<ClapWakeCoordinator>();
         services.AddSingleton<MarkLvConfigurationImporter>();
-        services.AddSingleton(provider => new ConversationProviderRouter(provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<GeminiLiveClient>(), provider.GetRequiredService<ChatGptConversationEngine>()));
+        services.AddSingleton(provider => new ConversationProviderRouter(provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<GeminiLiveClient>(), provider.GetRequiredService<ChatGptConversationEngine>(), provider.GetRequiredService<CognitiveTasks>()));
         services.AddSingleton<IConversationEngine>(provider => provider.GetRequiredService<ConversationProviderRouter>());
         services.AddSingleton<WindowsApplicationCatalog>();
         services.AddSingleton<WindowsResourceMonitor>();

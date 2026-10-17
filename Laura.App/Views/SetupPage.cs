@@ -59,14 +59,14 @@ public sealed class SetupPage : ContentPage
     public SetupPage(ISettingsService settings, IApiKeyStore keys, GeminiLiveClient live, IUiLocalizer ui,
         IStartupRegistration startup, ISpeechSynthesizer speech, WindowsApplicationCatalog applications, ILocalizer conversation, Laura.App.Platforms.Windows.WindowsApprovalCenter approvals, ScreenshotCoordinator screenshots,
         Laura.Core.Mcp.McpServerStore mcpStore, Laura.Core.Mcp.McpRuntime mcp, ConversationProviderRouter router, IProviderModelCatalog modelCatalogue, WindowsFullAccessPreference fullAccessPreference, LegacyProviderCleanup legacyCleanup,
-        IChatGptConnection chatGpt)
+        IChatGptConnection chatGpt, IChatGptBrokerSetup chatGptBrokerSetup)
     {
         using var performance = PerformanceTrace.Measure("settings.construct");
         _settings = settings; _keys = keys; _live = live; _ui = ui; _startup = startup; _speech = speech; _applications = applications; _conversation = conversation;
         _router = router;
         _fullAccessPreference = fullAccessPreference;
         _legacyCleanup = legacyCleanup;
-        _chatGpt = new ChatGptSettingsView(chatGpt, ui, settings.Current);
+        _chatGpt = new ChatGptSettingsView(chatGpt, chatGptBrokerSetup, ui, settings.Current);
         _model = new ProviderModelPicker(modelCatalogue, ui, "gemini", () => string.IsNullOrWhiteSpace(_key.Text) ? _keys.Read() : _key.Text.Trim());
         _createdCulture = ui.Culture.Name;
         LauraSettings current = settings.Current;

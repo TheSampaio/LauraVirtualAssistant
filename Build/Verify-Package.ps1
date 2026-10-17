@@ -9,7 +9,9 @@ if ((Get-Item -LiteralPath $packageRoot -Force).Attributes -band [IO.FileAttribu
 if (Get-ChildItem -LiteralPath $packageRoot -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }) { throw 'Package contains a redirected entry.' }
 $required = @('Laura.exe', 'Laura.dll', 'Laura.runtimeconfig.json', 'coreclr.dll', 'hostfxr.dll', 'Microsoft.ui.xaml.dll', 'e_sqlite3.dll',
     'LICENSE', 'THIRD_PARTY_NOTICES.md', 'licenses/dependency-inventory.json', 'licenses/VisualCpp-Runtime-LICENSE.txt',
-    'Microsoft.IdentityModel.JsonWebTokens.dll', 'Microsoft.IdentityModel.Tokens.dll', 'licenses/Microsoft.IdentityModel-8.16.0-LICENSE.txt')
+    'Microsoft.IdentityModel.JsonWebTokens.dll', 'Microsoft.IdentityModel.Tokens.dll', 'licenses/Microsoft.IdentityModel-8.16.0-LICENSE.txt',
+    'Install-CredentialBroker.ps1', 'CredentialBroker/Laura.CredentialBroker.exe', 'CredentialBroker/broker-manifest.json',
+    'CredentialBroker/System.ServiceProcess.ServiceController.dll', 'CredentialBroker/System.Diagnostics.EventLog.dll')
 foreach ($relative in $required) {
     if (!(Test-Path -LiteralPath (Join-Path $packageRoot $relative) -PathType Leaf)) { throw ('Required package dependency is missing: ' + $relative) }
 }

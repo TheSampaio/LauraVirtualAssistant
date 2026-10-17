@@ -7,7 +7,7 @@ using Laura.Core.Abstractions;
 namespace Laura.Platform.Windows.Conversation;
 
 /// <summary>Receives one bounded literal IPv4 loopback callback after opening the Windows default browser.</summary>
-public sealed class ChatGptBrowserAuthorization : IChatGptBrowserAuthorization
+public sealed class ChatGptBrowserAuthorization(Func<Uri, CancellationToken, Task>? launch = null) : IChatGptBrowserAuthorization
 {
     /// <summary>Starts the listener before browser launch. Args: authorize: Creates the authorization URL for the exact bound callback; token: Login deadline. Returns: Callback URI for OAuth state validation.</summary>
     public async Task<Uri> ReceiveAsync(Func<Uri, Uri> authorize, CancellationToken token)
@@ -18,7 +18,8 @@ public sealed class ChatGptBrowserAuthorization : IChatGptBrowserAuthorization
         Uri url = authorize(callback);
         if (url.Scheme != "https" || url.Host != "auth.openai.com" || url.AbsolutePath != "/api/accounts/authorize")
         { throw new InvalidDataException("oauth_authorization_endpoint_invalid"); }
-        using var browser = Process.Start(new ProcessStartInfo(url.AbsoluteUri) { UseShellExecute = true });
+        if (launch is not null) { await launch(url, token).ConfigureAwait(false); }
+        else { using var browser = Process.Start(new ProcessStartInfo(url.AbsoluteUri) { UseShellExecute = true }); }
         while (true)
         {
             using TcpClient connection = await listener.AcceptTcpClientAsync(token).ConfigureAwait(false);

@@ -4,7 +4,7 @@ Laura keeps Gemini Live as its default conversation and voice provider. The opti
 
 ## Connecting
 
-Open Settings → ChatGPT, continue with ChatGPT in the default browser, return to Laura, refresh models and test a selected model. A catalog entry alone does not prove inference availability. A successful test requires a completed streaming response.
+Open Settings → ChatGPT and install the separate credential service through Windows administrator consent. Then continue with ChatGPT in the default browser, return to Laura, refresh models and test a selected model. A catalog entry alone does not prove inference availability. A successful test requires a completed streaming response. The offline application installer does not silently install a system service. See [credential service](../CredentialBroker.md) for paths, migration, repair and the exact security boundary.
 
 Before testing, disable additional credits for Laura in ChatGPT Usage and confirm the corresponding checkbox. The OAuth/inference contract does not supply a flag that enforces this external allowance. Laura requires the owner's confirmation and retains it only for the protected registration that passed the probe. It does not purchase credits or enable additional billing.
 
@@ -14,11 +14,11 @@ Save the selected provider and explicit options. History, retrieved Brain refere
 
 The C# adapter calls the public Responses endpoint with `store:false`, `stream:true` and bounded explicit input. It validates terminal events and preserves completed output items for tool exchange. It omits unsupported hosted executors. There is no second command runner: tools enter the existing task coordinator and PermissionManager.
 
-Authorization uses dynamic registration, a stable installation identifier, PKCE S256, one-use state/nonce, an exact loopback callback and signed OIDC validation. Issued clients remain distinct from the temporary dynamic registration client. DPAPI protects tokens and account bindings in a separate credential file. Refresh is serialized across processes and rotating tokens are committed atomically. Tokens never enter Core, Brain, tool arguments, INI or diagnostics. Disconnect attempts official revocation and clears local tokens even when remote revocation cannot be confirmed.
+Authorization uses dynamic registration, a stable installation identifier, PKCE S256, one-use state/nonce, an exact loopback callback and signed OIDC validation. Issued clients remain distinct from the temporary dynamic registration client. These operations run inside LocalService; service-owned DPAPI protects tokens and account bindings under an administrator-provisioned ACL. Refresh is serialized and rotating tokens are committed atomically. Tokens never enter Core, Brain, tool arguments, INI or diagnostics. Disconnect attempts official revocation and clears local tokens even when remote revocation cannot be confirmed.
 
-Full-access commands execute as the current Windows user. Credential-path guards and DPAPI protect normal data access and storage; they do not provide an operating-system security boundary against arbitrary code authorized to execute with that same user identity. Credentials are never injected into child command arguments or environment. A hard isolation guarantee would require a separately enforced process/identity boundary, beyond the existing full-access executor.
+Full-access commands execute as the current Windows user. The separate LocalService identity and service-only data ACL keep ChatGPT tokens outside that account's readable files and DPAPI identity. SCM-authenticated local IPC returns safe state and inference results, never token exports. This is not a command sandbox or a defense against administrators, SYSTEM, other compromised LocalService processes, or same-user calls to the fixed inference interface. Credentials are never injected into child command arguments or environment. Gemini's key continues to use its existing current-user DPAPI storage.
 
-The direct C# approach avoids an additional app-server executable and executor boundary. The app-server alternative remains official, but would require additional process and tool-permission integration. The preview does not provide the full paid API feature set, automatic durable HTTP history or guaranteed access to every ChatGPT model.
+The direct C# inference adapter runs in Laura's own credential service and retains the existing native tool boundary. No Codex app-server executor is introduced. The app-server alternative remains official, but would require separate tool-permission integration. The preview does not provide the full paid API feature set, automatic durable HTTP history or guaranteed access to every ChatGPT model.
 
 ## Persistent tasks
 
@@ -26,7 +26,7 @@ An objective, an inference round, a native operation and a checkpoint have separ
 
 The `CognitiveTasks` INI section controls cumulative cycles, active minutes, tool calls, provider calls, recovery attempts, result megabytes, idle minutes and an independent per-tool timeout. Model deadlines remain bounded in provider settings. Gemini suspends model waiting while a native tool executes; owner/task cancellation remains effective. A timeout preserves confirmed receipts and allows only bounded recovery. No provider switch is triggered solely by timeout or a shell error.
 
-Automatic routing considers structured native task stages and account availability. Manual choice wins. Native continuation retains the actual recipient scope. A status-only question cannot start repository acquisition. Permission denials and uncertain effects stop continuation. Identical mutable operations with confirmed or uncertain receipts cannot replay, including before process restart.
+Automatic routing considers actual plan length/tool diversity, substantive confirmed progress, repeated verified stalls, repository stages, account availability and observed provider/tool failures. Polling cannot manufacture progress. Timeout recovery splits a stage on the same provider; context-limit recovery trims the next input without discarding task identity or effect receipts. Native tool failure requests inspection, rather than automatic model substitution. Manual choice wins. Native continuation retains the actual recipient scope and bounded handoff metadata. A status-only question cannot start repository acquisition. Permission denials and uncertain effects stop continuation. Identical mutable operations with confirmed or uncertain receipts cannot replay, including before process restart.
 
 Task controls expose pause, cancel, native resumption, actual counts, provider/model and errors. Restart requires an explicit owner gesture and reacquires disclosure permission. No process is resurrected by PID. The assistant queue processes owner messages between bounded cycles; a chat reply still waits for the current inference to yield. Native task status remains independently readable.
 
@@ -35,6 +35,8 @@ Successful dialogue with no operations, plan, acquired resources or pending prot
 ## Repository learning
 
 Acquisition and indexing are measured separately from module analysis. `record_repository_analysis` accepts only current acquired source versions actually read by the task, with literal evidence and hash-pinned graph relations. Notes stay ordinary authoritative Brain Markdown. This records an interpretation, not verified comprehension, applied skill or successful operational outcome.
+
+An inventoried local file whose length or timestamp changes remains pending with an explicit integrity failure. It is not silently excluded as unsupported content. Native inventory refresh and byte verification must establish the current source before acquisition resumes.
 
 Skill validation remains strict. Closed rejection categories identify malformed identity, lists, guidance kind, evidence/outcomes and stale or nonliteral sources without exporting content. Historical generic rejection logs cannot retroactively establish an exact cause.
 

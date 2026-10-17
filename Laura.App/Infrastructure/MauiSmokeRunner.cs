@@ -20,6 +20,8 @@ public static class MauiSmokeRunner
         VerifyReactorTransitions();
         try
         {
+            if (Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal) && Environment.GetCommandLineArgs().Contains("--provider-handoff-smoke", StringComparer.Ordinal))
+            { await ProviderHandoffSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal) && Environment.GetCommandLineArgs().Contains("--rea-application-smoke", StringComparer.Ordinal))
             { await ChatGptApplicationSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal) && Environment.GetCommandLineArgs().Contains("--rea-continuation-smoke", StringComparer.Ordinal))

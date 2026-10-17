@@ -27,6 +27,8 @@ if (args.Length == 2 && args[0] == "--inspect-gui-policy")
 }
 if (args.Length == 0) { Console.Error.WriteLine("Usage: Laura.Smoke <isolated-directory> --gemini --key-file <Mark-LV api_keys.json> [--quick] [--vad]"); return 2; }
 string directory = Path.GetFullPath(args[0]);
+if (args.Contains("--credential-broker-live", StringComparer.Ordinal)) { return await CredentialBrokerLiveSmoke.RunAsync(directory, args); }
+if (args.Contains("--credential-broker-synthetic", StringComparer.Ordinal)) { return await CredentialBrokerSmoke.RunAsync(directory); }
 if (args.Contains("--chatgpt-synthetic", StringComparer.Ordinal)) { return await ChatGptSmoke.RunSyntheticAsync(directory); }
 if (args.Contains("--chatgpt-login", StringComparer.Ordinal) || args.Contains("--chatgpt-probe-model", StringComparer.Ordinal)) { return await ChatGptSmoke.RunLiveAsync(directory, args); }
 Directory.CreateDirectory(directory);

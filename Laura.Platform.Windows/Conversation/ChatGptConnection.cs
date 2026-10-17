@@ -12,7 +12,7 @@ namespace Laura.Platform.Windows.Conversation;
 
 /// <summary>Native official ChatGPT plan connection, isolated from conversation tools and paid API credentials.</summary>
 public sealed class ChatGptConnection(HttpClient http, ChatGptCredentialStore store, IChatGptBrowserAuthorization browser,
-    ChatGptIdTokenValidator validator) : IChatGptConnection, IChatGptInference, IDisposable
+    ChatGptIdTokenValidator validator, bool includeIdentityHint = true) : IChatGptConnection, IChatGptInference, IDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _sessionGate = new();
@@ -59,7 +59,7 @@ public sealed class ChatGptConnection(HttpClient http, ChatGptCredentialStore st
         {
             string? client = selected?.Client ?? (data.PendingClient.Length > 0 ? data.PendingClient : null);
             attempt = new ChatGptOAuthAttempt(uri, client);
-            return attempt.Authorize(data.Host, selected?.Email, selected?.IdToken, selected is { PlanAuthorized: false });
+            return attempt.Authorize(data.Host, selected?.Email, includeIdentityHint ? selected?.IdToken : null, selected is { PlanAuthorized: false });
         }, token).ConfigureAwait(false);
         if (attempt is null) { throw new ChatGptConnectionException("oauth_attempt_missing"); }
         var (code, issuedClient) = attempt.Consume(callback);
@@ -199,7 +199,7 @@ public sealed class ChatGptConnection(HttpClient http, ChatGptCredentialStore st
     }
 
     /// <summary>Cancels the old account's in-flight inference before account switching, logout or shutdown.</summary>
-    private void CancelInference()
+    internal void CancelInference()
     {
         lock (_sessionGate)
         {
@@ -216,6 +216,7 @@ public sealed class ChatGptConnection(HttpClient http, ChatGptCredentialStore st
     /// <summary>Refreshes near expiry under the store's cross-process lease, preserving rotating credentials atomically.</summary>
     private async Task<ChatGptRegistration> ReadyAsync(ChatGptCredentials data, CancellationToken token)
     {
+        Snapshot(data);
         ChatGptRegistration account = data.Accounts.SingleOrDefault(item => item.Id == data.Active) ?? throw new ChatGptConnectionException("account_unavailable");
         if (account.AccessToken.Length == 0) { throw new ChatGptConnectionException("sign_in_required"); }
         if (!account.PlanAuthorized) { throw new ChatGptConnectionException("plan_permission_missing"); }
@@ -232,6 +233,7 @@ public sealed class ChatGptConnection(HttpClient http, ChatGptCredentialStore st
             string replacementAccess = account.AccessToken;
             // Quarantine inference until a supplied refreshed identity has been verified; retain its rotating renewal token for recovery.
             account.AccessToken = "";
+            Snapshot(data);
             await store.SaveAsync(data, CancellationToken.None).ConfigureAwait(false);
             if (document.RootElement.TryGetProperty("id_token", out var id) && id.ValueKind == JsonValueKind.String)
             {
@@ -240,10 +242,10 @@ public sealed class ChatGptConnection(HttpClient http, ChatGptCredentialStore st
                 { account.ClearTokens(); await store.SaveAsync(data, CancellationToken.None).ConfigureAwait(false); throw new ChatGptConnectionException("account_identity_mismatch"); }
                 account.IdToken = id.GetString()!;
             }
-            account.AccessToken = replacementAccess; await store.SaveAsync(data, CancellationToken.None).ConfigureAwait(false);
+            account.AccessToken = replacementAccess; await store.SaveAsync(data, CancellationToken.None).ConfigureAwait(false); Snapshot(data);
         }
         catch (ChatGptConnectionException error) when (error.Code is "invalid_grant" or "invalid_refresh_token" or "token_expired" or "refresh_token_expired" or "refresh_token_invalidated" or "refresh_token_reused")
-        { account.ClearTokens(); await store.SaveAsync(data, CancellationToken.None).ConfigureAwait(false); throw; }
+        { account.ClearTokens(); await store.SaveAsync(data, CancellationToken.None).ConfigureAwait(false); Snapshot(data); throw; }
         if (!account.PlanAuthorized) { throw new ChatGptConnectionException("plan_permission_missing"); }
         LauraDiagnostics.Record("chatgpt.refresh", outcome: "renewed"); return account;
     }
@@ -306,7 +308,7 @@ public sealed class ChatGptConnection(HttpClient http, ChatGptCredentialStore st
         Volatile.Write(ref _registration, active?.Id.ToString("N") ?? "");
         Volatile.Write(ref _available, active is { AccessToken.Length: > 0, PlanAuthorized: true, IncludedPlanOnlyConfirmed: true } ? 1 : 0);
         return new(data.Active, data.Accounts.Select(account => new ChatGptAccount(account.Id, account.Email, account.AccessToken.Length > 0, account.PlanAuthorized)).ToArray(),
-            active?.AccessToken.Length > 0 ? active.PlanAuthorized ? "plan_authorized" : "identity_only" : "disconnected", _lastError, _httpStatus, active?.VerifiedModel ?? "");
+            active?.AccessToken.Length > 0 ? active.PlanAuthorized ? "plan_authorized" : "identity_only" : "disconnected", _lastError, _httpStatus, active?.VerifiedModel ?? "", active?.IncludedPlanOnlyConfirmed == true);
     }
     /// <summary>Serializes connection operations with independent deadlines and a cross-process credential lease; all diagnostics are symbolic.</summary>
     private async Task<T> RunAsync<T>(Func<ChatGptCredentials, CancellationToken, Task<T>> action, CancellationToken cancellationToken, TimeSpan? timeout = null)

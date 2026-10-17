@@ -39,16 +39,7 @@ public sealed class ChatGptCredentialStore(string directory, IPrivateDataProtect
         {
             if (plaintext.Length > MaximumBytes) { throw new InvalidDataException("credential_store_invalid"); }
             var data = JsonSerializer.Deserialize<ChatGptCredentials>(plaintext, Options) ?? throw new InvalidDataException("credential_store_invalid");
-            if (data.Host is null || !data.Host.StartsWith("urn:uuid:", StringComparison.Ordinal) || !Guid.TryParse(data.Host[9..], out _) || data.Accounts is null || data.Accounts.Count > 16
-                || data.PendingClient is null || data.PendingClient.Length > 256 || data.PendingClient.Length > 0 && !data.PendingClient.StartsWith("oaiapp_", StringComparison.Ordinal)
-                || data.Accounts.Any(account => account is null || account.Id == Guid.Empty || account.Client is null || !account.Client.StartsWith("oaiapp_", StringComparison.Ordinal)
-                    || account.Client.Length > 256 || account.Issuer != "https://auth.openai.com" || account.Subject is null || account.Subject.Length is < 1 or > 512
-                    || account.Email is null || account.AccessToken is null || account.RefreshToken is null || account.IdToken is null
-                    || account.Scopes is null || account.Scopes.Length > 32 || account.Scopes.Any(scope => scope is null || scope.Length > 256)
-                    || account.Email.Length > 512 || account.AccessToken.Length > 65536 || account.RefreshToken.Length > 65536 || account.IdToken.Length > 65536)
-                || data.Accounts.Select(account => account.Id).Distinct().Count() != data.Accounts.Count
-                || data.Active is { } active && !data.Accounts.Any(account => account.Id == active))
-            { throw new InvalidDataException("credential_store_invalid"); }
+            ValidateData(data);
             return data;
         }
         finally { CryptographicOperations.ZeroMemory(plaintext); }
@@ -56,7 +47,7 @@ public sealed class ChatGptCredentialStore(string directory, IPrivateDataProtect
     /// <summary>Replaces all rotating-token fields together using protected write-through temporary storage.</summary>
     internal async Task SaveAsync(ChatGptCredentials data, CancellationToken token)
     {
-        Validate(); Directory.CreateDirectory(_directory);
+        ValidateData(data); Validate(); Directory.CreateDirectory(_directory);
         byte[] plaintext = JsonSerializer.SerializeToUtf8Bytes(data, Options); byte[] encrypted;
         try
         {
@@ -76,6 +67,21 @@ public sealed class ChatGptCredentialStore(string directory, IPrivateDataProtect
     /// <summary>Rejects redirected or network credential paths before accessing protected data.</summary>
     private void Validate() => PermissionPolicy.ValidateResources(new(PermissionOperation.FileWrite, "ChatGPT credential storage", "Protect private credentials",
         [_directory, Path.Combine(_directory, "chatgpt-credentials.dat"), Path.Combine(_directory, "chatgpt-credentials.lock")]), []);
+
+    /// <summary>Rejects malformed imported or persisted registrations before changing the protected store.</summary>
+    internal static void ValidateData(ChatGptCredentials data)
+    {
+        if (data.Host is null || !data.Host.StartsWith("urn:uuid:", StringComparison.Ordinal) || !Guid.TryParse(data.Host[9..], out _) || data.Accounts is null || data.Accounts.Count > 16
+            || data.PendingClient is null || data.PendingClient.Length > 256 || data.PendingClient.Length > 0 && !data.PendingClient.StartsWith("oaiapp_", StringComparison.Ordinal)
+            || data.Accounts.Any(account => account is null || account.Id == Guid.Empty || account.Client is null || !account.Client.StartsWith("oaiapp_", StringComparison.Ordinal)
+                || account.Client.Length > 256 || account.Issuer != "https://auth.openai.com" || account.Subject is null || account.Subject.Length is < 1 or > 512
+                || account.Email is null || account.AccessToken is null || account.RefreshToken is null || account.IdToken is null
+                || account.Scopes is null || account.Scopes.Length > 32 || account.Scopes.Any(scope => scope is null || scope.Length > 256)
+                || account.Email.Length > 512 || account.AccessToken.Length > 65536 || account.RefreshToken.Length > 65536 || account.IdToken.Length > 65536)
+            || data.Accounts.Select(account => account.Id).Distinct().Count() != data.Accounts.Count
+            || data.Active is { } active && !data.Accounts.Any(account => account.Id == active))
+        { throw new InvalidDataException("credential_store_invalid"); }
+    }
 }
 
 /// <summary>Internal protected envelope; never registered as a model-visible dependency.</summary>

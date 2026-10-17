@@ -378,6 +378,24 @@
     "NugetSHA512": "h8j18ju7NzUzn37Z0yR8ndJSaWKwhcTepHF9IjQ2sMjPSIz62kY8Ph1Ee9Qln2lDLKb6pvIQWuVGVB7yjH7cmg=="
   },
   {
+    "Package": "System.ServiceProcess.ServiceController",
+    "Version": "10.0.0",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/dotnet",
+    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
+    "NugetSHA512": "PaFmFQXX/qL1vl0CfdJUMPMYT8TOEHlcdEiOZtd4LV2rcaS/WDQM4bpECcbRM4BrD+DWkWd/jtb6iPOqAX9TWA=="
+  },
+  {
+    "Package": "System.Diagnostics.EventLog",
+    "Version": "10.0.0",
+    "License": "MIT",
+    "Copyright": "© Microsoft Corporation. All rights reserved.",
+    "Repository": "https://github.com/dotnet/dotnet",
+    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
+    "NugetSHA512": "uaFRda9NjtbJRkdx311eXlAA3n2em7223c1A8d1VWyl+4FL9vkG7y2lpPfBU9HYdj/9KgdRNdn1vFK8ZYCYT/A=="
+  },
+  {
     "Package": "YamlDotNet",
     "Version": "18.1.0",
     "License": "MIT",

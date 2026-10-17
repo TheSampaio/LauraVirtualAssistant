@@ -35,3 +35,5 @@ Microsoft Visual C++ CRT 14.51.36247.0 (redistributable directory 14.51.36231, V
 Google Gemini Live is the required hosted conversation/voice service, not a redistributed model or voice asset. Its use is governed by the user's Google AI Studio account terms. Laura implements the documented Live protocol independently.
 
 Optional ChatGPT plan authorization uses the official Sign in with ChatGPT public-client flow and the public Responses endpoint. Microsoft.IdentityModel.JsonWebTokens, Tokens, Logging and Abstractions 8.16.0 verify signed OpenID Connect tokens under the included MIT license (`licenses/Microsoft.IdentityModel-8.16.0-LICENSE.txt`). No Codex executable, conversation model or OpenAI credential is redistributed.
+
+The optional Laura Credential Broker Windows service uses System.ServiceProcess.ServiceController and System.Diagnostics.EventLog 10.0.0 under MIT (Microsoft; dotnet/dotnet commit b0f34d51fccc69fd334253924abd8d6853fad7aa). Their package third-party notices and the .NET MIT license accompany the distribution. The service provides credential authorization and inference only; it includes no command executor.

@@ -141,6 +141,9 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
     public async Task<AssistantToolResult> ExecuteAsync(string name, JsonElement arguments, CancellationToken cancellationToken)
     {
         bool applicationDiagnostic = Environment.GetCommandLineArgs().Contains("--rea-application-smoke", StringComparer.Ordinal);
+        bool handoffDiagnostic = Environment.GetCommandLineArgs().Contains("--provider-handoff-smoke", StringComparer.Ordinal);
+        if (handoffDiagnostic && name is not ("plan_task" or "read_brain_passage" or "list_capabilities" or "task_status"))
+        { return new("The isolated provider handoff diagnostic permits only its synthetic evidence reads and native plan/capability metadata.") { Failed = true, Status = "blocked" }; }
         if (applicationDiagnostic && !(name == "run_program" && ChatGptApplicationSmokeRunner.AllowsInvocation(arguments))
             && name is not ("read_brain_passage" or "task_status" or "list_capabilities"))
         { return new("The isolated application diagnostic permits only current public analysis reads and exact numeric synthetic fixture invocations.") { Failed = true, Status = "blocked" }; }
@@ -149,7 +152,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         { return new("The isolated synthesis diagnostic permits only existing public repository evidence and status reads.") { Failed = true, Status = "blocked" }; }
         using var provider = new Laura.Core.Conversation.ProviderExecutionScope(Laura.Core.Conversation.ProviderExecutionScope.Provider ?? settings.Current.GenerativeAi.Provider);
         if (Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal)
-            && !applicationDiagnostic
+            && !applicationDiagnostic && !handoffDiagnostic
             && !(Environment.GetCommandLineArgs().Contains("--rea-continuation-smoke", StringComparer.Ordinal)
                 && name is "plan_task" or "repository_study_status" or "continue_repository_study" or "recent_task_context" or "read_brain_passage" or "recall_memory"
                     or "list_brain_skills" or "propose_brain_skill" or "assess_source_learning" or "record_repository_analysis" or "repository_learning_status")

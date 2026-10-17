@@ -58,6 +58,8 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Locked dependency restore failed.' }
         & dotnet publish Laura.App/Laura.App.csproj -c Release -f net10.0-windows10.0.19041.0 -r win-x64 --self-contained true --no-restore -m:1 -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=false -o $publish
         if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
+        & (Join-Path $PSScriptRoot 'Publish-CredentialBroker.ps1') -OutputDirectory (Join-Path $publish 'CredentialBroker')
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Install-CredentialBroker.ps1') -Destination $publish
         # Some packages expose runtime-specific content; current Windows assets may instead be flattened at publish time.
         $nativeRoot = Join-Path $publish 'runtimes'
         if (Test-Path -LiteralPath $nativeRoot -PathType Container) {

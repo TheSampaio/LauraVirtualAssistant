@@ -24,12 +24,13 @@ public sealed class ChatGptSettingsView : ContentView
     private string _savedModel = "";
     private Guid? _activeRegistration;
     /// <summary>Creates translated connection controls without opening a microphone or starting cloud requests.</summary>
-    public ChatGptSettingsView(IChatGptConnection connection, IUiLocalizer ui, LauraSettings settings)
+    public ChatGptSettingsView(IChatGptConnection connection, IChatGptBrokerSetup brokerSetup, IUiLocalizer ui, LauraSettings settings)
     {
         _connection = connection; _ui = ui;
         _selection = Theme.Picker([T("gemini"), "ChatGPT", T("automatic")], ""); Reload(settings);
         _cancel = Theme.ActionButton(T("cancel"), "x", () => { _operation?.Cancel(); return Task.CompletedTask; }); _cancel.IsEnabled = false;
-        Content = Theme.Stack(Theme.Label("ChatGPT", 22), Theme.Label(T("intro"), 13, Theme.Muted), _state, _accounts,
+        Content = Theme.Stack(Theme.Label("ChatGPT", 22), Theme.Label(T("intro"), 13, Theme.Muted), Theme.Label(T("brokerHelp"), 13, Theme.Muted),
+            Action("brokerInstall", "shield", async token => { await brokerSetup.InstallAsync(token).ConfigureAwait(true); await RefreshAsync(token).ConfigureAwait(true); }), _state, _accounts,
             Action("connect", "link", token => SignInAsync(null, token)),
             Action("reconnect", "link", token => SignInAsync(SelectedAccount(), token)),
             Action("status", "refresh_cw", RefreshAsync),
@@ -119,6 +120,9 @@ public sealed class ChatGptSettingsView : ContentView
         {
             "oauth_access_denied" => "denied", "plan_permission_missing" => "identity_only", "account_identity_mismatch" => "identityMismatch",
             "subscription_sharing_usage_limit_exceeded" => "usageLimit", "subscription_sharing_user_not_eligible" => "ineligible",
+            "broker_required" or "broker_identity_invalid" or "broker_identity_unavailable" => "brokerRequired",
+            "broker_installer_missing" => "brokerInstallerMissing", "broker_install_failed" => "brokerInstallFailed",
+            "broker_migration_reauthorization_required" => "brokerReauthorization",
             "revocation_unconfirmed" => "revocationUnconfirmed", "timeout" => "timeout", "canceled" => "canceled", _ => "error"
         };
         return T(key) + " (" + code + (status is { } value ? ", HTTP " + value.ToString(_ui.Culture) : "") + ")";
