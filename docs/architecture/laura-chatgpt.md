@@ -16,6 +16,8 @@ The C# adapter calls the public Responses endpoint with `store:false`, `stream:t
 
 Authorization uses dynamic registration, a stable installation identifier, PKCE S256, one-use state/nonce, an exact loopback callback and signed OIDC validation. Issued clients remain distinct from the temporary dynamic registration client. DPAPI protects tokens and account bindings in a separate credential file. Refresh is serialized across processes and rotating tokens are committed atomically. Tokens never enter Core, Brain, tool arguments, INI or diagnostics. Disconnect attempts official revocation and clears local tokens even when remote revocation cannot be confirmed.
 
+Full-access commands execute as the current Windows user. Credential-path guards and DPAPI protect normal data access and storage; they do not provide an operating-system security boundary against arbitrary code authorized to execute with that same user identity. Credentials are never injected into child command arguments or environment. A hard isolation guarantee would require a separately enforced process/identity boundary, beyond the existing full-access executor.
+
 The direct C# approach avoids an additional app-server executable and executor boundary. The app-server alternative remains official, but would require additional process and tool-permission integration. The preview does not provide the full paid API feature set, automatic durable HTTP history or guaranteed access to every ChatGPT model.
 
 ## Persistent tasks
