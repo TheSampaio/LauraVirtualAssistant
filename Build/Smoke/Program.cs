@@ -27,6 +27,8 @@ if (args.Length == 2 && args[0] == "--inspect-gui-policy")
 }
 if (args.Length == 0) { Console.Error.WriteLine("Usage: Laura.Smoke <isolated-directory> --gemini --key-file <Mark-LV api_keys.json> [--quick] [--vad]"); return 2; }
 string directory = Path.GetFullPath(args[0]);
+if (args.Contains("--chatgpt-synthetic", StringComparer.Ordinal)) { return await ChatGptSmoke.RunSyntheticAsync(directory); }
+if (args.Contains("--chatgpt-login", StringComparer.Ordinal) || args.Contains("--chatgpt-probe-model", StringComparer.Ordinal)) { return await ChatGptSmoke.RunLiveAsync(directory, args); }
 Directory.CreateDirectory(directory);
 using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
 using var settings = new SettingsService(new IniSettingsStore(Path.Combine(directory, "settings.ini"), NullLogger<IniSettingsStore>.Instance), NullLogger<SettingsService>.Instance);
@@ -63,10 +65,15 @@ if (args.Contains("--silent-thinking", StringComparer.Ordinal))
 if (args.Contains("--gemini", StringComparer.Ordinal))
 {
     int index = Array.IndexOf(args, "--key-file");
-    if (index < 0 || index + 1 >= args.Length) { Console.Error.WriteLine("Provide the existing credential file with --key-file. No credential is printed."); return 2; }
-    using JsonDocument config = JsonDocument.Parse(await File.ReadAllTextAsync(args[index + 1], timeout.Token));
-    var keys = new ProtectedApiKeyStore(directory);
-    keys.Save(config.RootElement.GetProperty("gemini_api_key").GetString() ?? "");
+    int protectedIndex = Array.IndexOf(args, "--protected-key-directory");
+    IApiKeyStore keys;
+    if (protectedIndex >= 0 && protectedIndex + 1 < args.Length) { keys = new ProtectedApiKeyStore(Path.GetFullPath(args[protectedIndex + 1])); }
+    else
+    {
+        if (index < 0 || index + 1 >= args.Length) { Console.Error.WriteLine("Provide an existing key file or protected credential directory. No credential is printed."); return 2; }
+        using JsonDocument config = JsonDocument.Parse(await File.ReadAllTextAsync(args[index + 1], timeout.Token));
+        keys = new ProtectedApiKeyStore(directory); keys.Save(config.RootElement.GetProperty("gemini_api_key").GetString() ?? "");
+    }
     await using var live = new GeminiLiveClient(settings, keys, memory, Array.Empty<ISkill>(), new SmokeShell());
     live.StatusChanged += (_, status) => Console.WriteLine("Live state: " + status);
     IReadOnlyList<string> selectedVoices = args.Contains("--session-reset-smoke", StringComparer.Ordinal) ? [] : args.Contains("--quick", StringComparer.Ordinal) ? ["Charon"] : GeminiLiveOptions.Voices;

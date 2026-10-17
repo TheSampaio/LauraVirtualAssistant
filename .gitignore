@@ -18,6 +18,8 @@ TestResults/
 
 # Local assistant data and credentials (including interrupted writes/backups)
 google-key.dat*
+chatgpt-credentials.dat*
+chatgpt-credentials.lock
 openai-key.dat*
 api_keys.json*
 settings.ini*
