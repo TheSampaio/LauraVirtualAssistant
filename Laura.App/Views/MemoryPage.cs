@@ -596,7 +596,20 @@ public sealed class MemoryPage : ContentPage
     /// <summary>Offers location, integrity, retrieval and private backup controls as concrete native actions.</summary>
     private async Task ManageAsync()
     {
-        string? action = await Laura.App.Platforms.Windows.WindowsDialogs.ChooseAsync(T("manage"), _ui.Get("ui.maui.cancel"), null, T("newBrain"), T("existingBrain"), T("migrate"), _ui.Get("ui.maintenance.title"), _ui.Get("ui.evidence.learning"), T("integrity"), T("rebuild"), T("learning"), T("budget"), T("backup"), T("restore"), T("clearHistory")).ConfigureAwait(true);
+        string? action = await Laura.App.Platforms.Windows.WindowsDialogs.ChooseAsync(T("manage"), _ui.Get("ui.maui.cancel"), null, T("newBrain"), T("existingBrain"), _ui.Get("ui.brain.shared"), _ui.Get("ui.brain.obsidianGroups"), T("migrate"), _ui.Get("ui.maintenance.title"), _ui.Get("ui.evidence.learning"), T("integrity"), T("rebuild"), T("learning"), T("budget"), T("backup"), T("restore"), T("clearHistory")).ConfigureAwait(true);
+        if (action == _ui.Get("ui.brain.obsidianGroups"))
+        { await _brain.ConfigureObsidianGroupsAsync().ConfigureAwait(true); _status.Text = _ui.Get("ui.brain.obsidianConfigured"); return; }
+        if (action == _ui.Get("ui.brain.shared"))
+        {
+            if (!await CanLeaveAsync().ConfigureAwait(true)) { return; }
+            string? candidate = SharedBrainConfiguration.ReadCandidate(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".shared-brain", "config.json"));
+            if (candidate is null) { await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync(T("manage"), _ui.Get("ui.brain.sharedMissing"), "OK").ConfigureAwait(true); return; }
+            if (!await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync(_ui.Get("ui.brain.shared"),
+                string.Format(System.Globalization.CultureInfo.CurrentCulture, _ui.Get("ui.brain.sharedChoice"), _brain.Location, candidate), T("existingBrain"), _ui.Get("ui.maui.cancel")).ConfigureAwait(true)) { return; }
+            await _brain.ChangeLocationAsync(candidate, false, true).ConfigureAwait(true);
+            _selected = null; _selectedPath = ""; _editor.Text = _loadedText = ""; _reader.Clear(); ShowEmptyDetails();
+            await RefreshAsync().ConfigureAwait(true); return;
+        }
         if (action == _ui.Get("ui.evidence.learning")) { await ShowLearningActivityAsync().ConfigureAwait(true); return; }
         if (action == _ui.Get("ui.maintenance.title"))
         { if (await CanLeaveAsync().ConfigureAwait(true)) { await NavigationMotion.PushAsync(Navigation, new BrainMaintenancePage(_brain, _maintenance, _settings, _ui, path => OpenAsync(path, true))).ConfigureAwait(true); } return; }

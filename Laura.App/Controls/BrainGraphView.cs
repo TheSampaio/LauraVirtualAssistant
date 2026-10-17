@@ -64,13 +64,13 @@ public sealed class BrainGraphView : GraphicsView, IDrawable
                 native.PointerMoved += (_, args) =>
                 {
                     var point = args.GetCurrentPoint(native).Position; string? id = Hit(new((float)point.X, (float)point.Y));
-                    ToolTipProperties.SetText(this, id is null ? "" : _notes.First(note => note.Id == id).Title);
+                    ToolTipProperties.SetText(this, id is null ? "" : _notes.First(note => note.Id == id).Title + " / " + _notes.First(note => note.Id == id).OriginAgent);
                 };
             }
         };
     }
     /// <summary>Highlights file-tree selection without simulating a pointer event.</summary>
-    public void Select(string id) { _selected = id; SemanticProperties.SetDescription(this, _notes.FirstOrDefault(note => note.Id == id)?.Title ?? "LAURA Brain graph"); Invalidate(); }
+    public void Select(string id) { _selected = id; SemanticProperties.SetDescription(this, _notes.FirstOrDefault(note => note.Id == id) is { } note ? note.Title + " / " + note.OriginAgent : "LAURA Brain graph"); Invalidate(); }
     /// <summary>Toggles derived connected-community layout and colors.</summary>
     public void SetCommunities(bool enabled) { _groupCommunities = enabled; _layoutStamp = ""; }
     /// <summary>Scales the canvas around its center while leaving node coordinates unchanged.</summary>
@@ -186,9 +186,11 @@ public sealed class BrainGraphView : GraphicsView, IDrawable
             PointF center = Screen(_positions[note.Id]); if (!dirtyRect.Inflate(80, 40).Contains(center)) { continue; }
             bool selected = note.Id == _selected; float radius = (selected ? 17 : 7) + (float)note.Importance * 4;
             if (selected) { for (int halo = 5; halo > 0; halo--) { canvas.FillColor = Theme.Accent.WithAlpha(.025f); canvas.FillCircle(center, radius + halo * 7); } }
-            canvas.FillColor = selected ? Theme.Accent : note.MemoryType == "episodic" ? Color.FromArgb("#D4ABA1") : note.MemoryType == "procedural" ? Color.FromArgb("#EC879A") : Color.FromArgb("#F47992");
-            if (_groupCommunities && !selected) { canvas.FillColor = (_communities[note.Id] % 3) switch { 0 => Color.FromArgb("#E58297"), 1 => Color.FromArgb("#C2A7B3"), _ => Color.FromArgb("#DAB19F") }; }
-            canvas.FillCircle(center, radius); canvas.StrokeColor = Color.FromArgb("#FFB6C5").WithAlpha(.6f); canvas.StrokeSize = 1; canvas.DrawCircle(center, radius);
+            BrainNodeAppearance appearance = BrainProvenance.Appearance(note.OriginAgent, selected);
+            canvas.FillColor = appearance.Fill is { } color ? Color.FromArgb(color) : Theme.Accent;
+            canvas.FillCircle(center, radius);
+            canvas.StrokeColor = selected ? Theme.Text : Theme.Line; canvas.StrokeSize = appearance.OutlineWidth;
+            canvas.DrawCircle(center, radius + appearance.OutlineOffset);
             if (selected || (dirtyRect.Height >= 240 && (_notes.Length < 90 || _zoom > 1.7)))
             { canvas.FontSize = selected ? 14 : 12; canvas.FontColor = selected ? Theme.Text : Theme.Muted; canvas.DrawString(note.Title.Length > 35 ? note.Title[..35] + "…" : note.Title, center.X - 100, center.Y + radius + 8, 200, 30, HorizontalAlignment.Center, VerticalAlignment.Top); }
         }
@@ -210,7 +212,7 @@ public sealed class BrainGraphView : GraphicsView, IDrawable
         canvas.FillColor = Theme.Surface; canvas.FillRoundedRectangle(bounds, 10); canvas.StrokeColor = Theme.Line; canvas.StrokeSize = 1; canvas.DrawRoundedRectangle(bounds, 10);
         canvas.SaveState(); canvas.ClipRectangle(bounds); canvas.StrokeColor = Theme.Accent.WithAlpha(.3f);
         foreach (BrainEdge edge in _edges) { PointF a = _positions[edge.Source], b = _positions[edge.Target]; canvas.DrawLine(origin.X + (a.X - center.X) * scale, origin.Y + (a.Y - center.Y) * scale, origin.X + (b.X - center.X) * scale, origin.Y + (b.Y - center.Y) * scale); }
-        foreach (BrainNote note in _notes) { PointF point = _positions[note.Id]; canvas.FillColor = note.Id == _selected ? Theme.Accent : Theme.Muted; canvas.FillCircle(origin.X + (point.X - center.X) * scale, origin.Y + (point.Y - center.Y) * scale, note.Id == _selected ? 3.5f : 2); }
+        foreach (BrainNote note in _notes) { PointF point = _positions[note.Id]; canvas.FillColor = BrainProvenance.Color(note.OriginAgent) is { } color ? Color.FromArgb(color) : Theme.Accent; canvas.FillCircle(origin.X + (point.X - center.X) * scale, origin.Y + (point.Y - center.Y) * scale, note.Id == _selected ? 3.5f : 2); }
         canvas.StrokeColor = Theme.Accent.WithAlpha(.6f);
         canvas.DrawRectangle(origin.X + (-_pan.X / _zoom - center.X) * scale - (float)Width / _zoom * scale / 2, origin.Y + (-_pan.Y / _zoom - center.Y) * scale - (float)Height / _zoom * scale / 2, (float)Width / _zoom * scale, (float)Height / _zoom * scale);
         canvas.RestoreState();
