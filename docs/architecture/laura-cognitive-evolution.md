@@ -1,5 +1,7 @@
 # Evolução cognitiva da LAURA
 
+> Historical architecture and validation record. The 2026-10-17 [agent rework](laura-agent-execution.md) supersedes provider, model and approval descriptions below. Gemini is now the sole conversation/voice provider; local inference and ONNX adapters are retired.
+
 ## Laura 2.0 implementation audit — 2026-10-15
 
 ### Native LPAC isolation experiment and offline SDK boundary — 2026-10-16

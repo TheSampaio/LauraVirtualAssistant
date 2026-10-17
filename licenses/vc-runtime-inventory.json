@@ -68,12 +68,5 @@
     "Version": "14.51.36247.0",
     "Sha256": "D1F4225DF2CD877DBF130D5668A021DCE3F94118455FF5EC952061C30AFC9CE7",
     "Publisher": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
-  },
-  {
-    "File": "vcomp140.dll",
-    "RelativePath": "Microsoft.VC145.OpenMP/vcomp140.dll",
-    "Version": "14.51.36247.0",
-    "Sha256": "95D4CE4A6802D1E18B5E0E1722CC30EA72CA7E033F83828F05C0B7B993FE7CBF",
-    "Publisher": "CN=Microsoft Windows Software Compatibility Publisher, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
   }
 ]

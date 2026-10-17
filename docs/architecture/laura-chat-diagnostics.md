@@ -1,5 +1,7 @@
 # PrtSc, diagnóstico compartilhável e extensão do chat — 2026-10-15
 
+> Historical architecture and validation record. The 2026-10-17 [agent rework](laura-agent-execution.md) supersedes provider, model and approval descriptions below. Gemini is now the sole conversation/voice provider; local inference and ONNX adapters are retired.
+
 ## Auditoria antes da integração
 
 Base da auditoria original: `61bcf84`, quando o produto suportava somente Gemini Live. Após a entrega inicial, o usuário confirmou a inclusão de GPT opcional. O novo adaptador, a seleção explícita e as verificações adicionais estão documentados em [GPT opcional](laura-gpt-provider.md). Gemini continua padrão e provedor de voz.

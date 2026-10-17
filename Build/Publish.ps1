@@ -40,7 +40,6 @@ function Assert-OwnedOutputTree([string]$Path) {
 $distribution = Assert-OwnedOutput $distribution
 $publish = Assert-OwnedOutputTree $publish
 $payload = Assert-OwnedOutput $payload
-if (!$Repackage) { & (Join-Path $PSScriptRoot 'Prepare-CudaRuntime.ps1') }
 if (!$Repackage -and (Test-Path -LiteralPath $publish)) {
     $resolvedPublish = [IO.Path]::GetFullPath($publish)
     $resolvedDistribution = [IO.Path]::GetFullPath($distribution).TrimEnd('\') + '\'
@@ -55,16 +54,18 @@ try {
         # Repackage only an intact verified binary tree; this cannot legitimize changed application binaries.
         & (Join-Path $PSScriptRoot 'Verify-Package.ps1') -PackageDirectory $publish
     } else {
-        & dotnet restore Laura.sln --locked-mode
+        & dotnet restore Laura.sln --locked-mode -m:1
         if ($LASTEXITCODE -ne 0) { throw 'Locked dependency restore failed.' }
-        & dotnet publish Laura.App/Laura.App.csproj -c Release -f net10.0-windows10.0.19041.0 -r win-x64 --self-contained true --no-restore -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=false -o $publish
+        & dotnet publish Laura.App/Laura.App.csproj -c Release -f net10.0-windows10.0.19041.0 -r win-x64 --self-contained true --no-restore -m:1 -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=false -o $publish
         if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
-        # Native backend packages expose multiple platforms as content; this distribution supports Windows x64 only.
+        # Some packages expose runtime-specific content; current Windows assets may instead be flattened at publish time.
         $nativeRoot = Join-Path $publish 'runtimes'
-        foreach ($runtime in Get-ChildItem -LiteralPath $nativeRoot -Directory) {
-            if ($runtime.Name -ne 'win-x64') { Remove-Item -LiteralPath (Assert-OwnedOutputTree $runtime.FullName) -Recurse -Force }
+        if (Test-Path -LiteralPath $nativeRoot -PathType Container) {
+            foreach ($runtime in Get-ChildItem -LiteralPath $nativeRoot -Directory) {
+                if ($runtime.Name -ne 'win-x64') { Remove-Item -LiteralPath (Assert-OwnedOutputTree $runtime.FullName) -Recurse -Force }
+            }
         }
-        # App-local CRT/OpenMP avoids a separate system-wide prerequisite installation.
+        # App-local CRT avoids a separate system-wide prerequisite installation.
         # The builder must have redistribution rights under the supplied Microsoft terms.
         $crtInventory = Get-Content -LiteralPath (Join-Path $root 'licenses/vc-runtime-inventory.json') -Raw | ConvertFrom-Json
         foreach ($component in $crtInventory) {

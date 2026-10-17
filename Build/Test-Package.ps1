@@ -17,10 +17,10 @@ $sentinel = Join-Path $run 'personal-data.txt'
 Set-Content -LiteralPath $sentinel -Value 'Preserve this data.'
 & $installerScript -InstallDirectory $installed -SkipShortcut
 if (!(Test-Path -LiteralPath $sentinel)) { throw 'Update changed unrelated personal data.' }
-foreach ($relative in @('Laura.exe', 'hostfxr.dll', 'hostpolicy.dll', 'coreclr.dll', 'Microsoft.Maui.Controls.dll', 'Microsoft.UI.Xaml.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'vcomp140.dll', 'e_sqlite3.dll', 'NAudio.Core.dll', 'NAudio.WinMM.dll', 'Localization/Locales/en-US.json', 'Localization/Locales/pt-BR.json', 'licenses/dependency-inventory.json')) {
+foreach ($relative in @('Laura.exe', 'hostfxr.dll', 'hostpolicy.dll', 'coreclr.dll', 'Microsoft.Maui.Controls.dll', 'Microsoft.UI.Xaml.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'e_sqlite3.dll', 'NAudio.Core.dll', 'NAudio.WinMM.dll', 'Localization/Locales/en-US.json', 'Localization/Locales/pt-BR.json', 'licenses/dependency-inventory.json')) {
     if (!(Test-Path -LiteralPath (Join-Path $installed $relative))) { throw "Missing packaged dependency: $relative" }
 }
-foreach ($brainDependency in @('YamlDotNet.dll', 'Markdig.dll', 'Microsoft.ML.OnnxRuntime.dll', 'onnxruntime.dll', 'licenses/YamlDotNet-18.1.0-LICENSE.txt', 'licenses/Markdig-1.4.0-LICENSE.txt', 'licenses/OnnxRuntime-1.31.0-LICENSE.txt', 'licenses/OnnxRuntime-1.31.0-ThirdPartyNotices.txt')) {
+foreach ($brainDependency in @('YamlDotNet.dll', 'Markdig.dll', 'licenses/YamlDotNet-18.1.0-LICENSE.txt', 'licenses/Markdig-1.4.0-LICENSE.txt')) {
     if (!(Test-Path -LiteralPath (Join-Path $installed $brainDependency))) { throw "Missing Brain dependency or license: $brainDependency" }
 }
 foreach ($mcpDependency in @('ModelContextProtocol.Core.dll', 'Microsoft.Extensions.AI.Abstractions.dll', 'licenses/ModelContextProtocol.Core-2.2.0-LICENSE.txt', 'licenses/Microsoft.Extensions.AI.Abstractions-10.8.3-LICENSE.txt')) {
@@ -28,7 +28,7 @@ foreach ($mcpDependency in @('ModelContextProtocol.Core.dll', 'Microsoft.Extensi
 }
 if (Get-ChildItem -LiteralPath $installed -Recurse -Directory | Where-Object { $_.Name -eq 'brain' }) { throw 'Personal Brain folders must not be distributed.' }
 if (Get-ChildItem -LiteralPath $installed -Recurse -File -Filter '*.onnx') { throw 'Optional user model weights must not be distributed.' }
-foreach ($removed in @('System.Windows.Forms.dll', 'System.Speech.dll', 'OllamaSharp.dll', 'LLamaSharp.dll', 'Whisper.net.dll', 'whisper.dll', 'llama.dll', 'sherpa-onnx-c-api.dll')) {
+foreach ($removed in @('System.Windows.Forms.dll', 'System.Speech.dll', 'OllamaSharp.dll', 'LLamaSharp.dll', 'Whisper.net.dll', 'whisper.dll', 'llama.dll', 'sherpa-onnx-c-api.dll', 'Microsoft.ML.OnnxRuntime.dll', 'onnxruntime.dll', 'vcomp140.dll')) {
     if (Get-ChildItem -LiteralPath $installed -Recurse -File -Filter $removed) { throw "Removed integration must not ship: $removed" }
 }
 foreach ($privateFile in @('google-key.dat', 'api_keys.json', 'settings.ini', 'memory.db')) {
