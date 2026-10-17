@@ -52,7 +52,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
             {
                 if (!_storage.EnumerateFiles().Contains("README.md", StringComparer.OrdinalIgnoreCase))
                 {
-                    var readme = new BrainNote { Path = "README.md", Title = "LAURA Brain", Type = "document", Body = "# LAURA Brain\n\nMarkdown is the source of truth. Each note has a stable id and schema_version: 1.\nEdit notes in any Markdown editor. Typed relations target ids; wikilinks resolve titles, aliases and relative paths.\nIndices and embeddings are disposable and stay outside this directory.\nSkills are inert until explicitly enabled; ordinary knowledge never grants tool permissions.\nConflicting drafts and previous revisions are preserved in Archive/.\nCloud sync is supplied by your chosen file/document provider, not by this vault. Plain Markdown is readable to anyone with access.\n" };
+                    var readme = new BrainNote { Path = "README.md", Title = "LAURA Brain", Type = "document", OriginAgent = "laura", Body = "# LAURA Brain\n\nMarkdown is the source of truth. Each note has a stable id and schema_version: 1.\nEdit notes in any Markdown editor. Typed relations target ids; wikilinks resolve titles, aliases and relative paths.\nIndices and embeddings are disposable and stay outside this directory.\nSkills are inert until explicitly enabled; ordinary knowledge never grants tool permissions.\nConflicting drafts and previous revisions are preserved in Archive/.\nCloud sync is supplied by your chosen file/document provider, not by this vault. Plain Markdown is readable to anyone with access.\n" };
                     _storage.Write(readme.Path, BrainMarkdown.Render(readme), null);
                 }
                 Scan(false);
@@ -148,6 +148,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         if (!rebuild && notes.Count == Snapshot.Notes.Count && notes.Zip(Snapshot.Notes).All(pair => pair.First.Path == pair.Second.Path && pair.First.Hash == pair.Second.Hash)
             && issues.SequenceEqual(Snapshot.Issues.Where(issue => issue.Code == "invalid_or_unreadable")))
         { index.Update(Location, Snapshot.Notes.Where(note => !Snapshot.Issues.Any(issue => issue.Path == note.Path && issue.Code == "conflicting_id")).ToArray(), false); return; }
+        foreach (BrainNote note in notes.Where(BrainProvenance.HasConflict)) { issues.Add(new(note.Path, "origin_tag_conflict")); }
         var duplicates = notes.GroupBy(note => note.Id, StringComparer.Ordinal).Where(group => group.Count() > 1).ToArray();
         var duplicateIds = duplicates.Select(group => group.Key).ToHashSet(StringComparer.Ordinal);
         foreach (var group in duplicates) { foreach (BrainNote note in group) { issues.Add(new(note.Path, "conflicting_id")); } }
@@ -297,13 +298,20 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
                 _storage!.ValidatePath(note.Path);
                 if (note.Hash.Length == 0) { note = note with { Path = DestinationPath(note.Path) }; }
                 if (!note.Path.EndsWith(".md", StringComparison.OrdinalIgnoreCase)) { throw new IOException("Notes require a Markdown extension."); }
+                if (note.Hash.Length == 0 && note.Frontmatter.Length == 0 && !preserveTimestamp && !note.Source.StartsWith("external_", StringComparison.Ordinal))
+                { note = note with { OriginAgent = note.OriginAgent.Length == 0 ? "laura" : note.OriginAgent }; }
                 BrainNote saved = note with { Id = note.Id.Length == 0 ? Guid.NewGuid().ToString("D") : note.Id, UpdatedAt = preserveTimestamp ? note.UpdatedAt : DateTimeOffset.UtcNow,
                     PreviousRevision = note.Revision, Revision = Guid.NewGuid().ToString("N") };
                 if (note.Hash.Length > 0)
                 {
                     string previousContent = _storage!.Read(note.Path);
                     if (FileBrainStorage.Hash(previousContent) != note.Hash) { PreserveDraft(saved); throw new BrainConflictException(); }
-                    try { writtenPaths.Add(PreserveRevision(BrainMarkdown.Parse(previousContent, note.Path))); }
+                    try
+                    {
+                        BrainNote previous = BrainMarkdown.Parse(previousContent, note.Path);
+                        saved = saved with { OriginAgent = previous.OriginAgent, Frontmatter = BrainMarkdown.MergeFrontmatter(previous.Frontmatter, saved.Frontmatter), Tags = previous.Tags.Concat(saved.Tags).Distinct(StringComparer.Ordinal).ToArray() };
+                        writtenPaths.Add(PreserveRevision(previous));
+                    }
                     catch (FormatException)
                     {
                         var original = new BrainNote { Path = "Archive/Revisions/" + Guid.NewGuid().ToString("N") + ".md", Title = "Original document before repair", Status = "archived", Source = "manual_repair",
@@ -591,6 +599,26 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         }
         finally { _gate.Release(); }
         await InitializeAsync(cancellationToken).ConfigureAwait(false);
+    }
+    /// <summary>Installs portable creator groups only on explicit request, preserving other graph settings with optimistic concurrency.</summary>
+    public async Task ConfigureObsidianGroupsAsync(CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await Task.Run(() =>
+            {
+                const string path = ".obsidian/graph.json";
+                string? content = null;
+                try { content = _storage!.Read(path); }
+                catch (FileNotFoundException) { }
+                catch (DirectoryNotFoundException) { }
+                string merged = BrainObsidianGroups.Merge(content ?? "");
+                _storage!.Write(path, merged, content is null ? null : FileBrainStorage.Hash(content));
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
     }
     /// <summary>Exports a private backup only to the user-selected destination; no overwrite or repository packaging occurs.</summary>
     public async Task BackupAsync(string destination, CancellationToken cancellationToken = default)

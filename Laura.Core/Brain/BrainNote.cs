@@ -25,6 +25,8 @@ public sealed record BrainNote
     public double Confidence { get; init; } = .8;
     /// <summary>Gets user importance independently of confidence.</summary>
     public double Importance { get; init; } = .5;
+    /// <summary>Gets immutable creator provenance, independent of ownership and execution permission.</summary>
+    public string OriginAgent { get; init; } = "";
     /// <summary>Gets portable categories.</summary>
     public IReadOnlyList<string> Tags { get; init; } = [];
     /// <summary>Gets former names and paths preserved during moves.</summary>
