@@ -28,6 +28,8 @@ Automatic routing considers structured native task stages and account availabili
 
 Task controls expose pause, cancel, native resumption, actual counts, provider/model and errors. Restart requires an explicit owner gesture and reacquires disclosure permission. No process is resurrected by PID. The assistant queue processes owner messages between bounded cycles; a chat reply still waits for the current inference to yield. Native task status remains independently readable.
 
+Successful dialogue with no operations, plan, acquired resources or pending protocol work releases its temporary task slot. The conversation history remains available. Routine chat therefore cannot exhaust the retention allowance reserved for operational objectives.
+
 ## Repository learning
 
 Acquisition and indexing are measured separately from module analysis. `record_repository_analysis` accepts only current acquired source versions actually read by the task, with literal evidence and hash-pinned graph relations. Notes stay ordinary authoritative Brain Markdown. This records an interpretation, not verified comprehension, applied skill or successful operational outcome.

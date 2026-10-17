@@ -9,6 +9,21 @@ namespace Laura.Core.Tests.Engine;
 /// <summary>Exercises automatic queued cycles through the real assistant, dispatcher, task coordinator and effect journal.</summary>
 public sealed class AutomaticTaskCycleTests
 {
+    /// <summary>Routine dialogue beyond the operational retention bound cannot disable subsequent conversation or leave empty task rows.</summary>
+    [Fact]
+    public async Task RoutineDialogueDoesNotExhaustOperationalTaskRetention()
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10)); var journal = new RecordingTaskJournal(); using var tasks = new CognitiveTasks(journal);
+        var memory = new WorkingConversationMemory(); var conversation = new RecordingConversationEngine(true, "A routine answer."); var tools = new LocalAgentTools();
+        var settings = new StubSettingsService(LauraSettings.Default with { GreetOnStartup = false, GenerativeAi = new() { Enabled = true } });
+        var localizer = new StubLocalizer(); var user = new StubUserContext(); var clock = new SystemClock();
+        var dispatcher = new GeminiSkillDispatcher(conversation, settings, user, memory, localizer, tasks: tasks, tools: tools);
+        await using var engine = new AssistantEngine(new RecordingSpeechSynthesizer(), dispatcher, settings, localizer, new StubShellController(),
+            new GreetingComposer(localizer, user, clock), clock, NullLogger<AssistantEngine>.Instance, memory, tasks: tasks, taskTools: tools, conversation: conversation);
+        await engine.StartAsync(deadline.Token);
+        for (int turn = 0; turn < 205; turn++) { await engine.SubmitCommandAsync("A routine dialogue turn.", deadline.Token); }
+        Assert.Equal(205, conversation.CallCount); Assert.Empty(await tasks.ListAsync(deadline.Token));
+    }
     /// <summary>Executes a verified three-stage goal without repeated owner prompts, including recovery after a model timeout and interleaved owner dialogue.</summary>
     [Theory]
     [InlineData(false, false)]

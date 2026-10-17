@@ -419,7 +419,9 @@ public sealed class AssistantEngine : IAssistantEngine
             await _tasks.SetContinuationAsync(taskId, remaining is not null, token).ConfigureAwait(false); return;
         }
         string? pending = _conversation.PendingRound(taskId) ?? await _taskTools.PendingTaskContinuationAsync(token).ConfigureAwait(false);
-        if (!await _tasks.SetContinuationAsync(taskId, pending is not null, token).ConfigureAwait(false) || pending is null) { return; }
+        if (pending is null)
+        { await _tasks.SetContinuationAsync(taskId, false, token).ConfigureAwait(false); await _tasks.RetireDialogueAsync(taskId, token).ConfigureAwait(false); return; }
+        if (!await _tasks.SetContinuationAsync(taskId, true, token).ConfigureAwait(false)) { return; }
         var next = new CommandSubmitted(pending) { ContinuingTaskTurnId = taskId, Automatic = true, Generation = Volatile.Read(ref _conversationGeneration) };
         bool queued = _messages.Writer.TryWrite(next);
         Diagnostics.LauraDiagnostics.Record("task.continuation", outcome: queued ? "queued" : "queue_full_paused", taskId: taskId);

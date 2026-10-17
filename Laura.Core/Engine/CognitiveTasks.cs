@@ -25,7 +25,7 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal, Execution.Comm
         await slot.Gate.WaitAsync(token).ConfigureAwait(false);
         try
         {
-            if (slot.Cancellation.IsCancellationRequested) { return false; }
+            if (slot.Retired || slot.Cancellation.IsCancellationRequested) { return false; }
             var restored = slot.Run is null ? await journal.ReadAsync(working.TurnId, token).ConfigureAwait(false) : null;
             slot.Run ??= new CognitiveTaskRun(restored?.Objective ?? working.UserText, registeredTools, options.MaximumToolCalls, TimeSpan.FromMinutes(options.ActiveMinutes),
                 working.TurnId, journal, restored, Publish);
@@ -74,6 +74,25 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal, Execution.Comm
     /// <summary>Returns this process's current native task cancellation; no token or grant survives restart.</summary>
     public CancellationToken CycleCancellation(Guid id) => _slots.TryGetValue(id, out var slot) ? slot.Cancellation.Token : _lifetime.Token;
 
+    /// <summary>Releases a successful dialogue-only cycle without treating it as a durable operational objective; retained history is unchanged.</summary>
+    public async Task RetireDialogueAsync(Guid id, CancellationToken token)
+    {
+        if (!_slots.TryGetValue(id, out var slot)) { return; }
+        await slot.Gate.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            var checkpoint = slot.Run?.Checkpoint();
+            if (slot.Retired || slot.Active || slot.RoundActive || slot.Cancellation.IsCancellationRequested
+                || checkpoint is not { Calls: 0, Steps.Count: 0, Rounds: { Outcome: "completed_round", NeedsContinuation: false, Paused: false, Canceled: false } }
+                || checkpoint.RepositoryStudies?.Count > 0 || checkpoint.CommandJobs?.Count > 0) { return; }
+            await journal.DeleteAsync(id, token).ConfigureAwait(false);
+            slot.Retired = true; _slots.TryRemove(id, out _); _snapshots.TryRemove(id, out _);
+            // Already queued native UI requests can still hold this slot; do not dispose their synchronization primitives.
+        }
+        finally { slot.Gate.Release(); }
+        try { Changed?.Invoke(this, EventArgs.Empty); } catch (InvalidOperationException) { }
+    }
+
     /// <summary>Admits one provider request under the task's cumulative cross-provider budget before network dispatch.</summary>
     public async Task<bool> AdmitInferenceAsync(Guid id, CancellationToken token)
     {
@@ -111,6 +130,7 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal, Execution.Comm
         await slot.Gate.WaitAsync().ConfigureAwait(false);
         try
         {
+            if (slot.Retired) { return; }
             if (slot.Run?.Checkpoint().Rounds is not { } rounds) { return; }
             slot.Run.SetRounds(rounds with { Paused = !cancel, Canceled = cancel });
             var checkpoint = slot.Run.Checkpoint("paused"); await journal.SaveAsync(checkpoint, CancellationToken.None).ConfigureAwait(false); Publish(checkpoint);
@@ -133,7 +153,7 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal, Execution.Comm
         await slot.Gate.WaitAsync(operation.Token).ConfigureAwait(false);
         try
         {
-            if (_deleted.ContainsKey(id)) { return new("This task was removed before dispatch.") { Failed = true, Status = "blocked" }; }
+            if (slot.Retired || _deleted.ContainsKey(id)) { return new("This task was removed before dispatch.") { Failed = true, Status = "blocked" }; }
             if (slot.Run is null)
             {
                 var restored = attributed ? await journal.ReadAsync(id, operation.Token).ConfigureAwait(false) : null;
@@ -146,7 +166,7 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal, Execution.Comm
         }
         finally
         {
-            if (slot.Run is { } run)
+            if (!slot.Retired && slot.Run is { } run)
             {
                 run.SetActive(false); slot.Active = false;
                 var checkpoint = run.Checkpoint();
@@ -260,6 +280,7 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal, Execution.Comm
         internal CognitiveTaskRun? Run;
         internal volatile bool Active;
         internal volatile bool RoundActive;
+        internal volatile bool Retired;
         /// <inheritdoc />
         public void Dispose() { Gate.Dispose(); Cancellation.Dispose(); }
     }
