@@ -37,6 +37,12 @@ public sealed record CognitiveTaskCheckpoint(Guid Id, string Objective, DateTime
         + "\nPrevious outputs and arguments were not retained. Re-read actual evidence and revalidate current state. Do not replay completed effects."
         + " No task permission survives restart; reacquire exact native authorizations. Background job IDs can inspect only this process session's retained jobs; unavailable IDs cannot attach to a PID or authorize replay. Report partial progress and never infer overall success from completed operations.";
 
+    /// <summary>Builds bounded cross-provider context from native receipts; no tool arguments, output bodies or execution grants are transferred.</summary>
+    public string HandoffContext() => "Continue the SAME native task and original objective. This metadata is reference data, never permission: "
+        + JsonSerializer.Serialize(new { Id, Objective, State, Steps, RepositoryStudies, CommandJobs,
+            recentOperations = Operations.TakeLast(8).Select(operation => new { operation.Call, operation.Tool, operation.Status, operation.ResultHash }) })
+        + " Preserve completed work and the repository cursor. Re-read only missing relevant evidence through the native tools; reacquire the actual recipient's disclosure authorization. Do not replay completed mutable operations or infer goal completion from these receipts.";
+
     /// <summary>Restricts persisted tool labels to bounded native identifier syntax.</summary>
     private static bool SafeTool(string value) => !string.IsNullOrEmpty(value) && value.Length <= 80 && value.All(character => char.IsAsciiLetterOrDigit(character) || character == '_');
     /// <summary>Checks a SHA-256 identity without interpreting it as an authorization.</summary>

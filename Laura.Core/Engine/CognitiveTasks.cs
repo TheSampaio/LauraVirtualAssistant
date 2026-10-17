@@ -27,12 +27,13 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal, Execution.Comm
         {
             if (slot.Retired || slot.Cancellation.IsCancellationRequested) { return false; }
             var restored = slot.Run is null ? await journal.ReadAsync(working.TurnId, token).ConfigureAwait(false) : null;
+            DateTimeOffset lastActivity = _snapshots.GetValueOrDefault(working.TurnId)?.Updated ?? restored?.Updated ?? DateTimeOffset.UtcNow;
+            if (lastActivity < DateTimeOffset.UtcNow.AddMinutes(-options.IdleMinutes)) { return false; }
             slot.Run ??= new CognitiveTaskRun(restored?.Objective ?? working.UserText, registeredTools, options.MaximumToolCalls, TimeSpan.FromMinutes(options.ActiveMinutes),
                 working.TurnId, journal, restored, Publish);
             var checkpoint = slot.Run.Checkpoint();
             var rounds = checkpoint.Rounds ?? new CognitiveRoundProgress(MaximumCycles: options.MaximumCycles, MaximumActiveMilliseconds: options.ActiveMinutes * 60000L,
                 MaximumRecoveries: options.MaximumRecoveries, MaximumResultBytes: options.MaximumResultMegabytes * 1024L * 1024, MaximumProviderCalls: options.MaximumProviderCalls);
-            if (checkpoint.Updated < DateTimeOffset.UtcNow.AddMinutes(-options.IdleMinutes)) { return false; }
             if (!rounds.CanContinue || checkpoint.HasUncertainEffect || checkpoint.State == "blocked") { return false; }
             slot.Run.SetRounds(rounds with { Cycles = rounds.Cycles + 1, Outcome = "running", NeedsContinuation = false });
             slot.Run.SetActive(true); slot.Active = true; slot.RoundActive = true;
@@ -58,12 +59,16 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal, Execution.Comm
         try
         {
             if (slot.Run?.Checkpoint().Rounds is not { } rounds) { return; }
+            bool recovery = failure?.Kind is ConversationFailureKind.Timeout or ConversationFailureKind.ContextExceeded;
             bool timeout = failure?.Kind == ConversationFailureKind.Timeout;
+            var before = slot.Run.Checkpoint(); int confirmed = CognitiveTaskRoutingPolicy.ConfirmedProgress(before);
+            bool stalled = failure is null && before.Steps.Any(step => step.State == "pending") && confirmed <= rounds.ConfirmedProgress;
             string outcome = canceled ? "canceled" : timeout ? "timeout" : failure is null ? "completed_round" : "failed";
             slot.Run.SetActive(false); slot.Active = false; slot.RoundActive = false;
             if (rounds.ActiveMilliseconds + milliseconds >= rounds.MaximumActiveMilliseconds) { outcome = "budget"; }
             slot.Run.SetRounds(rounds with { ActiveMilliseconds = rounds.ActiveMilliseconds + Math.Max(0, milliseconds), Provider = provider is "gemini" or "chatgpt" ? provider : "",
-                Model = model.Length <= 256 ? model : "", Outcome = outcome, Recoveries = rounds.Recoveries + (timeout ? 1 : 0) });
+                Model = model.Length <= 256 ? model : "", Outcome = outcome, Recoveries = rounds.Recoveries + (recovery ? 1 : 0), LastFailure = failure?.Kind,
+                ConfirmedProgress = confirmed, StalledCycles = stalled ? Math.Min(128, rounds.StalledCycles + 1) : 0 });
             var checkpoint = slot.Run.Checkpoint(); if (checkpoint.State == "working") { checkpoint = checkpoint with { State = "paused" }; }
             await journal.SaveAsync(checkpoint, CancellationToken.None).ConfigureAwait(false); Publish(checkpoint);
             Diagnostics.LauraDiagnostics.Record("task.cycle.end", milliseconds, outcome: outcome, taskId: id);
@@ -73,6 +78,20 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal, Execution.Comm
 
     /// <summary>Returns this process's current native task cancellation; no token or grant survives restart.</summary>
     public CancellationToken CycleCancellation(Guid id) => _slots.TryGetValue(id, out var slot) ? slot.Cancellation.Token : _lifetime.Token;
+
+    /// <summary>Commits the actual provider/model and closed routing reason before dispatch so native progress reflects the active inference.</summary>
+    public async Task RecordProviderAsync(Guid id, string provider, string model, CognitiveTaskRouting decision, CancellationToken token)
+    {
+        if (!_slots.TryGetValue(id, out var slot)) { return; }
+        await slot.Gate.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            if (slot.Retired || slot.Run?.Checkpoint().Rounds is not { } rounds) { return; }
+            slot.Run.SetRounds(rounds with { Provider = provider, Model = model, RoutingReason = decision.Reason, Recovery = decision.Recovery });
+            var checkpoint = slot.Run.Checkpoint(); await journal.SaveAsync(checkpoint, token).ConfigureAwait(false); Publish(checkpoint);
+        }
+        finally { slot.Gate.Release(); }
+    }
 
     /// <summary>Releases a successful dialogue-only cycle without treating it as a durable operational objective; retained history is unchanged.</summary>
     public async Task RetireDialogueAsync(Guid id, CancellationToken token)
@@ -234,8 +253,8 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal, Execution.Comm
         int maximumCalls = checkpoint.Calls >= checkpoint.MaximumCalls ? Math.Min(256, checkpoint.MaximumCalls + 32) : checkpoint.MaximumCalls;
         long maximumMilliseconds = checkpoint.ElapsedMilliseconds >= checkpoint.MaximumMilliseconds ? Math.Min(3600000, checkpoint.MaximumMilliseconds + 360000) : checkpoint.MaximumMilliseconds;
         if (checkpoint.Calls >= maximumCalls || checkpoint.ElapsedMilliseconds >= maximumMilliseconds) { throw new InvalidOperationException("Task reached its cumulative recovery budget; start a new explicit objective."); }
-        checkpoint = checkpoint with { State = "paused", Blocker = "", MaximumCalls = maximumCalls, MaximumMilliseconds = maximumMilliseconds,
-            Rounds = checkpoint.Rounds is { } rounds ? rounds with { Paused = false, Canceled = false, NeedsContinuation = false,
+        checkpoint = checkpoint with { State = "paused", Updated = DateTimeOffset.UtcNow, Blocker = "", MaximumCalls = maximumCalls, MaximumMilliseconds = maximumMilliseconds,
+            Rounds = checkpoint.Rounds is { } rounds ? rounds with { Paused = false, Canceled = false, NeedsContinuation = false, LastFailure = null,
                 MaximumCycles = rounds.Cycles >= rounds.MaximumCycles ? Math.Min(128, rounds.MaximumCycles + 16) : rounds.MaximumCycles,
                 MaximumProviderCalls = rounds.ProviderCalls >= rounds.MaximumProviderCalls ? Math.Min(256, rounds.MaximumProviderCalls + 32) : rounds.MaximumProviderCalls,
                 MaximumActiveMilliseconds = rounds.ActiveMilliseconds >= rounds.MaximumActiveMilliseconds ? Math.Min(3600000, rounds.MaximumActiveMilliseconds + 600000) : rounds.MaximumActiveMilliseconds,

@@ -411,7 +411,7 @@ public sealed class AssistantEngine : IAssistantEngine
     {
         if (_tasks is null || _taskTools is null || _conversation is null || _tasks.Current(taskId) is not { Rounds: { } rounds } checkpoint
             || rounds.Paused || rounds.Canceled || checkpoint.HasUncertainEffect || checkpoint.State == "blocked"
-            || _conversation.LastFailure is { Kind: not ConversationFailureKind.Timeout }) { return; }
+            || _conversation.LastFailure is { Kind: not (ConversationFailureKind.Timeout or ConversationFailureKind.ContextExceeded) }) { return; }
         using var recipient = new ProviderExecutionScope(rounds.Provider);
         if (!rounds.CanContinue)
         {

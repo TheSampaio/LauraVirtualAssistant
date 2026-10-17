@@ -108,6 +108,7 @@ public sealed class CognitiveTaskRun
     public CognitiveTaskOperation? NextSourceOperation()
     {
         if (PendingContinuation() is null) { return null; }
+        if (_sources.Count == 0 && _pendingStudy == Guid.Empty) { return null; }
         if (_pendingStudy != Guid.Empty && _studyRemaining != 0 && (_sources.Count == 0 || _sourceAssessed))
         {
             if (_studyCursor.Length == 0 && registeredTools.Contains("repository_study_status")) { return new("repository_study_status", JsonSerializer.SerializeToElement(new { id = _pendingStudy })); }

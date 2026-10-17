@@ -40,4 +40,6 @@ public sealed record ConversationTurn(string Prompt, CultureInfo Culture, string
     public Guid ContinuingTaskTurnId { get; init; }
     /// <summary>Gets a native structured task requirement; ordinary input remains routine regardless of wording.</summary>
     public CognitiveTaskDemand TaskDemand { get; init; }
+    /// <summary>Gets native progress/recovery evidence; this value never originates in a model-supplied tool argument.</summary>
+    public CognitiveTaskRouting? TaskRouting { get; init; }
 }

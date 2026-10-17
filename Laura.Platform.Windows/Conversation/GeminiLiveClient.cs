@@ -196,7 +196,9 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
             using var correlation = LauraDiagnostics.Correlate(_memory.WorkingContext.TurnId);
             using var measurement = LauraDiagnostics.Measure("interaction.text");
             ReportStatus("Thinking");
-            if (_contextBuilder is not null)
+            if (turn.TaskRouting?.Recovery == CognitiveRecoveryAction.ReduceContext)
+            { turn = turn with { History = turn.PriorHistory().TakeLast(2).ToArray(), Memories = [], SkillCatalogue = "", SkillGuidance = "" }; }
+            else if (_contextBuilder is not null)
             {
                 BrainContext context = await _contextBuilder.BuildAsync(turn.Prompt, cancellationToken).ConfigureAwait(false);
                 turn = turn with { Memories = context.Memories.Length > 0 ? [context.Memories] : [], SkillCatalogue = context.SkillCatalogue, SkillGuidance = "" };

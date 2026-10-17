@@ -46,9 +46,9 @@ public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISet
             if (tracked && !await tasks!.AdmitInferenceAsync(taskId, operation.Token).ConfigureAwait(false))
             { return SkillResponse.Speak(new ConversationFailure(ConversationFailureKind.OperationLimit).Describe(localizer)); }
             var checkpoint = tracked ? tasks!.Current(taskId) : null;
-            CognitiveTaskDemand demand = checkpoint?.RepositoryStudies is { Count: > 0 } && checkpoint.Rounds?.Cycles > 1 ? CognitiveTaskDemand.Analysis : CognitiveTaskDemand.Routine;
+            CognitiveTaskRouting decision = CognitiveTaskRoutingPolicy.Evaluate(checkpoint);
             answer = await conversation.AskAsync(new ConversationTurn(request.RawText, request.Culture, user.DisplayName)
-            { TurnId = request.TurnId, ContinuingTaskTurnId = request.ContinuingTaskTurnId, TaskDemand = demand,
+            { TurnId = request.TurnId, ContinuingTaskTurnId = request.ContinuingTaskTurnId, TaskDemand = decision.Demand, TaskRouting = decision,
                 History = history.Where(message => request.TurnId == Guid.Empty || message.TurnId != request.TurnId).TakeLast(8).ToArray(), Image = request.Image }, operation.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { canceled = true; throw; }
@@ -57,8 +57,10 @@ public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISet
             if (tracked)
             {
                 string provider = routing?.ActiveProvider ?? "gemini";
+                string model = tasks!.Current(taskId)?.Rounds is { } active && active.Provider == provider && active.Model.Length > 0
+                    ? active.Model : provider == "chatgpt" ? settings.Current.ChatGpt.Model : settings.Current.GenerativeAi.Model;
                 await tasks!.EndCycleAsync(taskId, (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds, provider,
-                    provider == "chatgpt" ? settings.Current.ChatGpt.Model : settings.Current.GenerativeAi.Model, conversation.LastFailure, canceled).ConfigureAwait(false);
+                    model, conversation.LastFailure, canceled).ConfigureAwait(false);
             }
         }
         return SkillResponse.Speak(string.IsNullOrWhiteSpace(answer) ? (conversation.LastFailure ?? new(ConversationFailureKind.Unknown)).Describe(localizer) : answer);

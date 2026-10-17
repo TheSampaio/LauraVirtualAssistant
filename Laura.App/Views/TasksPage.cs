@@ -57,6 +57,7 @@ public sealed class TasksPage : ContentPage
         {
             details.Add(Theme.Label(string.Format(_ui.Culture, T("cycles"), rounds.Cycles, rounds.MaximumCycles, rounds.ProviderCalls, rounds.MaximumProviderCalls), 12, Theme.Muted));
             details.Add(Theme.Label(string.Format(_ui.Culture, T("provider"), rounds.Provider.Length > 0 ? rounds.Provider : T("unknown"), rounds.Model.Length > 0 ? rounds.Model : T("unknown")), 12, Theme.Muted));
+            details.Add(Theme.Label(string.Format(_ui.Culture, T("routingDetails"), T("route." + rounds.RoutingReason), T("recovery." + rounds.Recovery), rounds.StalledCycles), 12, Theme.Muted));
             details.Add(Theme.Label(string.Format(_ui.Culture, T("activeBudget"), rounds.ActiveMilliseconds / 1000, rounds.MaximumActiveMilliseconds / 1000, rounds.Recoveries, rounds.MaximumRecoveries), 12, Theme.Muted));
             if (rounds.Paused) { details.Add(Theme.Label(T("ownerPaused"), 12)); }
             if (rounds.Canceled) { details.Add(Theme.Label(T("ownerCanceled"), 12)); }

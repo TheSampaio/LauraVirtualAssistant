@@ -8,6 +8,14 @@ namespace Laura.Core.Tests.Engine;
 public sealed class CognitiveTaskRunTests
 {
     private static readonly HashSet<string> Tools = ["recall_memory", "study_github_repository", "list_brain_skills", "propose_brain_skill", "plan_task", "task_status", "list_capabilities", "run_program"];
+    /// <summary>A general pending plan cannot cause unsolicited source acquisition, repeated memory recall or skill discovery.</summary>
+    [Fact]
+    public void GeneralPlanDoesNotInventSourceWorkflowOperations()
+    {
+        var task = new CognitiveTaskRun("Complete the requested native investigation.", Tools);
+        task.Plan(["run_program", "list_capabilities"]);
+        Assert.NotNull(task.PendingContinuation()); Assert.Null(task.NextSourceOperation());
+    }
     /// <summary>Reading study coverage cannot create a background acquisition objective or continue unrelated work.</summary>
     [Fact]
     public async Task StatusQuestionCannotStartAutomaticAcquisition()

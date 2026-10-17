@@ -10,6 +10,22 @@ namespace Laura.Core.Tests.Conversation;
 /// <summary>Verifies shared native tools, data-disclosure opt-in and stable task identities across independent ChatGPT rounds.</summary>
 public sealed class ChatGptConversationTests
 {
+    /// <summary>Context-limit recovery discards oversized protocol/retrieval context while keeping a bounded recent conversation and the same native task.</summary>
+    [Fact]
+    public async Task ContextRecoveryRebuildsBoundedInput()
+    {
+        var inference = new RecordingChatGptInference(); for (int index = 0; index < 4; index++) { inference.Results.Enqueue(Call("old" + index)); }
+        var memory = new WorkingConversationMemory(); var tools = new LocalAgentTools(); var turn = Turn();
+        using var engine = new ChatGptConversationEngine(inference, Settings(true), memory, tools, localizer: new StubLocalizer());
+        await engine.AskAsync(turn); Assert.NotNull(engine.PendingRound(turn.TurnId));
+        await engine.AskAsync(turn with { TurnId = Guid.NewGuid(), ContinuingTaskTurnId = turn.TurnId,
+            History = Enumerable.Range(0, 8).Select(index => new ConversationMessage(ConversationMessageSource.Assistant, "history-" + index, DateTimeOffset.UtcNow)).ToArray(),
+            Memories = ["old retrieved context"], SkillCatalogue = "old catalogue", TaskRouting = new(CognitiveTaskDemand.Routine, CognitiveRoutingReason.ContextLimit, CognitiveRecoveryAction.ReduceContext, "chatgpt") });
+        var rebuilt = inference.Requests[^1]; Assert.Equal(3, rebuilt.Input.Count); Assert.Equal(4, tools.Calls);
+        Assert.DoesNotContain("old retrieved context", JsonSerializer.Serialize(rebuilt.Input), StringComparison.Ordinal);
+        Assert.DoesNotContain("function_call_output", JsonSerializer.Serialize(rebuilt.Input), StringComparison.Ordinal);
+        Assert.Equal(turn.TurnId, memory.WorkingContext.TurnId);
+    }
     /// <summary>Consent to one registration never enables a newly selected account or sends it saved context.</summary>
     [Fact]
     public async Task AccountSwitchRequiresMatchingNativeConsent()
