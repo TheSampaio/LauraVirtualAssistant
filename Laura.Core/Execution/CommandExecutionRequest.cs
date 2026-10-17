@@ -11,6 +11,10 @@ public sealed record CommandExecutionRequest(string Executable, IReadOnlyList<st
     public int OutputCharacters { get; init; } = 32_000;
     /// <summary>Gets the native task identity used for diagnostics, never command authorization.</summary>
     public Guid TaskId { get; init; }
+    /// <summary>Gets the native invocation identity; structured model arguments cannot assign it.</summary>
+    public Guid OperationId { get; init; } = Guid.NewGuid();
+    /// <summary>Gets explicit task-scoped environment overrides; these never modify Windows settings.</summary>
+    public IReadOnlyDictionary<string, string> EnvironmentVariables { get; init; } = ImmutableDictionary<string, string>.Empty;
     /// <summary>Gets whether exact approval must describe a bounded background lifetime.</summary>
     public bool Background { get; init; }
 
@@ -22,7 +26,13 @@ public sealed record CommandExecutionRequest(string Executable, IReadOnlyList<st
             || Arguments.Any(argument => argument is null || argument.Length > 16_000 || argument.Contains('\0'))
             || Arguments.Sum(argument => (long)argument.Length + 3) + Executable.Length > 30_000)
         { throw new ArgumentException("Invalid or excessive structured process parameters."); }
+        if (EnvironmentVariables is null || EnvironmentVariables.Count > 64 || EnvironmentVariables.Any(pair =>
+            string.IsNullOrWhiteSpace(pair.Key) || pair.Key.Length > 128 || !pair.Key.All(character => char.IsAsciiLetterOrDigit(character) || character == '_')
+            || pair.Value is null || pair.Value.Length > 32000 || pair.Value.Contains('\0'))
+            || EnvironmentVariables.Sum(pair => (long)pair.Key.Length + pair.Value.Length) > 64000)
+        { throw new ArgumentException("Invalid or excessive task environment overrides."); }
         return this with { Executable = Path.GetFullPath(Executable), WorkingDirectory = Path.GetFullPath(WorkingDirectory),
+            EnvironmentVariables = EnvironmentVariables.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase),
             Arguments = Arguments.ToImmutableArray(), TimeoutSeconds = Math.Clamp(TimeoutSeconds, 1, 1800), OutputCharacters = Math.Clamp(OutputCharacters, 1024, 128_000) };
     }
 }

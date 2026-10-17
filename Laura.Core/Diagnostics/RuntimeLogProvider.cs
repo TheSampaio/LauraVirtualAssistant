@@ -15,7 +15,7 @@ public sealed class RuntimeLogProvider(RuntimeJournal journal) : ILoggerProvider
     private sealed class Logger(RuntimeJournal journal, string category) : ILogger
     {
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-        public bool IsEnabled(LogLevel level) => level >= LogLevel.Information && level != LogLevel.None;
+        public bool IsEnabled(LogLevel level) => level >= journal.MinimumLevel && level != LogLevel.None;
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
             if (!IsEnabled(logLevel)) { return; }

@@ -18,14 +18,6 @@ public sealed class ProviderModelCatalogTests : IDisposable
         Assert.Equal("invalid_credentials", result.Error); Assert.True(result.Stale); Assert.Empty(result.Models);
     }
     [Fact]
-    public void ReviewedDeprecationDoesNotInventTheStatusOfAnUnreviewedFutureModel()
-    {
-        Assert.True(ProviderModelCompatibility.IsDeprecated("gpt-4.1-nano"));
-        Assert.True(ProviderModelCompatibility.IsDeprecated("gpt-5-mini-2025-08-07"));
-        Assert.False(ProviderModelCompatibility.IsDeprecated("gpt-5.4-mini"));
-        Assert.False(ProviderModelCompatibility.IsDeprecated("future-model"));
-    }
-    [Fact]
     public async Task GeminiPaginatesAndNeverInfersLiveFromOrdinaryGenerationOrAnUnreviewedName()
     {
         using var transport = new Transport(); using var http = new HttpClient(transport);
@@ -41,18 +33,6 @@ public sealed class ProviderModelCatalogTests : IDisposable
         Assert.DoesNotContain("synthetic-google-key", await File.ReadAllTextAsync(Assert.Single(Directory.GetFiles(_directory))));
     }
 
-    [Fact]
-    public async Task OpenAiCapabilitiesAreReviewedAndDoNotDependOnTheGptPrefix()
-    {
-        using var transport = new Transport(); using var http = new HttpClient(transport);
-        transport.Responses.Enqueue(Json("""{"data":[{"id":"o3"},{"id":"gpt-5.4-mini-2026-03-17"},{"id":"gpt-image-1"},{"id":"text-embedding-3-small"},{"id":"gpt-unverified"}]}"""));
-        using var catalogue = new ProviderModelCatalog(http, _directory); var result = await catalogue.ListAsync("openai", "synthetic-openai-key");
-        Assert.Equal("Bearer synthetic-openai-key", Assert.Single(transport.Requests).Key);
-        Assert.True(result.Models.Single(model => model.Id == "o3").Capabilities.HasFlag(ModelCapabilities.Tools));
-        Assert.True(result.Models.Single(model => model.Id == "gpt-5.4-mini-2026-03-17").Capabilities.HasFlag(ModelCapabilities.Images));
-        Assert.All(result.Models.Where(model => model.Id is "gpt-image-1" or "text-embedding-3-small" or "gpt-unverified"), model => Assert.Equal(ModelCapabilities.None, model.Capabilities));
-    }
-
     [Theory]
     [InlineData(401, "invalid_credentials")]
     [InlineData(429, "rate_limit")]
@@ -61,14 +41,14 @@ public sealed class ProviderModelCatalogTests : IDisposable
     {
         using var transport = new Transport(); using var http = new HttpClient(transport); var clock = new TestTime();
         using var catalogue = new ProviderModelCatalog(http, _directory, clock);
-        transport.Responses.Enqueue(Json("""{"data":[{"id":"gpt-5.4-mini"}]}"""));
-        var original = await catalogue.ListAsync("openai", "key-one");
-        Assert.False((await catalogue.ListAsync("openai", "key-one")).Stale); Assert.Single(transport.Requests);
+        transport.Responses.Enqueue(Json("""{"models":[{"name":"models/gemini-test"}]}"""));
+        var original = await catalogue.ListAsync("gemini", "key-one");
+        Assert.False((await catalogue.ListAsync("gemini", "key-one")).Stale); Assert.Single(transport.Requests);
         clock.Now = clock.Now.AddDays(2); transport.Responses.Enqueue(new((HttpStatusCode)status));
-        var stale = await catalogue.ListAsync("openai", "key-one"); Assert.True(stale.Stale); Assert.Equal(error, stale.Error); Assert.Equal(original.Models, stale.Models); Assert.Equal(original.FetchedAt, stale.FetchedAt);
-        transport.Responses.Enqueue(new((HttpStatusCode)status)); var changed = await catalogue.ListAsync("openai", "key-two"); Assert.Empty(changed.Models);
+        var stale = await catalogue.ListAsync("gemini", "key-one"); Assert.True(stale.Stale); Assert.Equal(error, stale.Error); Assert.Equal(original.Models, stale.Models); Assert.Equal(original.FetchedAt, stale.FetchedAt);
+        transport.Responses.Enqueue(new((HttpStatusCode)status)); var changed = await catalogue.ListAsync("gemini", "key-two"); Assert.Empty(changed.Models);
         transport.Responses.Enqueue(new(HttpStatusCode.ServiceUnavailable));
-        using var restarted = new ProviderModelCatalog(http, _directory, clock); Assert.Single((await restarted.ListAsync("openai", "key-one")).Models);
+        using var restarted = new ProviderModelCatalog(http, _directory, clock); Assert.Single((await restarted.ListAsync("gemini", "key-one")).Models);
     }
 
     [Fact]

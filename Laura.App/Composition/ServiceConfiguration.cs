@@ -44,7 +44,7 @@ public static class ServiceConfiguration
 
         services.AddLogging(static builder =>
         {
-            builder.SetMinimumLevel(LogLevel.Information);
+            builder.SetMinimumLevel(LogLevel.Trace);
             builder.AddDebug();
         });
 
@@ -68,6 +68,8 @@ public static class ServiceConfiguration
 
         string settingsPath = storageDirectory is null ? IniSettingsStore.GetDefaultFilePath() : Path.Combine(storageDirectory, "settings.ini");
         services.AddSingleton(new AssistantStorage(Path.GetDirectoryName(Path.GetFullPath(settingsPath))!));
+        services.AddSingleton(_ => new WindowsFullAccessPreference(Path.GetDirectoryName(Path.GetFullPath(settingsPath))!));
+        services.AddSingleton(_ => new LegacyProviderCleanup(Path.GetDirectoryName(Path.GetFullPath(settingsPath))!));
         services.AddSingleton(provider => new Laura.Core.Diagnostics.RuntimeJournal(storageDirectory is null
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Laura", "Diagnostics")
             : Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Diagnostics")));
@@ -80,26 +82,24 @@ public static class ServiceConfiguration
         services.AddSingleton<ICognitiveTaskJournal>(provider => new FileCognitiveTaskJournal(
             Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Tasks"), provider.GetRequiredService<IPrivateDataProtector>()));
         services.AddSingleton<CognitiveTasks>();
-        services.AddSingleton<ILocalModelManager>(provider => new LocalModelManager(Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Models"),
-            new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, SupportedModels.All));
-        services.AddSingleton(_ => new WindowsInferenceBackend(true, Path.Combine(AppContext.BaseDirectory, "CudaRuntime")));
-        services.AddSingleton<LlamaLocalInferenceEngine>();
-        services.AddSingleton<ILocalInferenceEngine>(provider => provider.GetRequiredService<LlamaLocalInferenceEngine>());
-        services.AddSingleton<ILocalToolInferenceEngine>(provider => provider.GetRequiredService<LlamaLocalInferenceEngine>());
-        services.AddSingleton<LocalToolConversationEngine>();
         services.AddSingleton<IProviderModelCatalog>(provider => Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)
             ? new UiSmokeModelCatalog()
             : new ProviderModelCatalog(new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan },
                 Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "ModelCatalog")));
         services.AddSingleton(provider => new PermissionStore(Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Security", "permissions.json")));
         services.AddSingleton(provider => new PermissionManager(provider.GetRequiredService<PermissionStore>(),
-            () => provider.GetRequiredService<ISettingsService>().Current.Permissions,
+            () =>
+            {
+                PermissionOptions options = provider.GetRequiredService<ISettingsService>().Current.Permissions;
+                return options.Mode == ApprovalMode.FullAccess && !provider.GetRequiredService<WindowsFullAccessPreference>().IsConfirmed()
+                    ? options with { Mode = ApprovalMode.Ask } : options;
+            },
             () => new[] { provider.GetRequiredService<AssistantStorage>().Directory,
                 provider.GetRequiredService<ISettingsService>().Current.Brain.Directory }.Where(path => !string.IsNullOrWhiteSpace(path)),
             Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Workspace"), provider.GetRequiredService<IUiLocalizer>()));
         services.AddSingleton<SqliteConversationMemory>(_ => new SqliteConversationMemory(
             Path.Combine(Path.GetDirectoryName(settingsPath)!, "memory.db")));
-        services.AddSingleton<IBrainEmbedding, OnnxBrainEmbedding>();
+        services.AddSingleton<IBrainEmbedding, LexicalOnlyEmbedding>();
         string brainCache = storageDirectory is null ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Laura", "BrainCache") : Path.Combine(storageDirectory, "BrainCache");
         services.AddSingleton(provider => new BrainIndex(brainCache, provider.GetRequiredService<IBrainEmbedding>()));
         services.AddSingleton<Func<string, IBrainStorage>>(_ => location => new FileBrainStorage(location));
@@ -124,14 +124,9 @@ public static class ServiceConfiguration
         services.AddSingleton<BrainMaintenance>();
         services.AddSingleton<IConversationMemory>(provider => provider.GetRequiredService<BrainConversationMemory>());
         // Explicit live diagnostics read the already protected credential in-process; it is neither printed nor copied into fixtures.
-        string credentialDirectory = storageDirectory is not null && (Environment.GetCommandLineArgs().Contains("--permissions-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--screenshot-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--brain-live-smoke", StringComparer.Ordinal))
+        string credentialDirectory = storageDirectory is not null && (Environment.GetCommandLineArgs().Contains("--permissions-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--screenshot-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--brain-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--agent-live-smoke", StringComparer.Ordinal))
             ? Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())! : Path.GetDirectoryName(settingsPath)!;
         services.AddSingleton<IApiKeyStore>(_ => new ProtectedApiKeyStore(credentialDirectory));
-        services.AddSingleton(_ => new OpenAiApiKeyStore(Path.GetDirectoryName(settingsPath)!));
-        services.AddKeyedSingleton<HttpClient>("openai", (_, _) => new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan });
-        services.AddSingleton(provider => new OpenAiConversationEngine(provider.GetRequiredKeyedService<HttpClient>("openai"),
-            provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<OpenAiApiKeyStore>(), provider.GetRequiredService<IConversationMemory>(),
-            provider.GetRequiredService<IAssistantTools>(), provider.GetRequiredService<BrainContextBuilder>(), provider.GetRequiredService<PermissionManager>()));
         services.AddSingleton(_ => new UserFileWorkspace(Path.Combine(Path.GetDirectoryName(settingsPath)!, "Workspace")));
 
         services.AddSingleton<ILocalizer>(provider => new JsonLocalizer(
@@ -155,13 +150,12 @@ public static class ServiceConfiguration
         services.AddSingleton<IBriefingContributor, ReminderBriefingContributor>();
         services.AddSingleton<ClapWakeCoordinator>();
         services.AddSingleton<MarkLvConfigurationImporter>();
-        services.AddSingleton(provider => new ConversationProviderRouter(provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<GeminiLiveClient>(), provider.GetRequiredService<OpenAiConversationEngine>(), provider.GetRequiredService<LocalToolConversationEngine>()));
+        services.AddSingleton(provider => new ConversationProviderRouter(provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<GeminiLiveClient>()));
         services.AddSingleton<IConversationEngine>(provider => provider.GetRequiredService<ConversationProviderRouter>());
         services.AddSingleton<WindowsApplicationCatalog>();
         services.AddSingleton<WindowsResourceMonitor>();
         services.AddSingleton<WindowsDiskMonitor>();
         services.AddSingleton<WindowsGpuMonitor>();
-        services.AddSingleton<IModelHardwareProbe, WindowsModelHardwareProbe>();
         services.AddSingleton<IAssistantTools, MauiAssistantTools>();
         services.AddSingleton<ReminderScheduler>();
         services.AddSingleton<GreetingComposer>();
@@ -171,7 +165,6 @@ public static class ServiceConfiguration
         services.AddSingleton<ISkillDispatcher, GeminiSkillDispatcher>();
 
         services.AddSingleton<IAssistantEngine, AssistantEngine>();
-        services.AddSingleton<LocalVoiceSession>();
         services.AddSingleton<HourlyAnnouncer>();
     }
 
@@ -206,9 +199,6 @@ public static class ServiceConfiguration
     private static void AddPlatform(IServiceCollection services)
     {
         services.AddSingleton<ISpeechSynthesizer, SpeechRouter>();
-        services.AddSingleton<WindowsOfflineSpeechSynthesizer>();
-        services.AddSingleton<WhisperSpeechInput>();
-        services.AddSingleton<ISpeechInput>(provider => provider.GetRequiredService<WhisperSpeechInput>());
         services.AddSingleton<ISystemController, WindowsSystemController>();
         services.AddSingleton<IProcessLauncher, WindowsProcessLauncher>();
         services.AddSingleton<ICommandExecutor, WindowsCommandExecutor>();
@@ -237,6 +227,7 @@ public static class ServiceConfiguration
         services.AddTransient<SetupPage>();
         services.AddTransient<MemoryPage>();
         services.AddTransient<TasksPage>();
+        services.AddTransient<LogsPage>();
     }
 
     /// <summary>

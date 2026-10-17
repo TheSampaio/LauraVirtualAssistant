@@ -19,7 +19,7 @@ public sealed class ProviderModelCatalog(HttpClient http, string cacheDirectory,
     /// <inheritdoc />
     public async Task<ProviderModelCatalogue> ListAsync(string provider, string credential, bool refresh = false, CancellationToken cancellationToken = default)
     {
-        if (provider is not ("gemini" or "openai")) { throw new ArgumentException("Unknown catalogue provider.", nameof(provider)); }
+        if (provider != "gemini") { throw new ArgumentException("Unknown catalogue provider.", nameof(provider)); }
         if (string.IsNullOrWhiteSpace(credential)) { return new(provider, [], null, true, "key_required"); }
         if (credential.Any(char.IsControl)) { return new(provider, [], null, true, "invalid_credentials"); }
         string identity = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(credential)));
@@ -37,11 +37,9 @@ public sealed class ProviderModelCatalog(HttpClient http, string cacheDirectory,
                 do
                 {
                     if (pages.Count >= 32 || !pages.Add(next)) { throw new ListingException("invalid_response"); }
-                    Uri endpoint = provider == "gemini" ? new("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000" + (next.Length > 0 ? "&pageToken=" + Uri.EscapeDataString(next) : ""))
-                        : new("https://api.openai.com/v1/models");
+                    Uri endpoint = new("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000" + (next.Length > 0 ? "&pageToken=" + Uri.EscapeDataString(next) : ""));
                     using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
-                    if (provider == "gemini") { request.Headers.Add("x-goog-api-key", credential); }
-                    else { request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credential); }
+                    request.Headers.Add("x-goog-api-key", credential);
                     using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
                     if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) { throw new ListingException("invalid_credentials"); }
                     if (response.StatusCode == HttpStatusCode.BadRequest)
@@ -53,21 +51,20 @@ public sealed class ProviderModelCatalog(HttpClient http, string cacheDirectory,
                     while ((read = await stream.ReadAsync(buffer, timeout.Token).ConfigureAwait(false)) > 0)
                     { if (bytes.Length + read > 4 * 1024 * 1024) { throw new ListingException("invalid_response"); } await bytes.WriteAsync(buffer.AsMemory(0, read), timeout.Token).ConfigureAwait(false); }
                     using var document = JsonDocument.Parse(bytes.ToArray(), new JsonDocumentOptions { MaxDepth = 16 });
-                    string collection = provider == "gemini" ? "models" : "data";
+                    string collection = "models";
                     if (!document.RootElement.TryGetProperty(collection, out var items) || items.ValueKind != JsonValueKind.Array) { throw new ListingException("invalid_response"); }
                     foreach (var item in items.EnumerateArray())
                     {
-                        string id = item.GetProperty(provider == "gemini" ? "name" : "id").GetString() ?? "";
+                        string id = item.GetProperty("name").GetString() ?? "";
                         if (provider == "gemini" && id.StartsWith("models/", StringComparison.Ordinal)) { id = id[7..]; }
                         if (!ProviderModelCompatibility.ValidIdentifier(id)) { continue; }
                         string name = item.TryGetProperty("displayName", out var label) && label.ValueKind == JsonValueKind.String ? label.GetString() ?? id : id;
                         if (name.Length > 240 || name.Any(char.IsControl)) { name = id; }
                         var methods = item.TryGetProperty("supportedGenerationMethods", out var operations) && operations.ValueKind == JsonValueKind.Array
                             ? operations.EnumerateArray().Where(method => method.ValueKind == JsonValueKind.String).Select(method => method.GetString()!).ToHashSet(StringComparer.Ordinal) : [];
-                        ModelCapabilities capabilities = provider == "gemini" ? ProviderModelCompatibility.Gemini(id, methods) : ProviderModelCompatibility.OpenAi(id);
+                        ModelCapabilities capabilities = ProviderModelCompatibility.Gemini(id, methods);
                         int? context = item.TryGetProperty("inputTokenLimit", out var limit) && limit.TryGetInt32(out int tokens) && tokens > 0 ? tokens : null;
-                        bool deprecated = item.TryGetProperty("deprecated", out var retirement) && retirement.ValueKind == JsonValueKind.True
-                            || provider == "openai" && ProviderModelCompatibility.IsDeprecated(id);
+                        bool deprecated = item.TryGetProperty("deprecated", out var retirement) && retirement.ValueKind == JsonValueKind.True;
                         models[id] = new(id, name, capabilities, context, deprecated);
                         if (models.Count > 5000) { throw new ListingException("invalid_response"); }
                     }

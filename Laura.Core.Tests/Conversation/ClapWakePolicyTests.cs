@@ -7,7 +7,7 @@ namespace Laura.Core.Tests.Conversation;
 public sealed class ClapWakePolicyTests
 {
     [Theory]
-    [InlineData("local", true, true, true)]
+    [InlineData("local", true, true, false)]
     [InlineData("local", true, false, false)]
     [InlineData("local", false, true, false)]
     [InlineData("gemini", true, false, true)]
@@ -24,7 +24,7 @@ public sealed class ClapWakePolicyTests
     public void OptOutMuteBusyAndExplicitHandoffEachKeepDetectionClosed()
     {
         var enabled = LauraSettings.Default with { ClapWakeEnabled = true, MicrophoneMuted = false };
-        var ready = new ClapWakeState("local", true, true, true, false, false);
+        var ready = new ClapWakeState("gemini", true, true, true, false, false);
         Assert.True(ClapWakePolicy.CanArm(enabled, ready));
         Assert.False(ClapWakePolicy.CanArm(enabled with { ClapWakeEnabled = false }, ready));
         Assert.False(ClapWakePolicy.CanArm(enabled with { MicrophoneMuted = true }, ready));

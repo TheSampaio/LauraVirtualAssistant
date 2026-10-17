@@ -2,36 +2,22 @@ using Laura.Core.Abstractions;
 
 namespace Laura.Core.Conversation;
 
-/// <summary>Routes explicitly selected providers and drains both before changing settings or clearing dialogue.</summary>
-public sealed class ConversationProviderRouter(ISettingsService settings, IConversationEngine gemini, IConversationEngine openai, IConversationEngine? local = null) : IConversationEngine, IDisposable
+/// <summary>Guards explicitly enabled Gemini requests and drains work before changing settings or clearing dialogue.</summary>
+public sealed class ConversationProviderRouter(ISettingsService settings, IConversationEngine gemini) : IConversationEngine, IDisposable
 {
     private readonly SemaphoreSlim _requests = new(1, 1), _resets = new(1, 1);
     private readonly object _gate = new();
     private CancellationTokenSource _lifetime = new();
     private bool _resetting, _disposed;
-    private volatile IConversationEngine? _active;
-    private IConversationEngine? Selected => settings.Current.GenerativeAi.Provider switch
-    {
-        "openai" => openai,
-        "gemini" => gemini,
-        "local" => local,
-        "auto" when local?.IsAvailable == true => local,
-        "auto" when settings.Current.GenerativeAi.AllowCloudFallback => gemini,
-        _ => null,
-    };
+    private IConversationEngine? Selected => settings.Current.GenerativeAi.Enabled ? gemini : null;
     /// <inheritdoc />
     public bool IsAvailable { get { lock (_gate) { return !_resetting && !_disposed && Selected?.IsAvailable == true; } } }
     /// <inheritdoc />
-    public bool SupportsImages => IsAvailable && (_active is { } active ? active.SupportsImages
-        : Selected?.SupportsImages == true || CanRouteImages);
-    private bool CanRouteImages => settings.Current.GenerativeAi is { Provider: "auto", AllowCloudFallback: true }
-        && gemini.IsAvailable && gemini.SupportsImages;
+    public bool SupportsImages => IsAvailable && gemini.SupportsImages;
     /// <inheritdoc />
     public ConversationFailure? LastFailure { get; private set; }
-    /// <summary>Gets whether the current reviewed local model supports the native structured tool loop.</summary>
-    public bool SupportsLocalTools => local is LocalToolConversationEngine { SupportsTools: true };
-    /// <summary>Gets the actual selected runtime location; automatic mode never silently authorizes paid GPT usage.</summary>
-    public string ActiveProvider => ReferenceEquals(_active ?? Selected, local) && local is not null ? "local" : ReferenceEquals(_active ?? Selected, openai) ? "openai" : ReferenceEquals(_active ?? Selected, gemini) ? "gemini" : "unavailable";
+    /// <summary>Gets the sole configured conversation provider without enabling cloud access.</summary>
+    public string ActiveProvider => Selected is null ? "unavailable" : "gemini";
     /// <inheritdoc />
     public async Task<string?> AskAsync(ConversationTurn turn, CancellationToken cancellationToken = default)
     {
@@ -50,11 +36,9 @@ public sealed class ConversationProviderRouter(ISettingsService settings, IConve
                 IConversationEngine? selected = Selected;
                 if (turn.Image is not null && selected?.SupportsImages != true)
                 {
-                    if (CanRouteImages) { selected = gemini; }
-                    else { LastFailure = new(ConversationFailureKind.UnsupportedInput); return null; }
+                    LastFailure = new(ConversationFailureKind.UnsupportedInput); return null;
                 }
                 if (selected?.IsAvailable != true) { LastFailure = new(ConversationFailureKind.Unavailable); return null; }
-                _active = selected;
                 try
                 {
                     string? answer = await selected.AskAsync(turn, operation.Token).ConfigureAwait(false);
@@ -62,10 +46,8 @@ public sealed class ConversationProviderRouter(ISettingsService settings, IConve
                     return answer;
                 }
                 catch (ConversationProviderException error) { LastFailure = error.Failure; return null; }
-                catch (Exception error) when (ReferenceEquals(selected, local) && error is IOException or InvalidOperationException)
-                { LastFailure = selected.LastFailure ?? new(ConversationFailureKind.Unavailable); return null; }
             }
-            finally { _active = null; _requests.Release(); }
+            finally { _requests.Release(); }
         }
     }
     /// <inheritdoc />
@@ -79,8 +61,7 @@ public sealed class ConversationProviderRouter(ISettingsService settings, IConve
         {
             lock (_gate) { ObjectDisposedException.ThrowIf(_disposed, this); _resetting = true; _lifetime.Cancel(); }
             await _requests.WaitAsync().ConfigureAwait(false);
-            try { await gemini.ResetSessionAsync(() => openai.ResetSessionAsync(async () =>
-                { if (local is not null) { await local.ResetSessionAsync().ConfigureAwait(false); } await clearHistory().ConfigureAwait(false); })).ConfigureAwait(false); }
+            try { await gemini.ResetSessionAsync(clearHistory).ConfigureAwait(false); }
             finally
             {
                 lock (_gate) { _lifetime.Dispose(); _lifetime = new(); _resetting = false; }

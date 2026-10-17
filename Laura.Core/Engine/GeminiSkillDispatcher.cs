@@ -9,8 +9,7 @@ namespace Laura.Core.Engine;
 public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISettingsService settings, IUserContext user,
     IConversationMemory memory, ILocalizer localizer, SkillDispatcher? localDispatcher = null) : ISkillDispatcher
 {
-    private bool UseLocalDispatcher => localDispatcher is not null && (settings.Current.GenerativeAi.Provider == "local"
-        || settings.Current.GenerativeAi.Provider == "auto" && (conversation as ConversationProviderRouter)?.ActiveProvider != "gemini");
+    private bool UseLocalDispatcher => localDispatcher is not null && !conversation.IsAvailable;
     /// <inheritdoc />
     public bool CanUseGenerativeFallback(SkillRequest request) => UseLocalDispatcher ? localDispatcher!.CanUseGenerativeFallback(request) : conversation.IsAvailable;
     /// <inheritdoc />
@@ -19,10 +18,10 @@ public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISet
         if (UseLocalDispatcher)
         {
             SkillResponse native = await localDispatcher!.DispatchAsync(request, cancellationToken).ConfigureAwait(false);
-            return !native.Handled && settings.Current.GenerativeAi.Enabled && !conversation.IsAvailable
+            return !native.Handled && !conversation.IsAvailable
                 ? SkillResponse.Speak(localizer.Get(LocalizationKeys.GenerativeAi.NoProvider)) : native;
         }
-        if (!conversation.IsAvailable) { return SkillResponse.Speak(localizer.Get(settings.Current.GenerativeAi.Provider is "local" or "auto" ? LocalizationKeys.GenerativeAi.NoProvider : LocalizationKeys.GenerativeAi.ConfigureProvider)); }
+        if (!conversation.IsAvailable) { return SkillResponse.Speak(localizer.Get(LocalizationKeys.GenerativeAi.ConfigureProvider)); }
         IReadOnlyList<ConversationMessage> history = [];
         if (settings.Current.RememberConversations)
         {

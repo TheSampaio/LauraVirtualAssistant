@@ -110,6 +110,6 @@ public sealed class GeminiLiveProtocolTests
     public void Sanitization_MigratesLocalProvidersWithoutReusingLocalModelNames()
     {
         var options = new GenerativeAiOptions { Provider = "ollama", Model = "qwen2.5:0.5b", ContinuousListening = false }.Sanitized();
-        Assert.Equal("auto", options.Provider); Assert.Empty(options.Model); Assert.True(options.ContinuousListening); Assert.False(options.AllowCloudFallback);
+        Assert.Equal("gemini", options.Provider); Assert.Empty(options.Model); Assert.True(options.ContinuousListening); Assert.False(options.Enabled);
     }
 }

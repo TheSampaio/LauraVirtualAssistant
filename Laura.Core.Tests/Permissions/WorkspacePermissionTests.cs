@@ -58,15 +58,15 @@ public sealed class WorkspacePermissionTests : IDisposable
     {
         string root = Path.Combine(_root, "Project"); Directory.CreateDirectory(root); Guid task = Guid.NewGuid();
         using var manager = new PermissionManager(new PermissionStore(Path.Combine(_root, "permissions.json")), () => new());
-        Task<PermissionGrant> review = manager.AuthorizeRepositoryStudyAsync(task, root, "api.openai.com");
+        Task<PermissionGrant> review = manager.AuthorizeRepositoryStudyAsync(task, root, "generativelanguage.googleapis.com");
         manager.Decide(Assert.Single(manager.PendingRequests).Id, ApprovalChoice.Once); var grant = await review;
-        Assert.Equal(grant.Id, (await manager.AuthorizeRepositoryStudyAsync(task, root, "api.openai.com")).Id); Assert.Single(manager.Grants);
-        var read = new PermissionAction(PermissionOperation.RepositoryStudyRead, "Repository study", "Read scoped sources", [Path.Combine(root, "main.cs")], destination: "api.openai.com", taskId: task, scopeIdentity: root);
+        Assert.Equal(grant.Id, (await manager.AuthorizeRepositoryStudyAsync(task, root, "generativelanguage.googleapis.com")).Id); Assert.Single(manager.Grants);
+        var read = new PermissionAction(PermissionOperation.RepositoryStudyRead, "Repository study", "Read scoped sources", [Path.Combine(root, "main.cs")], destination: "generativelanguage.googleapis.com", taskId: task, scopeIdentity: root);
         Assert.Equal(1, await manager.ExecuteAsync(read, _ => Task.FromResult(1)));
         foreach (var denied in new[]
         {
             new PermissionAction(PermissionOperation.RepositoryStudyRead, read.Origin, "Other task", read.Resources, destination: read.Destination, taskId: Guid.NewGuid(), scopeIdentity: root),
-            new PermissionAction(PermissionOperation.RepositoryStudyRead, read.Origin, "Other recipient", read.Resources, destination: "generativelanguage.googleapis.com", taskId: task, scopeIdentity: root),
+            new PermissionAction(PermissionOperation.RepositoryStudyRead, read.Origin, "Other recipient", read.Resources, destination: "untrusted.example", taskId: task, scopeIdentity: root),
             new PermissionAction(PermissionOperation.RepositoryStudyRead, read.Origin, "Sibling", [Path.Combine(_root, "ProjectSibling", "main.cs")], destination: read.Destination, taskId: task, scopeIdentity: root),
             new PermissionAction(PermissionOperation.RepositoryStudyRead, read.Origin, "Secret", [Path.Combine(root, ".env")], destination: read.Destination, taskId: task, scopeIdentity: root),
             new PermissionAction(PermissionOperation.FileWrite, read.Origin, "Edit", read.Resources, taskId: task, scopeIdentity: root),
@@ -93,7 +93,7 @@ public sealed class WorkspacePermissionTests : IDisposable
         {
             new PermissionAction(PermissionOperation.FileWrite, edit.Origin, "Other task", edit.Resources, taskId: Guid.NewGuid()),
             new PermissionAction(PermissionOperation.FileWrite, edit.Origin, "Other project", [Path.Combine(_root, "ProjectSibling", "main.cs")], taskId: task),
-            new PermissionAction(PermissionOperation.FileReadCloud, edit.Origin, "Cloud read", edit.Resources, destination: "api.openai.com", taskId: task),
+            new PermissionAction(PermissionOperation.FileReadCloud, edit.Origin, "Cloud read", edit.Resources, destination: "generativelanguage.googleapis.com", taskId: task),
             new PermissionAction(PermissionOperation.Process, edit.Origin, "Run build", edit.Resources, taskId: task),
             new PermissionAction(PermissionOperation.FileTrash, edit.Origin, "Delete", edit.Resources, taskId: task),
             new PermissionAction(PermissionOperation.FileWrite, edit.Origin, "Secrets", [Path.Combine(project, ".env")], taskId: task),
@@ -115,13 +115,13 @@ public sealed class WorkspacePermissionTests : IDisposable
     {
         Directory.CreateDirectory(_root); Guid task = Guid.NewGuid();
         using var manager = new PermissionManager(new PermissionStore(Path.Combine(_root, "permissions.json")), () => new());
-        Task<PermissionGrant> pending = manager.AuthorizeWorkspaceAsync(task, _root, "api.openai.com");
+        Task<PermissionGrant> pending = manager.AuthorizeWorkspaceAsync(task, _root, "generativelanguage.googleapis.com");
         ApprovalRequest request = Assert.Single(manager.PendingRequests);
-        Assert.Equal(PermissionRisk.Critical, request.Risk); Assert.Equal("api.openai.com", request.Action.Destination);
+        Assert.Equal(PermissionRisk.Critical, request.Risk); Assert.Equal("generativelanguage.googleapis.com", request.Action.Destination);
         manager.Decide(request.Id, ApprovalChoice.Once); PermissionGrant grant = await pending;
-        var read = new PermissionAction(PermissionOperation.FileReadCloud, "Native tool: file_control", "Read code", [Path.Combine(_root, "code.cs")], destination: "api.openai.com", taskId: task);
+        var read = new PermissionAction(PermissionOperation.FileReadCloud, "Native tool: file_control", "Read code", [Path.Combine(_root, "code.cs")], destination: "generativelanguage.googleapis.com", taskId: task);
         Assert.Equal(1, await manager.ExecuteAsync(read, _ => Task.FromResult(1)));
-        Assert.False(PermissionPolicy.Matches(grant, new(PermissionOperation.FileReadCloud, read.Origin, "Other provider", read.Resources, destination: "generativelanguage.googleapis.com", taskId: task)));
+        Assert.False(PermissionPolicy.Matches(grant, new(PermissionOperation.FileReadCloud, read.Origin, "Other provider", read.Resources, destination: "untrusted.example", taskId: task)));
         Assert.False(PermissionPolicy.Matches(grant with { Expires = DateTimeOffset.UtcNow.AddSeconds(-1) }, read));
         Assert.False(PermissionPolicy.Matches(grant with { Persistent = true }, read));
     }

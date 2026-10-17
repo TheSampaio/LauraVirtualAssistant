@@ -115,7 +115,6 @@ public sealed class TasksPage : ContentPage
     /// <summary>Queues explicit recovery through the actual selected provider and existing speech/history pipeline.</summary>
     private async Task ResumeAsync(CognitiveTaskCheckpoint task)
     {
-        if (_router.ActiveProvider == "local" && !_router.SupportsLocalTools) { _status.Text = T("localLimited"); return; }
         _status.Text = T("resuming");
         try { await _engine.ResumeTaskAsync(task.Id).ConfigureAwait(true); await RefreshAsync().ConfigureAwait(true); }
         catch (Exception error) when (error is InvalidOperationException or IOException or System.Security.Cryptography.CryptographicException)

@@ -65,10 +65,10 @@ public sealed partial class BrainTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => restarted.ContinueAsync(progress.Id, taskId, "", progress.Cursor));
         using var afterRestartPermissions = SourcePermissions();
         var afterRestart = new RepositoryStudy(brain, new(brain, afterRestartPermissions, source), afterRestartPermissions, store, source);
-        Task<RepositoryStudyProgress> status = afterRestart.StatusAsync(progress.Id, taskId, "api.openai.com");
+        Task<RepositoryStudyProgress> status = afterRestart.StatusAsync(progress.Id, taskId, "generativelanguage.googleapis.com");
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         while (afterRestartPermissions.PendingRequests.Count == 0) { await Task.Delay(10, deadline.Token); }
-        var review = Assert.Single(afterRestartPermissions.PendingRequests); Assert.Equal("api.openai.com", review.Action.Destination); Assert.Equal(taskId, review.Action.TaskId);
+        var review = Assert.Single(afterRestartPermissions.PendingRequests); Assert.Equal("generativelanguage.googleapis.com", review.Action.Destination); Assert.Equal(taskId, review.Action.TaskId);
         afterRestartPermissions.Decide(review.Id, ApprovalChoice.Deny); await Assert.ThrowsAsync<PermissionDeniedException>(() => status);
     }
 
@@ -98,10 +98,10 @@ public sealed partial class BrainTests
     {
         var source = new RecordedRepositorySource(60); BrainService brain = Create(); using var permissions = SourcePermissions();
         var studies = new RepositoryStudy(brain, new(brain, permissions, source), permissions, new FileRepositoryStudyStore(Path.Combine(_root, "RemoteStudies"), new TestPrivateDataProtector()), source);
-        Guid taskId = Guid.NewGuid(); var starting = studies.StartAsync("https://github.com/example/synthetic", "Public synthetic repository", taskId, "api.openai.com"); await ApproveStudyAsync(permissions, starting); var progress = await starting;
+        Guid taskId = Guid.NewGuid(); var starting = studies.StartAsync("https://github.com/example/synthetic", "Public synthetic repository", taskId, "generativelanguage.googleapis.com"); await ApproveStudyAsync(permissions, starting); var progress = await starting;
         Assert.Equal(60, progress.InventoryFiles); Assert.Equal(new string('b', 40), progress.Revision);
         foreach (int expected in new[] { 24, 48, 60 })
-        { progress = await studies.ContinueAsync(progress.Id, taskId, "api.openai.com", progress.Cursor); Assert.Equal(expected, progress.AcquiredFiles); Assert.InRange(progress.Documents.Count, 1, 24); Assert.Empty(permissions.PendingRequests); }
+        { progress = await studies.ContinueAsync(progress.Id, taskId, "generativelanguage.googleapis.com", progress.Cursor); Assert.Equal(expected, progress.AcquiredFiles); Assert.InRange(progress.Documents.Count, 1, 24); Assert.Empty(permissions.PendingRequests); }
         Assert.Equal(60, source.Reads); Assert.Equal(1, source.Inspections); Assert.Equal("acquisition_complete", progress.State);
         var large = new RecordedRepositorySource(10, 65536) { Truncated = true };
         var bounded = new RepositoryStudy(brain, new(brain, permissions, large), permissions, new FileRepositoryStudyStore(Path.Combine(_root, "LargeRemoteStudies"), new TestPrivateDataProtector()), large);

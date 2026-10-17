@@ -80,6 +80,7 @@ public sealed partial class MainPage
     {
         var menu = new MenuFlyout();
         Add("ui.chat.clear", ClearChatAsync); Add("ui.chat.export", ExportChatAsync); Add("ui.chat.diagnostics", ExportDiagnosticsAsync);
+        Add("ui.logs.title", async () => await Navigation.PushAsync(_services.GetRequiredService<LogsPage>()).ConfigureAwait(true));
         if (_chatActionsButton.Handler?.PlatformView is Microsoft.UI.Xaml.FrameworkElement native) { menu.ShowAt(native); }
         return Task.CompletedTask;
         void Add(string key, Func<Task> action)
@@ -117,7 +118,7 @@ public sealed partial class MainPage
     }
     private nint OwnerHandle => WinRT.Interop.WindowNative.GetWindowHandle((Microsoft.UI.Xaml.Window)Window.Handler!.PlatformView!);
     private async Task ExportChatAsync()
-    { if (await WindowsDocumentExport.ConversationAsync(OwnerHandle, _conversations, _services.GetRequiredService<IApiKeyStore>(), _services.GetRequiredService<Laura.Platform.Windows.Conversation.OpenAiApiKeyStore>()).ConfigureAwait(true)) { Notice(_ui.Get("ui.chat.exported")); } }
+    { if (await WindowsDocumentExport.ConversationAsync(OwnerHandle, _conversations, _services.GetRequiredService<IApiKeyStore>()).ConfigureAwait(true)) { Notice(_ui.Get("ui.chat.exported")); } }
     private async Task ExportDiagnosticsAsync()
     { if (await WindowsDocumentExport.DiagnosticsAsync(OwnerHandle, _services.GetRequiredService<RuntimeJournal>()).ConfigureAwait(true)) { Notice(_ui.Get("ui.chat.diagnosticsSaved")); } }
     private void Notice(string text) { _chatNotice.Text = text; _chatNotice.IsVisible = text.Length > 0; }

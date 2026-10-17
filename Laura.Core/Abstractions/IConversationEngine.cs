@@ -7,8 +7,7 @@ namespace Laura.Core.Abstractions;
 ///
 /// It is deliberately optional: the dispatcher only queries it after all
 /// skills reject the command, and the default implementation does nothing. This way
-/// deterministic commands remain available offline and embedded local inference
-/// can be registered independently of the cloud providers.
+/// deterministic commands remain available without cloud conversation.
 /// </summary>
 public interface IConversationEngine
 {

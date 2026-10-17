@@ -59,6 +59,8 @@ public sealed record LauraSettings
 
     /// <summary>Gets the optional generative-mode configuration.</summary>
     public GenerativeAiOptions GenerativeAi { get; init; } = GenerativeAiOptions.Default;
+    /// <summary>Gets the local diagnostic detail threshold; no level includes private payloads.</summary>
+    public Microsoft.Extensions.Logging.LogLevel DiagnosticLevel { get; init; } = Microsoft.Extensions.Logging.LogLevel.Information;
 
     /// <summary>
     /// Gets a value indicating whether Laura greets the user on startup.
@@ -116,6 +118,7 @@ public sealed record LauraSettings
             UserNickname = UserNickname.Trim(),
             Voice = Voice.Sanitized(),
             GenerativeAi = GenerativeAi.Sanitized(),
+            DiagnosticLevel = Enum.IsDefined(DiagnosticLevel) ? DiagnosticLevel : Microsoft.Extensions.Logging.LogLevel.Information,
             Brain = Brain.Sanitized(),
             Permissions = Permissions.Sanitized(),
             Screenshots = Screenshots.Sanitized(),

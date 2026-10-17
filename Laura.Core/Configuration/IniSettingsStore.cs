@@ -71,7 +71,7 @@ public sealed class IniSettingsStore : ISettingsStore
         try
         {
             string content = await File.ReadAllTextAsync(_filePath, cancellationToken).ConfigureAwait(false);
-            return ReadSettings(IniDocument.Parse(content));
+            return ReadSettings(IniDocument.Parse(content)).Sanitized();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -115,6 +115,7 @@ public sealed class IniSettingsStore : ISettingsStore
 
         return new LauraSettings
         {
+            DiagnosticLevel = (Microsoft.Extensions.Logging.LogLevel)document.GetInt32("Diagnostics", "MinimumLevel", 2),
             Culture = document.GetString(GeneralSection, "Language", defaults.Culture),
             UiCulture = document.GetString(GeneralSection, "UiLanguage", defaults.UiCulture),
             InputDevice = document.GetInt32(VoiceSection, "InputDevice", defaults.InputDevice),
@@ -173,13 +174,7 @@ public sealed class IniSettingsStore : ISettingsStore
             {
                 Enabled = document.GetBoolean(GenerativeAiSection, "Enabled", defaults.GenerativeAi.Enabled),
                 Provider = document.GetString(GenerativeAiSection, "Provider", defaults.GenerativeAi.Provider),
-                AllowCloudFallback = document.GetBoolean(GenerativeAiSection, "AllowCloudFallback", defaults.GenerativeAi.AllowCloudFallback),
-                Endpoint = document.GetString(GenerativeAiSection, "Endpoint", defaults.GenerativeAi.Endpoint),
                 Model = document.GetString(GenerativeAiSection, "Model", defaults.GenerativeAi.Model),
-                OpenAiModel = document.GetString(GenerativeAiSection, "OpenAiModel", defaults.GenerativeAi.OpenAiModel),
-                LocalModel = document.GetString(GenerativeAiSection, "LocalModel", defaults.GenerativeAi.LocalModel),
-                LocalContextTokens = document.GetInt32(GenerativeAiSection, "LocalContextTokens", defaults.GenerativeAi.LocalContextTokens),
-                LocalGpuLayers = document.GetInt32(GenerativeAiSection, "LocalGpuLayers", defaults.GenerativeAi.LocalGpuLayers),
                 Persona = document.GetString(GenerativeAiSection, "Persona", defaults.GenerativeAi.Persona),
                 LiveVoice = document.GetString(GenerativeAiSection, "LiveVoice", defaults.GenerativeAi.LiveVoice),
                 ContinuousListening = document.GetBoolean(GenerativeAiSection, "ContinuousListening", false),
@@ -245,14 +240,9 @@ public sealed class IniSettingsStore : ISettingsStore
         document.SetNumber(VoiceSection, "Volume", settings.Voice.Volume);
 
         document.SetBoolean(GenerativeAiSection, "Enabled", settings.GenerativeAi.Enabled);
+        document.SetNumber("Diagnostics", "MinimumLevel", (int)settings.DiagnosticLevel);
         document.Set(GenerativeAiSection, "Provider", settings.GenerativeAi.Provider);
-        document.SetBoolean(GenerativeAiSection, "AllowCloudFallback", settings.GenerativeAi.AllowCloudFallback);
-        document.Set(GenerativeAiSection, "Endpoint", settings.GenerativeAi.Endpoint);
         document.Set(GenerativeAiSection, "Model", settings.GenerativeAi.Model);
-        document.Set(GenerativeAiSection, "OpenAiModel", settings.GenerativeAi.OpenAiModel);
-        document.Set(GenerativeAiSection, "LocalModel", settings.GenerativeAi.LocalModel);
-        document.SetNumber(GenerativeAiSection, "LocalContextTokens", settings.GenerativeAi.LocalContextTokens);
-        document.SetNumber(GenerativeAiSection, "LocalGpuLayers", settings.GenerativeAi.LocalGpuLayers);
         document.Set(GenerativeAiSection, "Persona", settings.GenerativeAi.Persona);
         document.Set(GenerativeAiSection, "LiveVoice", settings.GenerativeAi.LiveVoice);
         document.SetBoolean(GenerativeAiSection, "ContinuousListening", settings.GenerativeAi.ContinuousListening);

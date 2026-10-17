@@ -5,6 +5,19 @@ namespace Laura.Core.Tests.Files;
 public sealed class UserFileWorkspaceTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "laura-file-tests-" + Guid.NewGuid().ToString("N"));
+    /// <summary>Startup creates the default command directory without requiring an earlier generated artifact.</summary>
+    [Fact]
+    public void CommandWorkspaceExistsBeforeAnyArtifactIsSaved()
+    {
+        var files = new UserFileWorkspace(_directory);
+        Assert.False(Directory.Exists(files.RootDirectory));
+        files.EnsureCreated();
+        Assert.True(Directory.Exists(files.RootDirectory));
+        string existing = Path.Combine(files.RootDirectory, "existing.txt");
+        File.WriteAllText(existing, "keep");
+        files.EnsureCreated();
+        Assert.Equal("keep", File.ReadAllText(existing));
+    }
     [Fact]
     public void UserTextNeverBecomesAFilePathAndUnchangedCreationCanBeUndone()
     {

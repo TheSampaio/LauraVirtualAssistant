@@ -16,6 +16,7 @@ internal static class TaskRecoverySmokeRunner
     /// <summary>Exercises existing tool adapters and a private checkpoint through the isolated application's composition root.</summary>
     internal static async Task RunAsync(IServiceProvider services, Window window, string directory)
     {
+        using var native = new ProviderExecutionScope("local");
         var memory = services.GetRequiredService<IConversationMemory>(); var tasks = services.GetRequiredService<CognitiveTasks>();
         var journal = services.GetRequiredService<ICognitiveTaskJournal>(); var tools = services.GetRequiredService<IAssistantTools>();
         Guid id = Guid.NewGuid(); const string objective = "Inspect the synthetic task recovery fixture and preserve actual partial progress.";

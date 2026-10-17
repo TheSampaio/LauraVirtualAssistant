@@ -1,7 +1,7 @@
 namespace Laura.Core.Configuration;
 
 /// <summary>
-/// Configuration for Gemini Live, optional GPT chat and shared explicit desktop tools.
+/// Configuration for Gemini Live, shared explicit desktop tools.
 /// </summary>
 public sealed record GenerativeAiOptions
 {
@@ -13,33 +13,17 @@ public sealed record GenerativeAiOptions
     /// <summary>
     /// Gets whether cloud conversation and native voice are enabled.
     /// </summary>
-    public bool Enabled { get; init; } = true;
+    public bool Enabled { get; init; }
 
     /// <summary>
-    /// Gets the selected chat provider: gemini (native voice) or openai (GPT text).
+    /// Gets the sole conversation provider; legacy values are migrated without granting cloud consent.
     /// </summary>
-    public string Provider { get; init; } = "auto";
-    /// <summary>Gets explicit permission for automatic mode to send conversation data to Gemini when local inference is unavailable or an explicitly attached image requires vision. GPT still requires explicit selection.</summary>
-    public bool AllowCloudFallback { get; init; }
-
-    /// <summary>
-    /// Gets a legacy configuration field retained for INI compatibility; Live uses its fixed Google endpoint.
-    /// </summary>
-    public string Endpoint { get; init; } = "http://localhost:11434";
+    public string Provider { get; init; } = "gemini";
 
     /// <summary>
     /// Gets an optional Gemini model override; empty selects the reviewed Live default.
     /// </summary>
     public string Model { get; init; } = string.Empty;
-
-    /// <summary>Gets the independent optional GPT Responses model; never overwrites the Gemini Live model.</summary>
-    public string OpenAiModel { get; init; } = "gpt-5.4-mini";
-    /// <summary>Gets the reviewed managed local weight identifier.</summary>
-    public string LocalModel { get; init; } = "qwen3.5-4b-q4_k_m";
-    /// <summary>Gets the conservative native context allocation, bounded independently of the model's advertised maximum.</summary>
-    public int LocalContextTokens { get; init; } = 4096;
-    /// <summary>Gets reviewed offload selection: -1 automatic, 0 CPU, 16 partial CUDA, or 99 full CUDA when admitted.</summary>
-    public int LocalGpuLayers { get; init; } = -1;
 
     /// <summary>Gets the native Gemini Live voice, shared with Mark-LV.</summary>
     public string LiveVoice { get; init; } = "Aoede";
@@ -77,14 +61,10 @@ public sealed record GenerativeAiOptions
     /// </summary>
     public GenerativeAiOptions Sanitized() => this with
     {
-        Provider = Provider?.Trim().ToLowerInvariant() is "gemini" or "openai" or "local" or "auto" ? Provider.Trim().ToLowerInvariant() : Default.Provider,
-        LocalModel = Models.SupportedModels.All.Any(model => !model.IsSpeechModel && model.Id == LocalModel) ? LocalModel : Default.LocalModel,
-        LocalContextTokens = Math.Clamp(LocalContextTokens, 1024, 8192),
-        LocalGpuLayers = LocalGpuLayers is -1 or 0 or 16 or 99 ? LocalGpuLayers : -1,
-        OpenAiModel = OpenAiModel?.Trim() is { } gpt && Models.ProviderModelCompatibility.ValidIdentifier(gpt) ? gpt : Default.OpenAiModel,
+        Enabled = Enabled && string.Equals(Provider?.Trim(), "gemini", StringComparison.OrdinalIgnoreCase),
+        Provider = "gemini",
         ContinuousListening = true,
         SilenceDurationMs = Math.Clamp(SilenceDurationMs, 300, 2000),
-        Endpoint = string.IsNullOrWhiteSpace(Endpoint) ? Default.Endpoint : Endpoint.Trim(),
         Model = Model?.Trim() is { Length: <= 100 } model && !model.Contains("..", StringComparison.Ordinal)
             && model.All(static c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.')
             && (model.Length == 0 || model.StartsWith("gemini-", StringComparison.Ordinal))

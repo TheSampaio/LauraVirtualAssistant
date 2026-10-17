@@ -9,6 +9,15 @@ public sealed class CognitiveTaskRunTests
 {
     private static readonly HashSet<string> Tools = ["recall_memory", "study_github_repository", "list_brain_skills", "propose_brain_skill", "plan_task", "task_status", "list_capabilities", "run_program"];
 
+    /// <summary>Keeps adapter refusals consistent in returned model results and durable task receipts, even when an adapter omitted its status label.</summary>
+    [Fact]
+    public async Task AdapterFailureCannotRetainTheDefaultSuccessLabel()
+    {
+        var task = new CognitiveTaskRun("Inspect an observed adapter refusal.", Tools); using var arguments = JsonDocument.Parse("{}");
+        var result = await task.ExecuteAsync("run_program", arguments.RootElement, _ => Task.FromResult(new AssistantToolResult("Synthetic validation refused.") { Failed = true }), CancellationToken.None);
+        Assert.True(result.Failed); Assert.Equal("failed", result.Status); Assert.Equal("failed", Assert.Single(task.Checkpoint().Operations).Status);
+    }
+
     /// <summary>Continues real persisted inventory cursors without the old identical-operation loop guard blocking later batches.</summary>
     [Fact]
     public async Task PersistedStudyContinuesDistinctCursorsAndRestoresItsNativeIdentity()

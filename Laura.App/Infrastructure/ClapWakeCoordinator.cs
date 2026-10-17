@@ -9,8 +9,7 @@ namespace Laura.App.Infrastructure;
 
 /// <summary>Hands off local clap capture to a short acknowledgment and then continuous conversation.</summary>
 public sealed class ClapWakeCoordinator(WindowsClapListener listener, GeminiLiveClient live, IAssistantEngine engine,
-    ISettingsService settings, GreetingComposer greeting, ILogger<ClapWakeCoordinator> logger, ConversationProviderRouter router,
-    LocalVoiceSession localVoice, ILocalModelManager models) : IAsyncDisposable
+    ISettingsService settings, GreetingComposer greeting, ILogger<ClapWakeCoordinator> logger, ConversationProviderRouter router) : IAsyncDisposable
 {
     private readonly CancellationTokenSource _lifetime = new();
     private CancellationTokenSource? _wake;
@@ -58,8 +57,8 @@ public sealed class ClapWakeCoordinator(WindowsClapListener listener, GeminiLive
     }
     /// <summary>Computes readiness without starting speech capture, model inference or cloud traffic.</summary>
     private bool CanArm(bool ignoreOwnWake = false) => ClapWakePolicy.CanArm(settings.Current, new(router.ActiveProvider, router.IsAvailable,
-        router.ActiveProvider != "local" || File.Exists(models.GetModelPath(SupportedModels.Speech.Id)),
-        engine.State == AssistantState.Ready, !ignoreOwnWake && Volatile.Read(ref _busy) != 0 || localVoice.IsRunning
+        true,
+        engine.State == AssistantState.Ready, !ignoreOwnWake && Volatile.Read(ref _busy) != 0
             || live.IsListening || live.IsCaptureStarting || live.IsSpeaking || live.IsThinking, Volatile.Read(ref _suspensions) != 0));
 
     /// <summary>Closes detection atomically before an explicit listening handoff; disposal allows normal idle reconciliation.</summary>
@@ -87,8 +86,7 @@ public sealed class ClapWakeCoordinator(WindowsClapListener listener, GeminiLive
             wake.Token.ThrowIfCancellationRequested();
             if (router.ActiveProvider == provider && Interlocked.Read(ref _settingsVersion) == version && !settings.Current.MicrophoneMuted && settings.Current.ClapWakeEnabled)
             {
-                if (provider == "local") { await localVoice.StartAsync(true, CancellationToken.None, wake.Token).ConfigureAwait(false); }
-                else { await live.StartListeningAsync(cancellationToken: wake.Token).ConfigureAwait(false); }
+                await live.StartListeningAsync(cancellationToken: wake.Token).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) { if (!live.IsListening && !live.IsCaptureStarting && !live.IsSpeaking) { live.ReturnToReady(); } }

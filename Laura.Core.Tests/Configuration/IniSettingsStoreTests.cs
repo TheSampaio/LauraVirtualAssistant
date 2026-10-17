@@ -8,13 +8,34 @@ namespace Laura.Core.Tests.Configuration;
 /// </summary>
 public sealed class IniSettingsStoreTests : IDisposable
 {
-    [Fact]
-    public async Task LocalModelContextAndCloudConsentRoundTripWithoutChangingExplicitProviderSelection()
+    /// <summary>Retired providers migrate without granting cloud consent or changing the selected Brain.</summary>
+    [Theory]
+    [InlineData("local")]
+    [InlineData("openai")]
+    [InlineData("auto")]
+    public async Task RetiredProvidersRequireExplicitGeminiEnableAfterMigration(string provider)
     {
-        var options = new GenerativeAiOptions { Provider = "openai", OpenAiModel = "o3", AllowCloudFallback = true,
-            LocalModel = "qwen2.5-0.5b-instruct-q4_k_m", LocalContextTokens = 2048, LocalGpuLayers = 16 }.Sanitized();
-        var store = CreateStore(); await store.SaveAsync(LauraSettings.Default with { GenerativeAi = options });
-        Assert.Equal(options, (await store.LoadAsync()).GenerativeAi);
+        await File.WriteAllTextAsync(_filePath, "[GenerativeAI]\nProvider=" + provider + "\nEnabled=true\nLocalModel=retired\n[Brain]\nDirectory=C:/Synthetic/Brain\n");
+        var store = CreateStore();
+        LauraSettings migrated = await store.LoadAsync();
+        Assert.Equal("gemini", migrated.GenerativeAi.Provider);
+        Assert.False(migrated.GenerativeAi.Enabled);
+        Assert.Equal("C:/Synthetic/Brain", migrated.Brain.Directory);
+        await store.SaveAsync(migrated);
+        Assert.DoesNotContain("LocalModel", await File.ReadAllTextAsync(_filePath));
+        Assert.Equal(migrated.GenerativeAi, (await store.LoadAsync()).GenerativeAi);
+    }
+
+    /// <summary>Saved full-access and diagnostic preferences round-trip through sanitized INI values.</summary>
+    [Fact]
+    public async Task FullAccessAndDiagnosticLevelRoundTrip()
+    {
+        var value = LauraSettings.Default with { Permissions = new() { Mode = Laura.Core.Permissions.ApprovalMode.FullAccess }, DiagnosticLevel = Microsoft.Extensions.Logging.LogLevel.Debug };
+        var store = CreateStore(); await store.SaveAsync(value);
+        var loaded = await store.LoadAsync();
+        Assert.Equal(value.Permissions.Mode, loaded.Permissions.Mode);
+        Assert.Equal(value.DiagnosticLevel, loaded.DiagnosticLevel);
+        Assert.Equal(Microsoft.Extensions.Logging.LogLevel.Information, (value with { DiagnosticLevel = (Microsoft.Extensions.Logging.LogLevel)999 }).Sanitized().DiagnosticLevel);
     }
     private readonly string _filePath = Path.Combine(
         Path.GetTempPath(),
@@ -45,7 +66,6 @@ public sealed class IniSettingsStoreTests : IDisposable
                 Provider = "gemini",
                 LiveVoice = "Kore",
                 ContinuousListening = true,
-                Endpoint = "http://localhost:11434",
                 Model = "gemini-3.1-flash-live-preview",
                 Persona = "Be brief.",
             },

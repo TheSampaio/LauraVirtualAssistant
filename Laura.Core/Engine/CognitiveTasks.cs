@@ -67,6 +67,16 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal, Execution.Comm
         return stored.Concat(_snapshots.Values).GroupBy(checkpoint => checkpoint.Id).Select(group => group.Last()).OrderByDescending(checkpoint => checkpoint.Updated).Take(200).ToArray();
     }
 
+    /// <summary>Finds only checkpoints belonging to actual prior owner turns in the supplied conversation. Args: history: Trusted retained messages; currentTurn: Current native interaction; cancellationToken: Query cancellation. Returns: At most three recent linked checkpoints; assistant text cannot introduce identities.</summary>
+    public async Task<IReadOnlyList<CognitiveTaskCheckpoint>> RecentForConversationAsync(IReadOnlyList<ConversationMessage> history, Guid currentTurn, CancellationToken cancellationToken = default)
+    {
+        Guid[] ids = history.Reverse().Where(message => message.Source is ConversationMessageSource.UserTyped or ConversationMessageSource.UserVoice
+            && message.TurnId != Guid.Empty && message.TurnId != currentTurn).Select(message => message.TurnId).Distinct().Take(16).ToArray();
+        if (ids.Length == 0) { return []; }
+        var available = (await ListAsync(cancellationToken).ConfigureAwait(false)).ToDictionary(task => task.Id);
+        return ids.Where(available.ContainsKey).Select(id => available[id]).Take(3).ToArray();
+    }
+
     /// <summary>Cancels the selected task immediately; other tasks and their permissions remain independent.</summary>
     public void Cancel(Guid id)
     { commandJobs?.CancelTask(id); if (_slots.TryGetValue(id, out var slot)) { slot.Cancellation.Cancel(); } }

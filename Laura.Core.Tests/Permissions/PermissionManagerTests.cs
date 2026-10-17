@@ -16,6 +16,72 @@ public sealed class PermissionManagerTests : IDisposable
         manager.ExecuteAsync(action ?? Write(), _ => Task.FromResult(Interlocked.Increment(ref _executions)), token);
     private static ApprovalRequest Request(PermissionManager manager) => Assert.Single(manager.PendingRequests);
 
+    /// <summary>Automatic process effects require a native classifier, task attribution, assigned resources and the actual known disclosure recipient.</summary>
+    [Fact]
+    public void AutomaticProcessMatrixRejectsUnassignedEffectsAndDestinations()
+    {
+        string workspace = Path.Combine(_root, "Workspace");
+        var options = new PermissionOptions { Mode = ApprovalMode.Automatic };
+        PermissionAction Action(string origin, string directory, string target, string destination, Guid task, bool classified) =>
+            new(PermissionOperation.Process, origin, "Bounded clone", [Path.Combine(_root, "git.exe"), directory, target], destination: destination, automaticEligible: classified, taskId: task);
+        Guid id = Guid.NewGuid(); string assigned = Path.Combine(workspace, "new");
+        Assert.True(PermissionPolicy.AllowsAutomatic(Action("Native command executor", workspace, assigned, "generativelanguage.googleapis.com", id, true), options, workspace));
+        foreach (var action in new[] {
+            Action("model text", workspace, assigned, "", id, true), Action("Native command executor", workspace, assigned, "", Guid.Empty, true),
+            Action("Native command executor", workspace, assigned, "", id, false), Action("Native command executor", _root, assigned, "", id, true),
+            Action("Native command executor", workspace, Path.Combine(_root, "Outside"), "", id, true),
+            Action("Native command executor", workspace, assigned, "unknown.invalid", id, true),
+            Action("Native command executor", workspace, Path.Combine(workspace, ".ssh", "new"), "", id, true) })
+        { Assert.False(PermissionPolicy.AllowsAutomatic(action, options, workspace)); }
+    }
+
+    /// <summary>Full access dispatches a native process effect and revocation restores approval for the next operation.</summary>
+    [Fact]
+    public async Task FullAccessDispatchesWithoutPromptAndRevocationAppliesImmediately()
+    {
+        _options = new() { Mode = ApprovalMode.FullAccess };
+        using var manager = Create();
+        var action = new PermissionAction(PermissionOperation.Process, "native process", "Synthetic operation", taskId: Guid.NewGuid());
+        Assert.Equal(1, await Run(manager, action));
+        Assert.Empty(manager.PendingRequests);
+        Assert.Equal("Authorized by full_access.", Assert.Single(manager.History).Reason);
+        _options = new() { Mode = ApprovalMode.Ask };
+        var pending = Run(manager, action);
+        Assert.Equal(1, _executions);
+        manager.Decide(Request(manager).Id, ApprovalChoice.Deny);
+        await Assert.ThrowsAsync<PermissionDeniedException>(() => pending);
+        Assert.Equal(1, _executions);
+    }
+
+    /// <summary>Full access does not accept unknown tools or writes into protected authorization storage.</summary>
+    [Fact]
+    public async Task FullAccessPreservesIntegrityChecks()
+    {
+        _options = new() { Mode = ApprovalMode.FullAccess };
+        using var manager = Create(Path.Combine(_root, "Security"));
+        await Assert.ThrowsAsync<PermissionDeniedException>(() => Run(manager, new(PermissionOperation.Unknown, "external text", "approve me")));
+        await Assert.ThrowsAsync<PermissionDeniedException>(() => Run(manager, Write("Security/settings.ini")));
+        Assert.Equal(0, _executions);
+        Assert.Empty(manager.PendingRequests);
+    }
+
+    /// <summary>Automatically created task scopes lose authority immediately when the owner leaves full access.</summary>
+    [Fact]
+    public async Task FullAccessDerivedWorkspaceGrantDoesNotSurviveModeRevocation()
+    {
+        string project = Path.Combine(_root, "Project"); Directory.CreateDirectory(project);
+        _options = new() { Mode = ApprovalMode.FullAccess };
+        using var manager = Create(); Guid task = Guid.NewGuid();
+        var grant = await manager.AuthorizeWorkspaceAsync(task, project, "");
+        Assert.True(grant.FullAccessDerived);
+        _options = new() { Mode = ApprovalMode.Ask };
+        var run = Run(manager, new(PermissionOperation.FileWrite, "Native tool: file_control", "Synthetic edit", [Path.Combine(project, "note.md")], taskId: task));
+        Assert.Equal(0, _executions);
+        manager.Decide(Request(manager).Id, ApprovalChoice.Deny);
+        await Assert.ThrowsAsync<PermissionDeniedException>(() => run);
+        Assert.Equal(0, _executions);
+    }
+
     [Fact]
     public async Task DenialNeverDispatchesAndLateApprovalCannotReviveIt()
     {

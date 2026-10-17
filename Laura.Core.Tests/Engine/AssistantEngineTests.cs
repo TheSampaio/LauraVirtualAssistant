@@ -37,11 +37,10 @@ public sealed class AssistantEngineTests
 
     [Theory]
     [InlineData("gemini")]
-    [InlineData("openai")]
     public async Task GenerativeProcessingKeepsThinkingVisualAndSpeaksOnlyTheAnswer(string provider)
     {
         var speech = new RecordingSpeechSynthesizer(); var localizer = new StubLocalizer(); var clock = new SystemClock();
-        var settings = new StubSettingsService(LauraSettings.Default with { GreetOnStartup = false, GenerativeAi = new() { Provider = provider } });
+        var settings = new StubSettingsService(LauraSettings.Default with { GreetOnStartup = false, GenerativeAi = new() { Provider = provider, Enabled = true } });
         var states = new List<AssistantState>(); Guid turnId = Guid.Empty;
         var dispatcher = new CallbackSkillDispatcher((request, _) => { turnId = request.TurnId; return Task.FromResult(SkillResponse.Speak("Verified answer")); });
         await using var engine = new AssistantEngine(speech, dispatcher, settings, localizer, new StubShellController(),
@@ -159,7 +158,7 @@ public sealed class AssistantEngineTests
         var speech = new RecordingSpeechSynthesizer();
         var dispatcher = new CallbackSkillDispatcher((request, _) =>
         { Assert.Equal(SkillRequestSource.Context, request.Source); dispatched = request.RawText; return Task.FromResult(SkillResponse.Speak("brief answer")); });
-        await using var engine = CreateEngine(dispatcher, speech);
+        await using var engine = CreateEngine(dispatcher, speech, generativeEnabled: true);
         engine.StateChanged += (_, state) => states.Add(state);
         await engine.StartAsync();
         await engine.SubmitContextCommandAsync(context, "Double clap · daily briefing");
@@ -220,10 +219,10 @@ public sealed class AssistantEngineTests
         { if (request.Source == SkillRequestSource.Context) { Opened.TrySetResult(); return Task.FromResult(SkillResponse.Speak("Synthetic first greeting")); } return Task.FromResult(SkillResponse.Silent()); }
     }
     /// <summary>Creates a domain engine with no platform, network, persistent memory or startup speech.</summary>
-    private static AssistantEngine CreateEngine(ISkillDispatcher dispatcher, ISpeechSynthesizer speech)
+    private static AssistantEngine CreateEngine(ISkillDispatcher dispatcher, ISpeechSynthesizer speech, bool generativeEnabled = false)
     {
         var localizer = new StubLocalizer(); var clock = new SystemClock();
-        return new(speech, dispatcher, new StubSettingsService(LauraSettings.Default with { GreetOnStartup = false }),
+        return new(speech, dispatcher, new StubSettingsService(LauraSettings.Default with { GreetOnStartup = false, GenerativeAi = new() { Enabled = generativeEnabled } }),
             localizer, new StubShellController(), new GreetingComposer(localizer, new StubUserContext(), clock), clock,
             NullLogger<AssistantEngine>.Instance);
     }

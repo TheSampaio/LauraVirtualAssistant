@@ -5,6 +5,17 @@ namespace Laura.Core.Tests.Execution;
 /// <summary>Checks explicit host boundaries without executing PowerShell or interpreting code as authorization.</summary>
 public sealed class PowerShellInvocationTests
 {
+    /// <summary>Task environment values are frozen before approval and cannot inject an environment-block entry.</summary>
+    [Fact]
+    public void EnvironmentOverridesAreBoundedAndImmutable()
+    {
+        var environment = new Dictionary<string, string> { ["LAURA_FIXTURE"] = "original" };
+        var request = new CommandExecutionRequest(Path.GetFullPath("powershell.exe"), ["-Command", "Get-Date"], Path.GetFullPath("Project")) { EnvironmentVariables = environment };
+        var frozen = request.Validated(); environment["LAURA_FIXTURE"] = "changed";
+        Assert.Equal("original", frozen.EnvironmentVariables["LAURA_FIXTURE"]);
+        Assert.Throws<ArgumentException>(() => (request with { EnvironmentVariables = new Dictionary<string, string> { ["INVALID=NAME"] = "value" } }).Validated());
+        Assert.Throws<ArgumentException>(() => (request with { EnvironmentVariables = new Dictionary<string, string> { ["VALID"] = "value\0injected" } }).Validated());
+    }
     /// <summary>Preserves literal script parameters while putting all host safety flags before -File.</summary>
     [Fact]
     public void FileModePreservesLiteralUnicodeSpaceAndHostLookingScriptArguments()

@@ -171,6 +171,7 @@ public sealed class CognitiveTaskRun
         }
         catch (Exception error) when (error is IOException or HttpRequestException or InvalidOperationException or ArgumentException or JsonException)
         { result = new("Adapter failed: " + error.GetType().Name + ". Retained results are partial; no goal completion is verified.") { Failed = true, Status = "failed" }; }
+        if (result.Failed && result.Status == "success") { result = result with { Status = "failed" }; }
         if (name == "start_program" && result.CommandJobId is { } jobId && jobId != Guid.Empty) { _commandJobs.Add(jobId); }
         ObserveSourceWorkflow(name, arguments, result); Record(name, result, initiator);
         string status = result.Status == "success" && result.Failed ? "failed" : result.Status;
@@ -215,7 +216,7 @@ public sealed class CognitiveTaskRun
         else { value.WriteTo(writer); }
     }
     /// <summary>Identifies only known observational capabilities whose repeat does not duplicate an external mutation.</summary>
-    private static bool IsReadOnly(string name) => name is "task_status" or "list_capabilities" or "recall_memory" or "list_brain_skills" or "read_brain_passage" or "system_status" or "list_apps"
+    private static bool IsReadOnly(string name) => name is "task_status" or "recent_task_context" or "list_capabilities" or "recall_memory" or "list_brain_skills" or "read_brain_passage" or "system_status" or "list_apps"
         or "repository_study_status" or "start_repository_study" or "continue_repository_study" or "program_status";
 
     /// <summary>Derives remaining work from confirmed adapter results, not model text or remote instructions.</summary>

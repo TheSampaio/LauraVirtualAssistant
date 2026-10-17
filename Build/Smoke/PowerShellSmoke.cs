@@ -10,7 +10,7 @@ internal static class PowerShellSmoke
     /// <summary>Exercises visible commands, pinned scripts, denial, literal arguments, nonzero exits and bounded lifecycle behavior.</summary>
     internal static async Task RunAsync(string directory, CancellationToken cancellationToken)
     {
-        using var provider = new ProviderExecutionScope("local"); string executable = WindowsProcessLauncher.ResolveExecutable("pwsh.exe");
+        using var provider = new ProviderExecutionScope("local"); string executable = WindowsCommandEnvironment.ResolvePowerShell();
         string root = Path.Combine(directory, "PowerShell workspace ação 漢字"); Directory.CreateDirectory(root);
         string script = Path.Combine(root, "Entry script.ps1"), sentinel = Path.Combine(root, "must-not-exist.txt");
         await File.WriteAllTextAsync(script, "param([string]$Value)\n[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)\n[Console]::Write($Value)\n[Console]::Error.Write('synthetic stderr')\nexit 7\n", cancellationToken);
@@ -35,6 +35,7 @@ internal static class PowerShellSmoke
         if (!observed.Succeeded || observed.StandardOutput != "verified") { throw new InvalidOperationException("Native explicit PowerShell command failed."); }
         const string literal = "a b ação 漢字 $(Remove-Item *)";
         observed = await executor.ExecuteAsync(command with { Arguments = ["-File", script, literal] }, cancellationToken: cancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(directory, "powershell-script-observation.json"), JsonSerializer.Serialize(new { observed, entryLocked, pinShown }), cancellationToken);
         if (observed.Succeeded || observed.ExitCode != 7 || observed.StandardOutput != literal || observed.StandardError != "synthetic stderr" || !entryLocked || !pinShown)
         { throw new InvalidOperationException("Pinned script, literal arguments, stderr or nonzero outcome failed."); }
         approve = false;

@@ -25,11 +25,12 @@ public static class LauraDiagnostics
     /// <summary>Gets the currently retained diagnostic rows; no conversation content is present.</summary>
     public static IReadOnlyList<LauraDiagnosticSample> Snapshot() => Samples.ToArray();
     /// <summary>Publishes numeric measurements with bounded optional identity metadata, never note text or filesystem paths.</summary>
-    public static void Record(string operation, double milliseconds = 0, long amount = 0, string outcome = "", IReadOnlyList<string>? ids = null, IReadOnlyList<double>? scores = null, Guid? interactionId = null)
+    public static void Record(string operation, double milliseconds = 0, long amount = 0, string outcome = "", IReadOnlyList<string>? ids = null, IReadOnlyList<double>? scores = null, Guid? interactionId = null, Guid taskId = default, Guid operationId = default)
     {
         Duration.Record(milliseconds, new KeyValuePair<string, object?>("operation", operation));
         if (Volatile.Read(ref _captures) == 0 && Published is null) { return; }
-        var sample = new LauraDiagnosticSample(interactionId ?? Interaction.Value, DateTimeOffset.UtcNow, operation, milliseconds, amount, outcome, ids?.Take(16).ToArray() ?? [], scores?.Take(16).ToArray() ?? []);
+        var sample = new LauraDiagnosticSample(interactionId ?? Interaction.Value, DateTimeOffset.UtcNow, operation, milliseconds, amount, outcome, ids?.Take(16).ToArray() ?? [], scores?.Take(16).ToArray() ?? [])
+        { TaskId = taskId, OperationId = operationId };
         Published?.Invoke(sample);
         if (Volatile.Read(ref _captures) == 0) { return; }
         Samples.Enqueue(sample);
@@ -54,4 +55,10 @@ public static class LauraDiagnostics
 }
 
 /// <summary>A numeric operation measurement; optional IDs are bounded stable knowledge identities, not contents.</summary>
-public sealed record LauraDiagnosticSample(Guid InteractionId, DateTimeOffset Timestamp, string Operation, double Milliseconds, long Amount, string Outcome, IReadOnlyList<string> Ids, IReadOnlyList<double> Scores);
+public sealed record LauraDiagnosticSample(Guid InteractionId, DateTimeOffset Timestamp, string Operation, double Milliseconds, long Amount, string Outcome, IReadOnlyList<string> Ids, IReadOnlyList<double> Scores)
+{
+    /// <summary>Gets the native task identity, independently of the current conversation interaction.</summary>
+    public Guid TaskId { get; init; }
+    /// <summary>Gets the native effect invocation identity.</summary>
+    public Guid OperationId { get; init; }
+}

@@ -10,8 +10,7 @@ public sealed class ProviderExecutionScope : IDisposable
     /// <summary>Enters a known provider scope. Args: provider: Native runtime identifier. Raises: ArgumentException for unknown providers.</summary>
     public ProviderExecutionScope(string provider)
     {
-        if (provider == "auto") { provider = "local"; }
-        if (provider is not ("gemini" or "openai" or "local")) { throw new ArgumentException("Unknown execution provider.", nameof(provider)); }
+        if (provider is not ("gemini" or "local")) { throw new ArgumentException("Unknown execution provider.", nameof(provider)); }
         _previous = ActiveProvider.Value; ActiveProvider.Value = provider;
     }
 
@@ -22,7 +21,6 @@ public sealed class ProviderExecutionScope : IDisposable
     public static string Destination => Provider switch
     {
         "gemini" => "generativelanguage.googleapis.com",
-        "openai" => "api.openai.com",
         "local" => "",
         _ => throw new InvalidOperationException("Disclosure requires a trusted execution provider."),
     };

@@ -18,6 +18,7 @@ public sealed class PermissionManager : IDisposable
     private readonly List<PermissionGrant> _grants = [];
     private readonly List<ApprovalAudit> _history = [];
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly AsyncLocal<string?> _executionAuthorization = new();
     private bool _stopped;
     private long _resetVersion;
 
@@ -32,6 +33,10 @@ public sealed class PermissionManager : IDisposable
     }
     /// <summary>Reports a safe startup storage diagnostic without file contents.</summary>
     public string? StorageWarning { get; private set; }
+    /// <summary>Gets descriptive authorization metadata only inside the current native execution callback; it grants no capability.</summary>
+    public string? CurrentAuthorization => _executionAuthorization.Value;
+    /// <summary>Gets the effective native mode, including revocation of a separately protected owner preference.</summary>
+    public ApprovalMode CurrentMode => _options().Mode;
     /// <summary>Signals UI subscribers; authorization never depends on a model or prompt.</summary>
     public event EventHandler? Changed;
     /// <summary>Gets immutable snapshots of waiting actions.</summary>
@@ -77,12 +82,12 @@ public sealed class PermissionManager : IDisposable
             PermissionPolicy.ValidateResources(action, _protectedRoots(), _workspaceRoot);
             string[] original = SnapshotResources(action);
             PermissionGrant? grant;
-            lock (_gate) { grant = _grants.FirstOrDefault(item => PermissionPolicy.Matches(item, action)); }
+            lock (_gate) { grant = _grants.FirstOrDefault(item => (!item.FullAccessDerived || _options().Mode == ApprovalMode.FullAccess) && PermissionPolicy.Matches(item, action)); }
             bool nativeConsent = action.UserInitiated && risk <= PermissionRisk.Moderate && action.Operation is PermissionOperation.LocalCapture or PermissionOperation.ScreenshotExport or PermissionOperation.BrainAttachment or PermissionOperation.ClipboardWrite;
             bool automaticPolicy = PermissionPolicy.AllowsAutomatic(action, _options(), _workspaceRoot);
             bool allowed = automaticPolicy || nativeConsent || action.Operation == PermissionOperation.Internal || grant is not null
                 && (grant.TaskId != Guid.Empty || _options().Mode == ApprovalMode.Automatic || !grant.DirectoryScope);
-            string authorization = nativeConsent ? "native_gesture" : automaticPolicy ? "automatic_policy" : grant?.TaskId != Guid.Empty && grant is not null ? "task_grant" : grant is not null ? "remembered_grant" : action.Operation == PermissionOperation.Internal ? "internal_policy" : "user_approval";
+            string authorization = nativeConsent ? "native_gesture" : automaticPolicy ? _options().Mode == ApprovalMode.FullAccess ? "full_access" : "automatic_policy" : grant?.TaskId != Guid.Empty && grant is not null ? "task_grant" : grant is not null ? "remembered_grant" : action.Operation == PermissionOperation.Internal ? "internal_policy" : "user_approval";
             if (allowed) { outcome = nativeConsent ? ApprovalOutcome.Approved : ApprovalOutcome.Automatic; }
             else
             {
@@ -121,9 +126,11 @@ public sealed class PermissionManager : IDisposable
             {
                 if (_stopped || version != _resetVersion || grant is not null && !_grants.Any(item => item.Id == grant.Id))
                 { throw new PermissionDeniedException("Authorization was revoked before dispatch."); }
+                if (grant is { FullAccessDerived: true } && _options().Mode != ApprovalMode.FullAccess)
+                { throw new PermissionDeniedException("Full-access task authorization was revoked before dispatch."); }
                 if (pending is not null && pending.Request.Expires <= DateTimeOffset.UtcNow)
                 { outcome = ApprovalOutcome.Expired; throw new PermissionDeniedException("Approval expired before dispatch."); }
-                if (grant is { DirectoryScope: true, TaskId: var scopedTask } && scopedTask == Guid.Empty && _options().Mode != ApprovalMode.Automatic)
+                if (grant is { DirectoryScope: true, TaskId: var scopedTask } && scopedTask == Guid.Empty && _options().Mode == ApprovalMode.Ask)
                 { throw new PermissionDeniedException("Approval mode changed before dispatch."); }
                 if (grant is { TaskId: var activeTask } && activeTask != Guid.Empty && !PermissionPolicy.Matches(grant, action)) { throw new PermissionDeniedException("Task scope expired before dispatch."); }
                 if (automaticPolicy && !PermissionPolicy.AllowsAutomatic(action, _options(), _workspaceRoot)) { throw new PermissionDeniedException("Automatic policy changed before dispatch."); }
@@ -135,10 +142,15 @@ public sealed class PermissionManager : IDisposable
                 if (pending is not null) { _pending.Remove(id); }
                 // Commit dispatch under the authorization gate, then run effects on a worker so native startup cannot block approval UI reads.
                 dispatched = true;
-                operation = Task.Run(() => execute(cancellationToken), cancellationToken);
+                operation = Task.Run(async () =>
+                {
+                    string? previous = _executionAuthorization.Value; _executionAuthorization.Value = authorization;
+                    try { return await execute(cancellationToken).ConfigureAwait(false); }
+                    finally { _executionAuthorization.Value = previous; }
+                }, cancellationToken);
             }
             reason = "Authorized by " + authorization + ".";
-            Laura.Core.Diagnostics.LauraDiagnostics.Record("permission.authorization", outcome: authorization, interactionId: action.TaskId);
+            Laura.Core.Diagnostics.LauraDiagnostics.Record("permission.authorization", outcome: authorization, taskId: action.TaskId, operationId: action.OperationId);
             T result = await operation.ConfigureAwait(false);
             if (succeeded is not null && !succeeded(result)) { outcome = ApprovalOutcome.Failed; reason = "Authorized operation reported failure."; }
             return result;
@@ -149,7 +161,8 @@ public sealed class PermissionManager : IDisposable
         finally
         {
             Laura.Core.Diagnostics.LauraDiagnostics.Record("permission." + action.Operation, amount: (int)risk, outcome: outcome.ToString(),
-                interactionId: Laura.Core.Diagnostics.LauraDiagnostics.CurrentInteractionId == Guid.Empty ? id : Laura.Core.Diagnostics.LauraDiagnostics.CurrentInteractionId);
+                interactionId: Laura.Core.Diagnostics.LauraDiagnostics.CurrentInteractionId == Guid.Empty ? id : Laura.Core.Diagnostics.LauraDiagnostics.CurrentInteractionId,
+                taskId: action.TaskId, operationId: action.OperationId);
             lock (_gate)
             {
                 _pending.Remove(id);
@@ -173,7 +186,7 @@ public sealed class PermissionManager : IDisposable
     /// <summary>Requests one native review of project edits and an optional explicit cloud read recipient. Args: taskId: Trusted active task; directory: Existing project root; destination: Actual provider host. Returns: Revocable session-only grant.</summary>
     public Task<PermissionGrant> AuthorizeWorkspaceAsync(Guid taskId, string directory, string destination, CancellationToken cancellationToken = default)
     {
-        if (taskId == Guid.Empty || destination is not ("" or "api.openai.com" or "generativelanguage.googleapis.com"))
+        if (taskId == Guid.Empty || destination is not ("" or "generativelanguage.googleapis.com"))
         { throw new PermissionDeniedException("A workspace requires an active task and a known recipient."); }
         string root = Path.GetFullPath(directory);
         PermissionPolicy.ValidateResources(new(PermissionOperation.WorkspaceAuthorization, "Workspace task review", "Validate project root before metadata IO", [root]), _protectedRoots(), _workspaceRoot);
@@ -188,7 +201,8 @@ public sealed class PermissionManager : IDisposable
         {
             token.ThrowIfCancellationRequested();
             var grant = new PermissionGrant(Guid.NewGuid(), PermissionOperation.WorkspaceAuthorization, "Native tool: file_control", root,
-                action.Fingerprint, DateTimeOffset.UtcNow, false, true) { TaskId = taskId, Expires = DateTimeOffset.UtcNow.AddHours(1), Destination = destination };
+                action.Fingerprint, DateTimeOffset.UtcNow, false, true) { TaskId = taskId, Expires = DateTimeOffset.UtcNow.AddHours(1), Destination = destination,
+                    FullAccessDerived = CurrentAuthorization == "full_access" };
             lock (_gate) { _grants.Add(grant); }
             return Task.FromResult(grant);
         }, cancellationToken);
@@ -196,7 +210,7 @@ public sealed class PermissionManager : IDisposable
     /// <summary>Reviews one task's repository reads, private Brain retention and optional actual provider disclosure. Source code never receives execution authority.</summary>
     public Task<PermissionGrant> AuthorizeRepositoryStudyAsync(Guid taskId, string source, string destination, CancellationToken cancellationToken = default)
     {
-        if (taskId == Guid.Empty || destination is not ("" or "api.openai.com" or "generativelanguage.googleapis.com"))
+        if (taskId == Guid.Empty || destination is not ("" or "generativelanguage.googleapis.com"))
         { throw new PermissionDeniedException("Repository study requires a trusted task and a known recipient."); }
         bool remoteSource = source.StartsWith("https://", StringComparison.Ordinal);
         string scope = remoteSource ? Brain.GitHubRepositoryAddress.Parse(source).Url : Path.GetFullPath(source);
@@ -211,7 +225,7 @@ public sealed class PermissionManager : IDisposable
         {
             var existing = _grants.FirstOrDefault(grant => grant.Operation == PermissionOperation.RepositoryStudyAuthorization
                 && grant.TaskId == taskId && grant.Scope == scope && grant.Destination == destination && grant.Expires > DateTimeOffset.UtcNow && !grant.Persistent);
-            if (existing is not null) { return Task.FromResult(existing); }
+            if (existing is not null && (!existing.FullAccessDerived || _options().Mode == ApprovalMode.FullAccess)) { return Task.FromResult(existing); }
         }
         var action = new PermissionAction(PermissionOperation.RepositoryStudyAuthorization, "Repository study review",
             (_ui?.Get(LocalizationKeys.Permissions.RepositoryStudyReview) ?? "Authorize bounded repository text reads and untrusted Brain references for this task for one hour. No source code, dependency or script will execute.")
@@ -221,7 +235,8 @@ public sealed class PermissionManager : IDisposable
         {
             token.ThrowIfCancellationRequested();
             var grant = new PermissionGrant(Guid.NewGuid(), PermissionOperation.RepositoryStudyAuthorization, "Repository study", scope,
-                action.Fingerprint, DateTimeOffset.UtcNow, false, !remoteSource) { TaskId = taskId, Expires = DateTimeOffset.UtcNow.AddHours(1), Destination = destination };
+                action.Fingerprint, DateTimeOffset.UtcNow, false, !remoteSource) { TaskId = taskId, Expires = DateTimeOffset.UtcNow.AddHours(1), Destination = destination,
+                    FullAccessDerived = CurrentAuthorization == "full_access" };
             lock (_gate) { _grants.Add(grant); } return Task.FromResult(grant);
         }, cancellationToken);
     }

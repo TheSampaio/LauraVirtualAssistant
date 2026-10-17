@@ -8,6 +8,24 @@ namespace Laura.Core.Tests.Diagnostics;
 public sealed class RuntimeJournalTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "laura-journal-" + Guid.NewGuid().ToString("N"));
+    /// <summary>Detail filtering and separate task/operation identities survive the asynchronous journal without payload fields.</summary>
+    [Fact]
+    public async Task NativeSeverityAndOperationCorrelationAreRetained()
+    {
+        await using var journal = new RuntimeJournal(_root);
+        Guid interaction = Guid.NewGuid(), task = Guid.NewGuid(), operation = Guid.NewGuid();
+        LauraDiagnostics.Record("audio.chunk.arrival");
+        using (LauraDiagnostics.Correlate(interaction))
+        { LauraDiagnostics.Record("process.create_failed", amount: 5, outcome: "failed", taskId: task, operationId: operation); }
+        var snapshot = await journal.SnapshotAsync();
+        Assert.DoesNotContain(snapshot.Events, row => row.Operation == "audio.chunk.arrival");
+        var failure = Assert.Single(snapshot.Events, row => row.Operation == "process.create_failed");
+        Assert.Equal(LogLevel.Error, failure.Level); Assert.Equal(interaction, failure.InteractionId);
+        Assert.Equal(task, failure.TaskId); Assert.Equal(operation, failure.OperationId);
+        journal.MinimumLevel = LogLevel.Debug;
+        LauraDiagnostics.Record("audio.chunk.arrival");
+        Assert.Contains((await journal.SnapshotAsync()).Events, row => row.Operation == "audio.chunk.arrival");
+    }
     [Fact]
     public async Task ExportNeverFormatsLoggerPayloadsAndContainsUsefulCorrelatedEvents()
     {

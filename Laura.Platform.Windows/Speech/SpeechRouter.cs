@@ -6,18 +6,17 @@ using Laura.Platform.Windows.Conversation;
 namespace Laura.Platform.Windows.Speech;
 
 /// <summary>Uses Gemini's native Live voice when selected, otherwise preserves offline speech.</summary>
-public sealed class SpeechRouter(GeminiLiveClient live, WindowsOfflineSpeechSynthesizer offline, ConversationProviderRouter router) : ISpeechSynthesizer
+public sealed class SpeechRouter(GeminiLiveClient live) : ISpeechSynthesizer
 {
     /// <inheritdoc />
-    public bool IsSpeaking => live.IsSpeaking || offline.IsSpeaking;
+    public bool IsSpeaking => live.IsSpeaking;
     /// <inheritdoc />
-    public IReadOnlyList<VoiceDescriptor> GetAvailableVoices() => offline.GetAvailableVoices();
+    public IReadOnlyList<VoiceDescriptor> GetAvailableVoices() => [];
     /// <inheritdoc />
     public Task SpeakAsync(SpeechRequest request, CancellationToken cancellationToken = default) =>
-        router.ActiveProvider == "gemini" && live.IsAvailable ? live.SpeakAsync(request.Text, cancellationToken)
-        : router.ActiveProvider == "local" ? offline.SpeakAsync(request, cancellationToken) : Task.CompletedTask;
+        live.IsAvailable ? live.SpeakAsync(request.Text, cancellationToken) : Task.CompletedTask;
     /// <inheritdoc />
-    public void CancelSpeech() { live.Interrupt(); offline.CancelSpeech(); }
+    public void CancelSpeech() => live.Interrupt();
     /// <inheritdoc />
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

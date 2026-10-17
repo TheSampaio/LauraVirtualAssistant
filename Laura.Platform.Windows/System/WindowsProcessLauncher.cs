@@ -158,7 +158,7 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
         if (executable.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar, ':']) >= 0)
         { throw new ArgumentException("Use a full executable path.", nameof(executable)); }
         string name = Path.HasExtension(executable) ? executable : executable + ".exe";
-        foreach (string directory in new[] { Environment.SystemDirectory }.Concat((Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)))
+        foreach (string directory in WindowsCommandEnvironment.SearchDirectories())
         {
             if (!Path.IsPathFullyQualified(directory) || PermissionPolicy.IsNetworkPath(directory)) { continue; }
             string candidate = Path.Combine(directory, name);

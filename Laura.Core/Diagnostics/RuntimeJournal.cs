@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
 
 namespace Laura.Core.Diagnostics;
 
@@ -18,6 +19,13 @@ public sealed class RuntimeJournal : IAsyncDisposable
     private long _dropped, _failures;
     private int _disposed;
     private readonly Guid _run = Guid.NewGuid();
+    private int _minimumLevel = (int)LogLevel.Information;
+    /// <summary>Gets or sets the current native detail threshold; changing it does not enable sensitive payload logging.</summary>
+    public LogLevel MinimumLevel
+    {
+        get => (LogLevel)Volatile.Read(ref _minimumLevel);
+        set => Volatile.Write(ref _minimumLevel, Enum.IsDefined(value) ? (int)value : (int)LogLevel.Information);
+    }
     private sealed record Item(RuntimeLogEvent? Event = null, TaskCompletionSource<RuntimeLogSnapshot>? Snapshot = null);
     /// <summary>Starts bounded recording in an application-owned directory; no message text, screenshots, PCM or credentials are accepted.</summary>
     public RuntimeJournal(string directory, long fileBytes = 1024 * 1024, int fileCount = 8)
@@ -33,12 +41,12 @@ public sealed class RuntimeJournal : IAsyncDisposable
     /// <summary>Gets failed local write attempts; the journal continues accepting later diagnostics.</summary>
     public long WriteFailures => Interlocked.Read(ref _failures);
     private void Observe(LauraDiagnosticSample sample) => Enqueue(new(_run, sample.InteractionId, sample.Timestamp, Safe(sample.Operation), double.IsFinite(sample.Milliseconds) ? sample.Milliseconds : 0, sample.Amount,
-        Safe(sample.Outcome), sample.Ids.Select(HashIdentity).Take(16).ToArray(), sample.Scores.Where(double.IsFinite).Take(16).ToArray()));
+        Safe(sample.Outcome), sample.Ids.Select(HashIdentity).Take(16).ToArray(), sample.Scores.Where(double.IsFinite).Take(16).ToArray()) { TaskId = sample.TaskId, OperationId = sample.OperationId });
     /// <summary>Accepts finite numeric fields and restricted symbolic codes only. Arbitrary strings become 'redacted'.</summary>
     public void Record(string operation, double milliseconds = 0, long amount = 0, string outcome = "", Guid interactionId = default) =>
         Enqueue(new(_run, interactionId, DateTimeOffset.UtcNow, Safe(operation), double.IsFinite(milliseconds) ? milliseconds : 0, amount, Safe(outcome), [], []));
     private void Enqueue(RuntimeLogEvent row)
-    { if (Volatile.Read(ref _disposed) == 0 && !_queue.Writer.TryWrite(new(row))) { Interlocked.Increment(ref _dropped); } }
+    { if (row.Level < MinimumLevel) { return; } if (Volatile.Read(ref _disposed) == 0 && !_queue.Writer.TryWrite(new(row))) { Interlocked.Increment(ref _dropped); } }
     /// <summary>Flushes preceding events and snapshots all retained files on the writer lane. Recording can continue during export.</summary>
     public async Task<RuntimeLogSnapshot> SnapshotAsync(CancellationToken token = default)
     {
@@ -120,6 +128,14 @@ public sealed class RuntimeJournal : IAsyncDisposable
 }
 
 /// <summary>Strict technical schema; no arbitrary payload, exception message or transcript field.</summary>
-public sealed record RuntimeLogEvent(Guid RunId, Guid InteractionId, DateTimeOffset Timestamp, string Operation, double Milliseconds, long Amount, string Outcome, IReadOnlyList<string> Ids, IReadOnlyList<double> Scores);
+public sealed record RuntimeLogEvent(Guid RunId, Guid InteractionId, DateTimeOffset Timestamp, string Operation, double Milliseconds, long Amount, string Outcome, IReadOnlyList<string> Ids, IReadOnlyList<double> Scores)
+{
+    /// <summary>Gets the native task identity without retaining the objective.</summary>
+    public Guid TaskId { get; init; }
+    /// <summary>Gets the native effect invocation identity.</summary>
+    public Guid OperationId { get; init; }
+    /// <summary>Gets severity derived only from symbolic native event codes.</summary>
+    public LogLevel Level => RuntimeEventLevel.For(Operation, Outcome);
+}
 /// <summary>A consistent retained technical window and explicit loss counters.</summary>
 public sealed record RuntimeLogSnapshot(DateTimeOffset CapturedAt, IReadOnlyList<RuntimeLogEvent> Events, long DroppedEvents, long WriteFailures, int MalformedLines);

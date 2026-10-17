@@ -69,6 +69,16 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
             ISettingsService settings = services.GetRequiredService<ISettingsService>();
             services.GetRequiredService<RuntimeDiagnosticContext>();
             using (PerformanceTrace.Measure("startup.settings")) { await settings.LoadAsync().ConfigureAwait(true); }
+            if (settings.Current.Permissions.Mode == Laura.Core.Permissions.ApprovalMode.FullAccess
+                && !services.GetRequiredService<Laura.Platform.Windows.System.WindowsFullAccessPreference>().IsConfirmed())
+            {
+                await settings.UpdateAsync(settings.Current with { Permissions = settings.Current.Permissions with { Mode = Laura.Core.Permissions.ApprovalMode.Ask } }).ConfigureAwait(true);
+                Laura.Core.Diagnostics.LauraDiagnostics.Record("permission.full_access_unconfirmed", outcome: "revoked");
+            }
+            await Task.Run(services.GetRequiredService<Laura.Core.Files.UserFileWorkspace>().EnsureCreated).ConfigureAwait(true);
+            try { await Task.Run(services.GetRequiredService<LegacyProviderCleanup>().RetireCredential).ConfigureAwait(true); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or Laura.Core.Permissions.PermissionDeniedException)
+            { services.GetRequiredService<ILogger<LauraApplication>>().LogWarning("Retired credential cleanup failed ({ErrorType}).", error.GetType().Name); }
             _permissionOptions = settings.Current.Permissions;
             settings.Changed += OnPermissionSettingsChanged;
             await PersistPermissionOptionsAsync().ConfigureAwait(true);
@@ -192,6 +202,7 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
     private void OnPermissionSettingsChanged(object? sender, Laura.Core.Configuration.LauraSettings settings)
     {
         if (_permissionOptions == settings.Permissions) { return; }
+        Laura.Core.Diagnostics.LauraDiagnostics.Record("permission.mode_changed", outcome: settings.Permissions.Mode.ToString());
         _permissionOptions = settings.Permissions; _ = PersistPermissionOptionsAsync();
     }
     private async Task PersistPermissionOptionsAsync()

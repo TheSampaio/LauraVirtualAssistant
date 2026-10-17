@@ -9,7 +9,7 @@ public sealed class ProviderExecutionScopeTests
     public async Task ConcurrentProvidersAndNestedScopesRetainTheirActualRecipient()
     {
         Assert.Null(ProviderExecutionScope.Provider);
-        await Task.WhenAll(CheckAsync("gemini", "generativelanguage.googleapis.com"), CheckAsync("openai", "api.openai.com"));
+        await Task.WhenAll(CheckAsync("gemini", "generativelanguage.googleapis.com"), CheckAsync("gemini", "generativelanguage.googleapis.com"));
         Assert.Null(ProviderExecutionScope.Provider);
         Assert.Throws<InvalidOperationException>(() => ProviderExecutionScope.Destination);
     }

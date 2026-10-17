@@ -60,7 +60,7 @@ public sealed class BrainIndex(string directory, IBrainEmbedding embedding)
             schema.ExecuteNonQuery();
         }
         string model = "";
-        try { model = embedding.ModelId; } catch (Exception error) when (error is InvalidOperationException or IOException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException) { }
+        try { model = embedding.ModelId; } catch (Exception error) when (error is InvalidOperationException or IOException) { }
         SemanticAvailable = model.Length > 0;
         var vectors = new Dictionary<string, float[]>(StringComparer.Ordinal);
         var passages = new Dictionary<string, BrainPassage>(StringComparer.Ordinal);
@@ -103,7 +103,7 @@ public sealed class BrainIndex(string directory, IBrainEmbedding embedding)
                 string? cached = existing.ExecuteScalar() as string;
                 float[] vector;
                 try { vector = cached is not null ? JsonSerializer.Deserialize<float[]>(cached) ?? [] : embedding.Embed(content); }
-                catch (Exception error) when (error is JsonException or InvalidOperationException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException) { SemanticAvailable = false; continue; }
+                catch (Exception error) when (error is JsonException or InvalidOperationException) { SemanticAvailable = false; continue; }
                 vectors[passage.Id] = vector;
                 if (cached is not null) { continue; }
                 using var save = connection.CreateCommand(); save.Transaction = transaction;
@@ -171,7 +171,7 @@ public sealed class BrainIndex(string directory, IBrainEmbedding embedding)
     {
         if (!SemanticAvailable || string.IsNullOrWhiteSpace(query)) { return []; }
         float[] vector;
-        try { vector = embedding.Embed(query); } catch (Exception error) when (error is InvalidOperationException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException or IOException) { return []; }
+        try { vector = embedding.Embed(query); } catch (Exception error) when (error is InvalidOperationException or IOException) { return []; }
         return _vectors.Where(pair => pair.Value.Length == vector.Length && vector.Length > 0 && _passages.ContainsKey(pair.Key))
             .Select(pair => (Passage: _passages[pair.Key], Score: pair.Value.Zip(vector, (left, right) => (double)left * right).Sum()))
             .Where(pair => pair.Score >= .35).OrderByDescending(pair => pair.Score).GroupBy(pair => pair.Passage.NoteId, StringComparer.Ordinal)

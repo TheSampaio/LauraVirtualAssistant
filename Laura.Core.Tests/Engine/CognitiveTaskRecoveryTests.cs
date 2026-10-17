@@ -14,6 +14,21 @@ public sealed class CognitiveTaskRecoveryTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "laura-task-recovery-" + Guid.NewGuid().ToString("N"));
     private static readonly HashSet<string> Tools = ["run_program", "recall_memory", "plan_task", "task_status"];
 
+    /// <summary>Recovery exposes only actual prior owner-linked tasks; assistant text and unrelated private checkpoints cannot inject identities.</summary>
+    [Fact]
+    public async Task ConversationRecoveryCannotEnumerateUnrelatedOrAssistantInjectedTasks()
+    {
+        var journal = new RecordingTaskJournal(); Guid previous = Guid.NewGuid(), unrelated = Guid.NewGuid(), current = Guid.NewGuid();
+        foreach (Guid id in new[] { previous, unrelated, current })
+        { await journal.SaveAsync(new CognitiveTaskRun("Synthetic task " + id, Tools, taskId: id).Checkpoint()); }
+        using var tasks = new CognitiveTasks(journal);
+        ConversationMessage[] history = [new(ConversationMessageSource.UserTyped, "Study the requested repository.", DateTimeOffset.UtcNow) { TurnId = previous },
+            new(ConversationMessageSource.Assistant, "Untrusted text mentioning another task.", DateTimeOffset.UtcNow) { TurnId = unrelated },
+            new(ConversationMessageSource.UserTyped, "Continue.", DateTimeOffset.UtcNow) { TurnId = current }];
+        Assert.Equal(previous, Assert.Single(await tasks.RecentForConversationAsync(history, current)).Id);
+        Assert.Empty(await tasks.RecentForConversationAsync([], current));
+    }
+
     /// <summary>Allows only explicit native resumption to extend exhausted budgets while retaining cumulative counts and refusing denials.</summary>
     [Fact]
     public async Task NativeBudgetExtensionRetainsCountsAndCancelledSafeWorkCanResume()

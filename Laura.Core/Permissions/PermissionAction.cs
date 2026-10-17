@@ -77,12 +77,13 @@ public sealed class PermissionAction
 {
     /// <summary>Snapshots relevant parameters. Only their SHA-256 digest enters the audit/store.</summary>
     public PermissionAction(PermissionOperation operation, string origin, string description,
-        IEnumerable<string>? resources = null, string parameters = "", string destination = "", bool userInitiated = false, bool automaticEligible = false, Guid taskId = default, string scopeIdentity = "")
+        IEnumerable<string>? resources = null, string parameters = "", string destination = "", bool userInitiated = false, bool automaticEligible = false, Guid taskId = default, string scopeIdentity = "", Guid operationId = default)
     {
         Operation = operation; Origin = origin; Description = description; Destination = destination;
         UserInitiated = userInitiated;
         AutomaticEligible = automaticEligible;
         TaskId = taskId;
+        OperationId = operationId;
         ScopeIdentity = scopeIdentity;
         Resources = (resources ?? []).ToImmutableArray();
         Fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
@@ -109,6 +110,8 @@ public sealed class PermissionAction
     public bool AutomaticEligible { get; }
     /// <summary>Gets the native active task identity, never read from a model-supplied argument.</summary>
     public Guid TaskId { get; }
+    /// <summary>Gets the native effect identity used to correlate authorization with execution.</summary>
+    public Guid OperationId { get; }
 }
 
 /// <summary>A pending immutable request. Its ID accepts exactly one timely UI decision.</summary>
@@ -124,6 +127,8 @@ public sealed record PermissionGrant(Guid Id, PermissionOperation Operation, str
     public DateTimeOffset? Expires { get; init; }
     /// <summary>Gets the explicitly reviewed disclosure host, empty for strictly local workspace access.</summary>
     public string Destination { get; init; } = "";
+    /// <summary>Gets whether the scope came from full-access policy rather than a separate native owner review.</summary>
+    public bool FullAccessDerived { get; init; }
 }
 /// <summary>Minimal audit data; no prompts, clipboard, file contents, URLs, arguments, credentials or tokens.</summary>
 public sealed record ApprovalAudit(Guid Id, DateTimeOffset Time, PermissionOperation Operation,

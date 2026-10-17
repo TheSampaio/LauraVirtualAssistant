@@ -29,6 +29,17 @@ public static class PermissionPolicy
     /// <summary>Only trusted native application adapters may describe this bounded effect; arbitrary processes never inherit the policy.</summary>
     public static bool AllowsAutomatic(PermissionAction action, PermissionOptions options, string? workspaceRoot = null)
     {
+        if (options.Mode == ApprovalMode.FullAccess)
+        {
+            // Resource integrity and protected application storage remain enforced by the manager.
+            return action.Operation != PermissionOperation.Unknown && Enum.IsDefined(action.Operation);
+        }
+        if (options.Mode == ApprovalMode.Automatic && action.Operation == PermissionOperation.Process)
+        {
+            return action.Origin == "Native command executor" && action.AutomaticEligible && action.TaskId != Guid.Empty
+                && action.Resources.Length is 2 or 3 && workspaceRoot is not null && action.Resources.Skip(1).All(path => Within(path, workspaceRoot) && !SensitivePath(path))
+                && action.Destination is "" or "generativelanguage.googleapis.com";
+        }
         if (options.Mode != ApprovalMode.Automatic || Risk(action) > PermissionRisk.Moderate || action.Destination.Length != 0) { return false; }
         if (action.Operation == PermissionOperation.WindowManagement) { return action.AutomaticEligible; }
         if (action.Operation == PermissionOperation.ApplicationLaunch) { return options.OpenInstalledApplications && action.AutomaticEligible; }
