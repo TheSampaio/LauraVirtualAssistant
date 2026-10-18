@@ -241,7 +241,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
         string providerText = activeProvider.ToUpperInvariant() + " · " + _ui.Get("ui.voice.provider") + ": GEMINI LIVE · " + _settings.Current.GenerativeAi.LiveVoice;
         if (_provider.Text != providerText) { _provider.Text = providerText; }
         bool voiceSupported = _live.IsAvailable;
-        _listen.IsEnabled = voiceSupported; _microphoneButton.IsEnabled = voiceSupported;
+        _listen.IsEnabled = voiceSupported || listening; _microphoneButton.IsEnabled = true;
         string micAction = _ui.Get(muted ? "ui.hud.unmute" : "ui.hud.mute");
         _microphoneButton.Source = Theme.IconSource(muted ? "mic_off" : "mic"); _micIcon.Source = _microphoneButton.Source;
         _microphoneButton.BackgroundColor = muted ? Theme.Field : Theme.AssistantSurface;
@@ -253,6 +253,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _voiceHint.TextColor = listening ? Theme.Accent : Theme.Muted;
         if (!voiceSupported) { _micStatus.Text = VoiceUnavailableText(); _voiceHint.Text = _micStatus.Text; }
         string state = _visualMode switch { ReactorMode.Speaking => "Speaking", ReactorMode.Thinking => "Thinking", ReactorMode.Listening => "Listening", ReactorMode.Working => "Working", _ => _reportedStatus };
+        if (state == "Speaking" && !_live.IsPlaying) { state = _ui.Get("ui.voice.synthesizing"); }
         _status.Text = state switch { "Ready" => _ui.Get("ui.state.ready"), "Speaking" => _ui.Get("ui.state.speaking"), "Thinking" => _ui.Get("ui.state.thinking"), "Connecting" => _ui.Get("ui.state.connecting"), "Working" => _ui.Get("ui.state.working"), "Listening" => _ui.Get("ui.maui.listening"), "Stopped" => _ui.Get("ui.hud.stopped"), _ => state };
         _status.TextColor = _visualMode == ReactorMode.Speaking ? Theme.Speaking : Theme.Accent;
         SemanticProperties.SetDescription(_reactor, "Laura · " + _status.Text);
@@ -306,7 +307,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     /// <summary>Animates vector rings and refreshes measured system statistics at one-second intervals.</summary>
     private void Tick(object? sender, EventArgs args)
     {
-        _core.Mode = _smokeMode ?? (_live.IsSpeaking ? ReactorMode.Speaking : _live.IsThinking || _engine.State == AssistantState.Thinking ? ReactorMode.Thinking : _live.IsListening ? ReactorMode.Listening : _engine.State == AssistantState.Working ? ReactorMode.Working : ReactorMode.Idle);
+        _core.Mode = _smokeMode ?? (_live.IsPlaying ? ReactorMode.Speaking : _live.IsThinking || _engine.State == AssistantState.Thinking ? ReactorMode.Thinking : _live.IsListening ? ReactorMode.Listening : _engine.State == AssistantState.Working ? ReactorMode.Working : ReactorMode.Idle);
         if (_visualMode != _core.Mode) { _visualMode = _core.Mode; RefreshFeedback(); _reactor.Invalidate(); }
         bool animate = _accessibility.AnimationsEnabled;
         long frame = Stopwatch.GetTimestamp();

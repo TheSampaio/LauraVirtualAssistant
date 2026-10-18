@@ -30,6 +30,12 @@ string directory = Path.GetFullPath(args[0]);
 if (args.Contains("--reliability-synthetic", StringComparer.Ordinal)) { return await ReliabilitySmoke.RunSyntheticAsync(directory); }
 if (args.Contains("--brain-read-benchmark", StringComparer.Ordinal)) { return await ReliabilitySmoke.RunBrainBenchmarkAsync(directory); }
 if (args.Contains("--cross-volume-edit-probe", StringComparer.Ordinal)) { return await ReliabilitySmoke.RunCrossVolumeEditAsync(directory); }
+if (args.Contains("--playback-state-probe", StringComparer.Ordinal))
+{
+    using var playbackTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+    await GeminiLiveClient.VerifyPlaybackForSmokeAsync(playbackTimeout.Token);
+    Directory.CreateDirectory(directory); await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "PASS: eight real zero-volume Windows output cycles preserved all PCM; priming alone did not report Playing. No cloud or microphone."); return 0;
+}
 if (args.Contains("--readaloud-device-probe", StringComparer.Ordinal))
 { int credential = Array.IndexOf(args, "--protected-key-directory"); if (credential < 0 || credential + 1 >= args.Length) { return 2; } return await ReliabilitySmoke.RunVoiceAsync(directory, Path.GetFullPath(args[credential + 1])); }
 if (args.Contains("--credential-broker-live", StringComparer.Ordinal)) { return await CredentialBrokerLiveSmoke.RunAsync(directory, args); }

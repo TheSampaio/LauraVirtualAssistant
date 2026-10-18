@@ -112,6 +112,8 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
     public void ReturnToReady() => ReportStatus("Ready");
     /// <summary>Gets whether native audio is currently buffered for playback.</summary>
     public bool IsSpeaking => _session?.Player.IsSpeaking == true || _speechSession?.Player.IsSpeaking == true;
+    /// <summary>Gets actual PCM queue delivery for the HUD, independently of capture gating during synthesis.</summary>
+    public bool IsPlaying => _session?.Player.IsPlaying == true || _speechSession?.Player.IsPlaying == true;
     /// <summary>Gets live microphone loudness without storing audio.</summary>
     public float InputLevel => Volatile.Read(ref _inputLevel);
     /// <summary>Gets loudness measured from the audio actually read by the output device.</summary>
@@ -139,7 +141,9 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
             for (int attempt = 0; attempt < 8; attempt++)
             {
                 player.Clear(); long before = player.BytesPlayed;
-                player.BeginTurn(); player.Add(audio[..160]); await Task.Delay(10, token).ConfigureAwait(false); player.Add(audio[160..]); player.CompleteTurn();
+                player.BeginTurn(); player.Add(audio[..160]);
+                if (player.IsPlaying) { throw new InvalidOperationException("Buffered priming samples were incorrectly reported as actual device playback."); }
+                await Task.Delay(10, token).ConfigureAwait(false); player.Add(audio[160..]); player.CompleteTurn();
                 await player.DrainAsync(token).ConfigureAwait(false);
                 if (player.BytesPlayed - before != audio.Length) { throw new InvalidOperationException("Playback discarded samples during fragment priming or restart."); }
             }

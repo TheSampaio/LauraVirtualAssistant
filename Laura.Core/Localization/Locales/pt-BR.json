@@ -1003,5 +1003,6 @@
   "ui.credential.AuthenticationFailed": "Falha de autenticação · credencial preservada",
   "ui.credential.NetworkUnavailable": "Rede indisponível · credencial preservada",
   "ui.voice.provider": "Voz",
-  "ui.voice.disabled": "Voz Gemini desativada nas configurações"
+  "ui.voice.disabled": "Voz Gemini desativada nas configurações",
+  "ui.voice.synthesizing": "Preparando áudio"
 }

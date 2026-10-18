@@ -43,6 +43,8 @@ internal sealed class LiveAudioPlayer : IDisposable
     }
     /// <summary>Gets whether speech remains buffered.</summary>
     public bool IsSpeaking => _buffer.BufferedBytes > 0 || Environment.TickCount64 - _meter.LastAudioRead < 240;
+    /// <summary>Gets whether real PCM has entered the output queue recently; priming buffered audio alone does not qualify.</summary>
+    public bool IsPlaying => Environment.TickCount64 - _meter.LastAudioRead < 240;
     /// <summary>Gets the amplitude currently being played.</summary>
     public float Level => _meter.Level;
     /// <summary>Gets the total number of PCM bytes accepted by this session.</summary>

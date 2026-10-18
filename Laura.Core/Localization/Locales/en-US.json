@@ -1050,5 +1050,6 @@
   "ui.credential.AuthenticationFailed": "Authentication failed · credential retained",
   "ui.credential.NetworkUnavailable": "Network unavailable · credential retained",
   "ui.voice.provider": "Voice",
-  "ui.voice.disabled": "Gemini voice disabled in settings"
+  "ui.voice.disabled": "Gemini voice disabled in settings",
+  "ui.voice.synthesizing": "Preparing audio"
 }
