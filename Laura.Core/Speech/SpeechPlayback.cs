@@ -26,3 +26,6 @@ public sealed record SpeechPlayback(Guid ResponseId, Guid PlaybackId, SpeechPlay
 
 /// <summary>Signals an unavailable voice without invalidating an already produced text response.</summary>
 public sealed class SpeechUnavailableException(string reason) : InvalidOperationException(reason);
+
+/// <summary>Signals a failed synthesis or output component without invalidating a completed text inference or task checkpoint.</summary>
+public sealed class SpeechPlaybackException(string reason, Exception? innerException = null) : InvalidOperationException(reason, innerException);

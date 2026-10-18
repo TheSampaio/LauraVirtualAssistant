@@ -27,6 +27,8 @@ if (args.Length == 2 && args[0] == "--inspect-gui-policy")
 }
 if (args.Length == 0) { Console.Error.WriteLine("Usage: Laura.Smoke <isolated-directory> --gemini --key-file <Mark-LV api_keys.json> [--quick] [--vad]"); return 2; }
 string directory = Path.GetFullPath(args[0]);
+if (args.Contains("--restore-missing-chatgpt-registration", StringComparer.Ordinal))
+{ int credential = Array.IndexOf(args, "--protected-key-directory"); if (credential < 0 || credential + 1 >= args.Length) { return 2; } return await ReliabilitySmoke.RestoreMissingRegistrationAsync(directory, Path.GetFullPath(args[credential + 1])); }
 if (args.Contains("--reliability-synthetic", StringComparer.Ordinal)) { return await ReliabilitySmoke.RunSyntheticAsync(directory); }
 if (args.Contains("--brain-read-benchmark", StringComparer.Ordinal)) { return await ReliabilitySmoke.RunBrainBenchmarkAsync(directory); }
 if (args.Contains("--cross-volume-edit-probe", StringComparer.Ordinal)) { return await ReliabilitySmoke.RunCrossVolumeEditAsync(directory); }
@@ -36,8 +38,8 @@ if (args.Contains("--playback-state-probe", StringComparer.Ordinal))
     await GeminiLiveClient.VerifyPlaybackForSmokeAsync(playbackTimeout.Token);
     Directory.CreateDirectory(directory); await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "PASS: eight real zero-volume Windows output cycles preserved all PCM; priming alone did not report Playing. No cloud or microphone."); return 0;
 }
-if (args.Contains("--readaloud-device-probe", StringComparer.Ordinal))
-{ int credential = Array.IndexOf(args, "--protected-key-directory"); if (credential < 0 || credential + 1 >= args.Length) { return 2; } return await ReliabilitySmoke.RunVoiceAsync(directory, Path.GetFullPath(args[credential + 1])); }
+if (args.Contains("--readaloud-device-probe", StringComparer.Ordinal) || args.Contains("--chatgpt-voice-probe", StringComparer.Ordinal))
+{ int credential = Array.IndexOf(args, "--protected-key-directory"); if (credential < 0 || credential + 1 >= args.Length) { return 2; } return await ReliabilitySmoke.RunVoiceAsync(directory, Path.GetFullPath(args[credential + 1]), args.Contains("--chatgpt-voice-probe", StringComparer.Ordinal)); }
 if (args.Contains("--credential-broker-live", StringComparer.Ordinal)) { return await CredentialBrokerLiveSmoke.RunAsync(directory, args); }
 if (args.Contains("--credential-broker-synthetic", StringComparer.Ordinal)) { return await CredentialBrokerSmoke.RunAsync(directory); }
 if (args.Contains("--chatgpt-synthetic", StringComparer.Ordinal)) { return await ChatGptSmoke.RunSyntheticAsync(directory); }

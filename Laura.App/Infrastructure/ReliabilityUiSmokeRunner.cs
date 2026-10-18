@@ -15,10 +15,12 @@ internal static class ReliabilityUiSmokeRunner
     /// <summary>Validates saved credentials, ten provider switches, two approval modes and real file effects without cloud inference or microphone use.</summary>
     internal static async Task RunAsync(IServiceProvider services, Window window, string directory)
     {
+        DiagnosticStoragePolicy.RequireIsolated(services.GetRequiredService<AssistantStorage>().Directory, Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())!);
         var settings = services.GetRequiredService<ISettingsService>();
         var keys = services.GetRequiredService<IApiKeyStore>();
         keys.Save("synthetic-key-not-valid-for-inference");
         await settings.UpdateAsync(current => current with { GenerativeAi = current.GenerativeAi with { Enabled = true, LiveVoice = "Aoede" },
+            ChatGpt = current.ChatGpt with { Registration = Guid.NewGuid() },
             MicrophoneMuted = true, Permissions = current.Permissions with { Mode = ApprovalMode.Ask } }).ConfigureAwait(true);
         var main = services.GetRequiredService<MainPage>();
         using var capture = LauraDiagnostics.Capture();

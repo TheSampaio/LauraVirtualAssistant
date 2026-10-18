@@ -484,9 +484,10 @@ public sealed class SetupPage : ContentPage
         if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Isolated native diagnostics only."); }
         _permissions.VerifyForSmoke();
         var original = _settings.Current.GenerativeAi;
+        var chatGpt = _settings.Current.ChatGpt;
         string credential = _keys.Read();
         _chatGpt.Reload(_settings.Current with { ProviderSelection = ConversationProviderSelection.ChatGpt });
-        if (!await SaveAsync().ConfigureAwait(true) || _settings.Current.GenerativeAi != original || _keys.Read() != credential)
+        if (!await SaveAsync().ConfigureAwait(true) || _settings.Current.GenerativeAi != original || _settings.Current.ChatGpt != chatGpt || _keys.Read() != credential)
         { throw new InvalidOperationException("Saving ChatGPT selection changed Gemini settings or its protected credential."); }
         RefreshKeyState();
     }

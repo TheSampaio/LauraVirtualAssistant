@@ -443,8 +443,7 @@ public sealed class AssistantEngine : IAssistantEngine
 
         SkillRequest request = SkillRequest.Create(text, _localizer.Culture, _clock.Now, source) with { Image = image, TurnId = turnId, ContinuingTaskTurnId = continuingTaskTurnId };
 
-        bool willUseGenerativeAi = _settings.Current.GenerativeAi.Enabled
-            && _dispatcher.CanUseGenerativeFallback(request);
+        bool willUseGenerativeAi = _dispatcher.CanUseGenerativeFallback(request);
         if (willUseGenerativeAi) { SetState(AssistantState.Thinking); }
 
         SkillResponse response = await _dispatcher.DispatchAsync(request, cancellationToken).ConfigureAwait(false);
@@ -495,6 +494,11 @@ public sealed class AssistantEngine : IAssistantEngine
         {
             // Keep the verified text response; an unavailable voice is not a failed objective.
             _logger.LogWarning("Voice unavailable; the text response remains available.");
+        }
+        catch (SpeechPlaybackException)
+        {
+            // A separate output failure must not skip continuation of an already checkpointed cognitive task.
+            _logger.LogWarning("Voice delivery failed; the text response and task progress remain available.");
         }
         finally
         {

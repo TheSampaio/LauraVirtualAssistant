@@ -11,6 +11,21 @@ namespace Laura.Core.Tests.Engine;
 /// <summary>Verifies actual queued cancellation, worker recovery and concise internal briefing history.</summary>
 public sealed class AssistantEngineTests
 {
+    /// <summary>An output failure must preserve text, allow normal post-response actions and leave the next request usable.</summary>
+    [Fact]
+    public async Task FailedPlaybackPreservesTheCompletedResponseAndPostResponseActions()
+    {
+        var localizer = new StubLocalizer(); var clock = new SystemClock(); var shell = new StubShellController();
+        var dispatcher = new CallbackSkillDispatcher((request, _) => Task.FromResult(request.RawText == "first" ? SkillResponse.Farewell("Completed text") : SkillResponse.Silent()));
+        await using var engine = new AssistantEngine(new RecordingSpeechSynthesizer { PlaybackFails = true }, dispatcher,
+            new StubSettingsService(LauraSettings.Default with { GreetOnStartup = false }), localizer, shell,
+            new GreetingComposer(localizer, new StubUserContext(), clock), clock, NullLogger<AssistantEngine>.Instance);
+        await engine.StartAsync(); await engine.SubmitCommandAsync("first");
+        Assert.Contains(engine.ConversationHistory, message => message.Source == ConversationMessageSource.Assistant && message.Text == "Completed text");
+        Assert.True(shell.ShutdownRequested);
+        await engine.SubmitCommandAsync("second"); Assert.Equal(AssistantState.Ready, engine.State);
+    }
+
     /// <summary>Unavailable voice preserves the response and the next command remains usable.</summary>
     [Fact]
     public async Task UnavailableVoice_PreservesTextAndDoesNotFailTheCommand()

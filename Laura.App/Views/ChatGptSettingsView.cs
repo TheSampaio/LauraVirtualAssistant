@@ -38,7 +38,7 @@ public sealed class ChatGptSettingsView : ContentView
             Theme.Label(T("catalogHelp"), 12, Theme.Muted),
             Theme.Stack(Theme.Label(T("includedPlanOnly"), 13), _includedPlanOnly),
             Action("probe", "play", ProbeAsync),
-            Action("disconnect", "trash", async token => { Render(await _connection.DisconnectAsync(token).ConfigureAwait(true)); _models.Items.Clear(); _catalog = []; }),
+            Action("disconnect", "trash", async token => { Render(await _connection.DisconnectAsync(token).ConfigureAwait(true), true); _models.Items.Clear(); _catalog = []; }),
             Theme.ActionButton(T("usage"), "external_link", () => Launcher.Default.OpenAsync(new Uri("https://chatgpt.com/#settings/Usage"))),
             Theme.Label(T("limits"), 12, Theme.Muted),
             Theme.Label(T("selection"), 13), _selection, Theme.Label(T("enabled"), 13), _enabled,
@@ -64,6 +64,7 @@ public sealed class ChatGptSettingsView : ContentView
     /// <summary>Reloads saved owner preferences without creating authorization or querying a provider.</summary>
     public void Reload(LauraSettings settings)
     {
+        _activeRegistration = settings.ChatGpt.Registration;
         _savedModel = settings.ChatGpt.Model; _enabled.IsToggled = settings.ChatGpt.Enabled; _share.IsToggled = settings.ChatGpt.ShareContext;
         _automatic.IsToggled = settings.ChatGpt.AllowAutomatic; _includedPlanOnly.IsChecked = settings.ChatGpt.IncludedPlanOnly; _selection.SelectedIndex = (int)settings.ProviderSelection;
     }
@@ -97,14 +98,20 @@ public sealed class ChatGptSettingsView : ContentView
         Render(await _connection.ReadAsync(token).ConfigureAwait(true));
     }
     /// <summary>Renders safe registration labels; provider messages and tokens never become UI error text.</summary>
-    private void Render(ChatGptConnectionState state)
+    private void Render(ChatGptConnectionState state, bool disconnectedByOwner = false)
     {
         _loading = true;
         try
         {
-            Guid? previous = _accounts.SelectedIndex >= 0 && _accounts.SelectedIndex < _registrations.Count ? _registrations[_accounts.SelectedIndex].Id : null;
-            if (previous != state.Active && _activeRegistration is not null) { _includedPlanOnly.IsChecked = false; _share.IsToggled = false; _automatic.IsToggled = false; _enabled.IsToggled = false; }
-            _activeRegistration = state.Active;
+            ChatGptOptions before = Options;
+            ChatGptOptions reconciled = ChatGptSettingsDraft.Reconcile(before, state, disconnectedByOwner);
+            if (reconciled != before)
+            {
+                _includedPlanOnly.IsChecked = reconciled.IncludedPlanOnly; _share.IsToggled = reconciled.ShareContext;
+                _automatic.IsToggled = reconciled.AllowAutomatic; _enabled.IsToggled = reconciled.Enabled;
+                _models.Items.Clear(); _catalog = [];
+            }
+            _activeRegistration = reconciled.Registration;
             _registrations = state.Accounts; _accounts.Items.Clear();
             foreach (var account in _registrations) { _accounts.Items.Add((account.Email.Length > 0 ? account.Email : T("account")) + " · " + account.Id.ToString("N")[..6]); }
             _accounts.SelectedIndex = state.Active is { } active ? _registrations.ToList().FindIndex(account => account.Id == active) : -1;

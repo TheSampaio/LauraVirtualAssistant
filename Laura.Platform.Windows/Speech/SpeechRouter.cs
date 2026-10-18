@@ -15,8 +15,13 @@ public sealed class SpeechRouter(GeminiLiveClient live) : ISpeechSynthesizer
     /// <inheritdoc />
     public IReadOnlyList<VoiceDescriptor> GetAvailableVoices() => [];
     /// <inheritdoc />
-    public Task SpeakAsync(SpeechRequest request, CancellationToken cancellationToken = default) =>
-        live.SpeakAsync(request.Text, cancellationToken, request.ResponseId);
+    public async Task SpeakAsync(SpeechRequest request, CancellationToken cancellationToken = default)
+    {
+        try { await live.SpeakAsync(request.Text, cancellationToken, request.ResponseId).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (SpeechUnavailableException) { throw; }
+        catch (Exception error) { throw new SpeechPlaybackException("The voice synthesis or output component failed.", error); }
+    }
     /// <inheritdoc />
     public void CancelSpeech() => live.Interrupt();
     /// <inheritdoc />

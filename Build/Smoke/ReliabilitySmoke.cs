@@ -6,6 +6,8 @@ using Laura.Core.Memory;
 using Laura.Core.Skills;
 using Laura.Core.Speech;
 using Laura.Core.Brain;
+using Laura.Core.ChatGpt;
+using Laura.Core.Conversation;
 using System.Diagnostics;
 using Laura.Platform.Windows.Conversation;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,6 +15,40 @@ using Microsoft.Extensions.Logging.Abstractions;
 /// <summary>Explicit Windows credential and playback probes; never opens a microphone or writes owner credentials.</summary>
 internal static class ReliabilitySmoke
 {
+    /// <summary>Repairs only the missing nonsecret binding lost by the diagnosed settings view; keeps all other owner settings and a guarded recovery version.</summary>
+    public static async Task<int> RestoreMissingRegistrationAsync(string directory, string ownerDirectory)
+    {
+        directory = DiagnosticStoragePolicy.RequireIsolated(directory, ownerDirectory);
+        if (Process.GetProcessesByName("Laura").Length != 0) { throw new InvalidOperationException("Close Laura before repairing its settings binding."); }
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        string path = Path.Combine(ownerDirectory, "settings.ini"), legacy = Path.Combine(ownerDirectory, "Credentials");
+        var store = new IniSettingsStore(path, NullLogger<IniSettingsStore>.Instance);
+        using var editor = new Laura.Core.Files.VersionedFileEditor(Path.Combine(ownerDirectory, "Recovery", "Registration"));
+        var snapshot = await editor.ReadAsync(path, timeout.Token);
+        var before = await store.LoadAsync(timeout.Token);
+        using var broker = new ChatGptBrokerClient(new ChatGptCredentialStore(legacy, new WindowsPrivateDataProtector()), legacy);
+        var state = await broker.ReadAsync(timeout.Token);
+        if (before.ChatGpt.Registration is not null || !before.ChatGpt.Enabled || !before.ChatGpt.IncludedPlanOnly
+            || state.Status != "plan_authorized" || !state.IncludedPlanOnlyConfirmed || state.Active is null
+            || state.Accounts.Count(account => account.Id == state.Active && account.PlanAuthorized && account.SignedIn) != 1)
+        { throw new InvalidOperationException("The narrowly scoped missing-binding recovery preconditions were not met; no settings were changed."); }
+        var section = System.Text.RegularExpressions.Regex.Match(snapshot.Content, @"(?ims)^\[ChatGPT\]\r?\n.*?(?=^\[|\z)");
+        var empty = System.Text.RegularExpressions.Regex.Matches(section.Value, @"(?im)^Registration[ \t]*=[ \t]*(?=\r?$)");
+        if (snapshot.Truncated || !section.Success || empty.Count != 1) { throw new InvalidOperationException("An exact empty ChatGPT registration setting is required."); }
+        var entry = empty.Single();
+        string repaired = section.Value[..entry.Index] + "Registration=" + state.Active.Value.ToString("N") + section.Value[(entry.Index + entry.Length)..];
+        var receipt = await editor.PatchAsync(path, snapshot.Hash, section.Value, repaired, timeout.Token);
+        var after = await store.LoadAsync(timeout.Token);
+        var confirmed = await editor.ReadAsync(path, timeout.Token);
+        if (after.ChatGpt.Registration != state.Active || confirmed.Content != snapshot.Content.Replace(section.Value, repaired, StringComparison.Ordinal))
+        { await editor.RollbackAsync(receipt.Id, path, timeout.Token); throw new InvalidOperationException("Settings read-back differed beyond the repaired registration; the change was rolled back."); }
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Combine(directory, "registration-recovery.json"), JsonSerializer.Serialize(new
+        { MissingBindingRestored = true, OnlyRegistrationChanged = true, PriorVersionRetainedInOwnerStorage = true, BrokerSessionUnchanged = true }), timeout.Token);
+        Console.WriteLine("Missing ChatGPT settings binding restored to the existing authorized broker registration; other settings and credentials preserved.");
+        return 0;
+    }
+
     /// <summary>Verifies edit and restart rollback when receipt storage and the edited file reside on different Windows volumes.</summary>
     public static async Task<int> RunCrossVolumeEditAsync(string directory)
     {
@@ -103,35 +139,79 @@ internal static class ReliabilitySmoke
     }
 
     /// <summary>Uses the existing owner Gemini authorization for synthetic read-aloud at zero volume, with real device telemetry.</summary>
-    public static async Task<int> RunVoiceAsync(string directory, string credentialDirectory)
+    public static async Task<int> RunVoiceAsync(string directory, string credentialDirectory, bool chatGptResponse = false)
     {
+        directory = DiagnosticStoragePolicy.RequireIsolated(directory, credentialDirectory);
         Directory.CreateDirectory(directory);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
         var ownerStore = new IniSettingsStore(Path.Combine(credentialDirectory, "settings.ini"), NullLogger<IniSettingsStore>.Instance);
         LauraSettings owner = await ownerStore.LoadAsync(timeout.Token);
+        string legacy = Path.Combine(credentialDirectory, "Credentials");
+        using var broker = chatGptResponse ? new ChatGptBrokerClient(new ChatGptCredentialStore(legacy, new WindowsPrivateDataProtector()), legacy) : null;
+        if (broker is not null)
+        {
+            ChatGptConnectionState state = await broker.ReadAsync(timeout.Token);
+            await File.WriteAllTextAsync(Path.Combine(directory, "connection-preconditions.json"), JsonSerializer.Serialize(new
+            { state.Status, state.Error, BrokerAvailable = broker.IsAvailable, BrokerIncludedPlanOnly = state.IncludedPlanOnlyConfirmed,
+                Enabled = owner.ChatGpt.Enabled, IncludedPlanOnly = owner.ChatGpt.IncludedPlanOnly, RegistrationMatches = state.Active == owner.ChatGpt.Registration,
+                ModelConfigured = owner.ChatGpt.Model.Length > 0, SavedRegistrationPresent = owner.ChatGpt.Registration is not null,
+                AccountCount = state.Accounts.Count, SavedRegistrationKnown = state.Accounts.Any(account => account.Id == owner.ChatGpt.Registration),
+                PlanAuthorizedAccounts = state.Accounts.Count(account => account.PlanAuthorized) }, new JsonSerializerOptions { WriteIndented = true }), timeout.Token);
+            if (state.Status != "plan_authorized" || !state.IncludedPlanOnlyConfirmed || !owner.ChatGpt.Enabled
+                || !owner.ChatGpt.IncludedPlanOnly || state.Active != owner.ChatGpt.Registration)
+            { throw new InvalidOperationException("An existing owner-enabled, plan-only ChatGPT registration is required; this probe does not change consent."); }
+            if (!(await broker.ModelsAsync(timeout.Token)).Any(model => model.Slug == owner.ChatGpt.Model))
+            { throw new InvalidOperationException("The configured ChatGPT model is absent from the current account catalog."); }
+        }
         using var settings = new SettingsService(new IniSettingsStore(Path.Combine(directory, "settings.ini"), NullLogger<IniSettingsStore>.Instance), NullLogger<SettingsService>.Instance);
         await settings.UpdateAsync(LauraSettings.Default with { Culture = "pt-BR", ProviderSelection = ConversationProviderSelection.ChatGpt,
+            ChatGpt = owner.ChatGpt with { ShareContext = false, AllowAutomatic = false },
             GenerativeAi = owner.GenerativeAi with { Enabled = true }, OutputDevice = owner.OutputDevice, Voice = owner.Voice with { Volume = 0 }, GreetOnStartup = false }, timeout.Token);
         var memory = new SqliteConversationMemory(Path.Combine(directory, "conversation.db")); memory.Initialize();
         await using var live = new GeminiLiveClient(settings, new ProtectedApiKeyStore(credentialDirectory), memory, Array.Empty<ISkill>(), new SmokeShell());
         using var capture = LauraDiagnostics.Capture();
         Guid response = Guid.NewGuid();
+        bool textCompleted = false; int textCharacters = 0;
         try
         {
-            await live.SpeakAsync("Teste de reprodução da Laura. Dois mais dois são quatro.", timeout.Token, response);
+            string text = "Teste de reprodução da Laura. Dois mais dois são quatro.";
+            if (broker is not null)
+            {
+                using var conversation = new ChatGptConversationEngine(broker, settings, memory, new NoTools());
+                conversation.StreamUpdated += (_, update) => { if (update.Completed) { textCompleted = true; } };
+                text = await conversation.AskAsync(new("Responda em uma única frase curta em português: quanto é dois mais dois?", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"), "") { TurnId = response }, timeout.Token)
+                    ?? throw new InvalidOperationException("The real ChatGPT request did not complete.");
+                if (!textCompleted || text.Length == 0 || text.Length > 1000) { throw new InvalidOperationException("No bounded completed ChatGPT text was received."); }
+                textCharacters = text.Length;
+            }
+            var speech = new Laura.Platform.Windows.Speech.SpeechRouter(live);
+            await speech.SpeakAsync(new(text, settings.Current.Voice, "pt-BR") { ResponseId = response, OutputDevice = settings.Current.OutputDevice }, timeout.Token);
             SpeechPlayback result = live.LastSpeechPlayback ?? throw new InvalidOperationException("No playback evidence was recorded.");
             if (result.ResponseId != response || result.State != SpeechPlaybackState.Completed || result.ReceivedBytes <= 0
                 || result.QueuedBytes != result.ReceivedBytes || live.IsListening)
             { throw new InvalidOperationException("Playback did not meet native completion requirements."); }
-            Console.WriteLine("Real Gemini read-aloud completed on the Windows output device with ChatGPT selected, zero volume and no microphone.");
+            Console.WriteLine(chatGptResponse ? "Real ChatGPT text completed through the installed broker and was rendered by Gemini on the Windows device; zero volume and no microphone."
+                : "Real Gemini read-aloud completed on the Windows output device with ChatGPT selected, zero volume and no microphone.");
             return 0;
         }
         finally
         {
             await File.WriteAllTextAsync(Path.Combine(directory, "voice-results.json"), JsonSerializer.Serialize(new
-            { Playback = live.LastSpeechPlayback, ConfiguredVoice = settings.Current.GenerativeAi.LiveVoice, Volume = 0,
+            { Playback = live.LastSpeechPlayback, ReasoningProvider = chatGptResponse ? "chatgpt" : "Synthetic fixed text (no reasoning request)",
+                ReasoningModel = chatGptResponse ? settings.Current.ChatGpt.Model : "Not used", TextCompleted = textCompleted, TextCharacters = textCharacters,
+                ConfiguredVoice = settings.Current.GenerativeAi.LiveVoice, Volume = 0,
                 MicrophoneOpened = live.IsListening, AcousticAudibility = "Not tested", Diagnostics = LauraDiagnostics.Snapshot() }, new JsonSerializerOptions { WriteIndented = true }));
         }
+    }
+
+    /// <summary>Disables all effects and tool disclosure in the real synthetic provider-to-voice acceptance probe.</summary>
+    private sealed class NoTools : IAssistantTools
+    {
+        /// <inheritdoc />
+        public object[] Declarations => [];
+        /// <inheritdoc />
+        public Task<AssistantToolResult> ExecuteAsync(string name, JsonElement arguments, CancellationToken cancellationToken)
+            => throw new InvalidOperationException("No tools are available in this acceptance probe.");
     }
 
     /// <summary>Disables optional embeddings so this benchmark requires no model or network.</summary>
