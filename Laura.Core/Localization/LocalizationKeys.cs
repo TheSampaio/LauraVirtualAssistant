@@ -64,6 +64,8 @@ public static class LocalizationKeys
     /// <summary>Texts and triggers for each skill.</summary>
     public static class Skills
     {
+        /// <summary>A sequence stopped after a native capability declined; previous effects must not be replayed.</summary>
+        public const string SequenceStopped = "tools.sequenceStopped";
         /// <summary>Triggers for the time skill.</summary>
         public const string TimePhrases = "phrases.time";
 

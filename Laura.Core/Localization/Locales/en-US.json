@@ -1,4 +1,5 @@
 {
+  "tools.sequenceStopped": "The next native step could not run. Previous results are preserved; the sequence was not sent to a model.",
   "ui.tasks.routingDetails": "Routing: {0} · Recovery: {1} · Rounds without new confirmed tool evidence: {2}",
   "ui.tasks.route.Routine": "routine task",
   "ui.tasks.route.Manual": "owner selection",

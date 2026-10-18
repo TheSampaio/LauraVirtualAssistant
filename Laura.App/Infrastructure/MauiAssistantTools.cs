@@ -657,7 +657,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             case "volume_up": system.AdjustVolume(Math.Clamp(Number(args, "value", 5), 1, 50)); break;
             case "volume_down": system.AdjustVolume(-Math.Clamp(Number(args, "value", 5), 1, 50)); break;
             case "volume_mute": system.ToggleMute(); break;
-            case "lock": system.LockWorkstation(); break;
+            case "lock": return system.LockWorkstation() ? "Windows accepted the lock request; the final session state is not verified." : "Windows refused the lock request.";
             case "settings": return await launcher.TryOpenAsync(new Uri("ms-settings:"), token).ConfigureAwait(false) ? "Windows settings opened." : "Could not open settings.";
             case "task_manager": return await launcher.TryStartAsync("taskmgr.exe", cancellationToken: token).ConfigureAwait(false) ? "Task Manager started." : "Task Manager could not start.";
             case "show_desktop": WindowsComputerController.Hotkey(["WIN", "D"]); break;

@@ -39,6 +39,9 @@ public sealed class WebSearchSkill : PhraseSkillBase
     protected override string PhrasesKey => LocalizationKeys.Skills.SearchPrefixes;
 
     /// <inheritdoc />
+    public override bool CanHandle(SkillRequest request) => PhraseMatcher.TryMatchPrefix(request.NormalizedText, Localizer.GetPhrases(PhrasesKey), out _);
+
+    /// <inheritdoc />
     public override async Task<SkillResponse> ExecuteAsync(
         SkillRequest request,
         CancellationToken cancellationToken = default)

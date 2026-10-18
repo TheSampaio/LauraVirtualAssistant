@@ -10,17 +10,16 @@ public sealed class GeminiSkillDispatcher(IConversationEngine conversation, ISet
     IConversationMemory memory, ILocalizer localizer, SkillDispatcher? localDispatcher = null, CognitiveTasks? tasks = null, IAssistantTools? tools = null,
     ConversationProviderRouter? routing = null) : ISkillDispatcher
 {
-    private bool UseLocalDispatcher => localDispatcher is not null && !conversation.IsAvailable;
     /// <inheritdoc />
-    public bool CanUseGenerativeFallback(SkillRequest request) => UseLocalDispatcher ? localDispatcher!.CanUseGenerativeFallback(request) : conversation.IsAvailable;
+    public bool CanUseGenerativeFallback(SkillRequest request) => conversation.IsAvailable && localDispatcher?.CanHandleNatively(request) != true;
     /// <inheritdoc />
     public async Task<SkillResponse> DispatchAsync(SkillRequest request, CancellationToken cancellationToken = default)
     {
-        if (UseLocalDispatcher)
+        if (localDispatcher is not null)
         {
-            SkillResponse native = await localDispatcher!.DispatchAsync(request, cancellationToken).ConfigureAwait(false);
-            return !native.Handled && !conversation.IsAvailable
-                ? SkillResponse.Speak(localizer.Get(LocalizationKeys.GenerativeAi.NoProvider)) : native;
+            SkillResponse native = await localDispatcher.DispatchNativeAsync(request, cancellationToken).ConfigureAwait(false);
+            if (native.Handled) { return native; }
+            if (!conversation.IsAvailable) { return SkillResponse.Speak(localizer.Get(LocalizationKeys.GenerativeAi.NoProvider)); }
         }
         if (!conversation.IsAvailable) { return SkillResponse.Speak(localizer.Get(LocalizationKeys.GenerativeAi.ConfigureProvider)); }
         IReadOnlyList<ConversationMessage> history = [];

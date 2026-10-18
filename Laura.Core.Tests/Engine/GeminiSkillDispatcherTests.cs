@@ -11,6 +11,29 @@ namespace Laura.Core.Tests.Engine;
 /// <summary>Checks natural app routing and privacy boundaries through the selected provider.</summary>
 public sealed class GeminiSkillDispatcherTests : IDisposable
 {
+    /// <summary>Recognized capabilities consume no reasoning calls even when ChatGPT works independently of disabled Gemini.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AvailableCloudStillPrefersNativeSkills(bool geminiEnabled)
+    {
+        var conversation = new RecordingConversationEngine(true, "Unnecessary inference");
+        var settings = new StubSettingsService(LauraSettings.Default with { GenerativeAi = new() { Enabled = geminiEnabled } });
+        var skill = new FakeSkill("native-fixture", 1, "native command", SkillResponse.Speak("Native evidence"));
+        var localizer = new StubLocalizer(); var user = new StubUserContext(); var memory = CreateMemory();
+        var local = new SkillDispatcher([skill], localizer, conversation, settings, user, Microsoft.Extensions.Logging.Abstractions.NullLogger<SkillDispatcher>.Instance, memory);
+        var dispatcher = new GeminiSkillDispatcher(conversation, settings, user, memory, localizer, local);
+        var request = SkillRequest.Create("native command", CultureInfo.GetCultureInfo("en-US"), DateTimeOffset.UtcNow, SkillRequestSource.Text) with { TurnId = Guid.NewGuid() };
+        Assert.False(dispatcher.CanUseGenerativeFallback(request));
+        Assert.Equal("Native evidence", (await dispatcher.DispatchAsync(request)).SpokenText);
+        Assert.Equal(1, skill.ExecutionCount); Assert.Equal(0, conversation.CallCount);
+
+        var continuation = request with { ContinuingTaskTurnId = Guid.NewGuid() };
+        Assert.True(dispatcher.CanUseGenerativeFallback(continuation));
+        await dispatcher.DispatchAsync(continuation);
+        Assert.Equal(1, skill.ExecutionCount); Assert.Equal(1, conversation.CallCount);
+    }
+
     [Theory]
     [InlineData("gemini")]
     [InlineData("local")]

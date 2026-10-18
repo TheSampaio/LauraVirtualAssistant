@@ -6,12 +6,12 @@ namespace Laura.Core.Abstractions;
 public interface ISystemController
 {
     /// <summary>
-    /// Locks the workstation.
+    /// Requests a workstation lock and reports whether the operating system accepted the request.
     /// </summary>
-    void LockWorkstation();
+    bool LockWorkstation();
 
     /// <summary>
-    /// Ajusta o volume principal em passos.
+    /// Adjusts the master volume in steps.
     ///
     /// Args:
     ///     steps: Number of increments; negative values reduce the volume.
@@ -19,7 +19,7 @@ public interface ISystemController
     void AdjustVolume(int steps);
 
     /// <summary>
-    /// Alterna o silenciamento do volume principal.
+    /// Toggles master volume muting.
     /// </summary>
     void ToggleMute();
 }

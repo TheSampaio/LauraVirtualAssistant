@@ -82,17 +82,17 @@ public sealed class VolumeSkill : ISkill
     /// </summary>
     private VolumeAction ResolveAction(string normalizedText)
     {
-        if (PhraseMatcher.MatchesAny(normalizedText, _localizer.GetPhrases(LocalizationKeys.Skills.VolumeUpPhrases)))
+        if (PhraseMatcher.MatchesWhole(normalizedText, _localizer.GetPhrases(LocalizationKeys.Skills.VolumeUpPhrases)))
         {
             return VolumeAction.Increase;
         }
 
-        if (PhraseMatcher.MatchesAny(normalizedText, _localizer.GetPhrases(LocalizationKeys.Skills.VolumeDownPhrases)))
+        if (PhraseMatcher.MatchesWhole(normalizedText, _localizer.GetPhrases(LocalizationKeys.Skills.VolumeDownPhrases)))
         {
             return VolumeAction.Decrease;
         }
 
-        return PhraseMatcher.MatchesAny(normalizedText, _localizer.GetPhrases(LocalizationKeys.Skills.VolumeMutePhrases))
+        return PhraseMatcher.MatchesWhole(normalizedText, _localizer.GetPhrases(LocalizationKeys.Skills.VolumeMutePhrases))
             ? VolumeAction.ToggleMute
             : VolumeAction.None;
     }

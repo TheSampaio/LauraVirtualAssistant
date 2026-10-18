@@ -24,12 +24,14 @@ public sealed class WindowsSystemController : ISystemController
     }
 
     /// <inheritdoc />
-    public void LockWorkstation()
+    public bool LockWorkstation()
     {
-        if (!NativeMethods.LockWorkStation())
+        bool accepted = NativeMethods.LockWorkStation();
+        if (!accepted)
         {
             _logger.LogWarning("Windows refused the workstation lock request.");
         }
+        return accepted;
     }
 
     /// <inheritdoc />

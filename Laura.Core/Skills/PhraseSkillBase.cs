@@ -41,7 +41,7 @@ public abstract class PhraseSkillBase : ISkill
     public virtual bool CanHandle(SkillRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return PhraseMatcher.MatchesAny(request.NormalizedText, Localizer.GetPhrases(PhrasesKey));
+        return PhraseMatcher.MatchesWhole(request.NormalizedText, Localizer.GetPhrases(PhrasesKey));
     }
 
     /// <inheritdoc />

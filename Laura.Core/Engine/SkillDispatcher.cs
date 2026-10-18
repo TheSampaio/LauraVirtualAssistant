@@ -68,13 +68,32 @@ public sealed class SkillDispatcher : ISkillDispatcher
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (request.Source == SkillRequestSource.Context || request.Image is not null)
-        { return await AskConversationEngineAsync(request, cancellationToken).ConfigureAwait(false); }
+        SkillResponse native = await DispatchNativeAsync(request, cancellationToken).ConfigureAwait(false);
+        return native.Handled ? native : await AskConversationEngineAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Checks registered native capabilities without inferring intent from keywords or invoking a model.</summary>
+    public bool CanHandleNatively(SkillRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return request.Source != SkillRequestSource.Context && request.Image is null && request.ContinuingTaskTurnId == Guid.Empty
+            && (CommandSequence.Parse(request.RawText, _localizer.GetPhrases("phrases.sequencePrefix")) is not null
+                || _skills.Any(skill => skill.CanHandle(request)));
+    }
+
+    /// <summary>Runs only recognized native skills, preserving permission checks and never calling a model.</summary>
+    public async Task<SkillResponse> DispatchNativeAsync(SkillRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (request.Source == SkillRequestSource.Context || request.Image is not null || request.ContinuingTaskTurnId != Guid.Empty)
+        { return SkillResponse.NotHandled; }
 
         IReadOnlyList<string>? steps = CommandSequence.Parse(request.RawText, _localizer.GetPhrases("phrases.sequencePrefix"));
         if (steps is not null)
         {
-            SkillRequest[] requests = [.. steps.Select(text => SkillRequest.Create(text, request.Culture, request.Timestamp, request.Source))];
+            SkillRequest[] requests = [.. steps.Select(text => SkillRequest.Create(text, request.Culture, request.Timestamp, request.Source) with { TurnId = request.TurnId })];
             if (requests.Length == 0 || requests.Any(step => !_skills.Any(skill => skill.CanHandle(step))))
             {
                 return SkillResponse.Speak(_localizer.Get("tools.sequenceInvalid"));
@@ -83,7 +102,9 @@ public sealed class SkillDispatcher : ISkillDispatcher
             foreach (SkillRequest step in requests)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                SkillResponse response = await DispatchAsync(step, cancellationToken).ConfigureAwait(false);
+                SkillResponse response = await DispatchNativeAsync(step, cancellationToken).ConfigureAwait(false);
+                // A declined step must never replay earlier effects through a generative fallback.
+                if (!response.Handled) { return SkillResponse.Speak(string.Join(" ", answers.Append(_localizer.Get(LocalizationKeys.Skills.SequenceStopped)))); }
                 if (!string.IsNullOrWhiteSpace(response.SpokenText)) { answers.Add(response.SpokenText); }
                 if (response.RequestsShutdown) { return response; }
             }
@@ -106,7 +127,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
             }
         }
 
-        return await AskConversationEngineAsync(request, cancellationToken).ConfigureAwait(false);
+        return SkillResponse.NotHandled;
     }
 
     /// <inheritdoc />
@@ -116,7 +137,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
 
         return _settings.Current.GenerativeAi.Enabled
             && _conversationEngine.IsAvailable
-            && (request.Source == SkillRequestSource.Context || request.Image is not null || !_skills.Any(skill => skill.CanHandle(request)));
+            && !CanHandleNatively(request);
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 {
+  "tools.sequenceStopped": "A próxima etapa nativa não pôde ser executada. Os resultados anteriores foram preservados; a sequência não foi enviada a um modelo.",
   "ui.tasks.routingDetails": "Roteamento: {0} · Recuperação: {1} · Rodadas sem novas evidências confirmadas de ferramentas: {2}",
   "ui.tasks.route.Routine": "tarefa rotineira",
   "ui.tasks.route.Manual": "seleção do proprietário",
