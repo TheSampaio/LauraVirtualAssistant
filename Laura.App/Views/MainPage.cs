@@ -238,8 +238,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     {
         bool muted = _settings.Current.MicrophoneMuted, listening = _live.IsListening;
         string activeProvider = _services.GetRequiredService<ConversationProviderRouter>().ActiveProvider;
-        string providerText = activeProvider.ToUpperInvariant() + " · " + _ui.Get("ui.voice.provider") + ": GEMINI LIVE · " + _settings.Current.GenerativeAi.LiveVoice
-            + (_services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().CurrentMode == Laura.Core.Permissions.ApprovalMode.FullAccess ? " · " + _ui.Get("ui.permissions.fullAccess") : "");
+        string providerText = activeProvider.ToUpperInvariant() + " · " + _ui.Get("ui.voice.provider") + ": GEMINI LIVE · " + _settings.Current.GenerativeAi.LiveVoice;
         if (_provider.Text != providerText) { _provider.Text = providerText; }
         bool voiceSupported = _live.IsAvailable;
         _listen.IsEnabled = voiceSupported; _microphoneButton.IsEnabled = voiceSupported;
@@ -273,6 +272,15 @@ public sealed partial class MainPage : ContentPage, IDisposable
         if (_setupPage is null || !_setupPage.CanReuse) { _setupPage = _services.GetRequiredService<SetupPage>(); }
         else { _setupPage.ReloadFromSettings(); }
         return NavigationMotion.PushAsync(Navigation, _setupPage);
+    }
+    /// <summary>Verifies text-provider labels and independent voice controls in isolated native diagnostics.</summary>
+    internal void VerifyProviderFeedbackForSmoke()
+    {
+        EnsureSmoke(); Reload();
+        string provider = _services.GetRequiredService<ConversationProviderRouter>().ActiveProvider.ToUpperInvariant();
+        if (!_provider.Text.StartsWith(provider, StringComparison.Ordinal) || _listen.IsEnabled != _live.IsAvailable
+            || _live.IsAvailable && _micStatus.Text == _ui.Get("ui.credential.NotConfigured"))
+        { throw new InvalidOperationException("Native provider and voice feedback are inconsistent."); }
     }
     /// <summary>Opens the Brain through the same native action used by diagnostics.</summary>
     public Task OpenBrainAsync()

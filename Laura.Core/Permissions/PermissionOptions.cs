@@ -6,9 +6,7 @@ public enum ApprovalMode
     /// <summary>Ask for every ungranted protected effect.</summary>
     Ask,
     /// <summary>Also honor explicit directory and bounded installed-application opening policies.</summary>
-    Automatic,
-    /// <summary>Use the current Windows account for requested operations without per-operation approval.</summary>
-    FullAccess
+    Automatic
 }
 /// <summary>When the existing voice service announces a pending request.</summary>
 public enum ApprovalVoiceMode

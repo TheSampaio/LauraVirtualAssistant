@@ -73,7 +73,6 @@ public static class ServiceConfiguration
         string chatGptDirectory = storageDirectory is not null && Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal)
             ? Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())! : Path.GetDirectoryName(settingsPath)!;
         services.AddSingleton(new AssistantStorage(Path.GetDirectoryName(Path.GetFullPath(settingsPath))!));
-        services.AddSingleton(_ => new WindowsFullAccessPreference(Path.GetDirectoryName(Path.GetFullPath(settingsPath))!));
         services.AddSingleton(_ => new LegacyProviderCleanup(Path.GetDirectoryName(Path.GetFullPath(settingsPath))!));
         services.AddSingleton(provider => new Laura.Core.Diagnostics.RuntimeJournal(storageDirectory is null
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Laura", "Diagnostics")
@@ -96,12 +95,11 @@ public static class ServiceConfiguration
             () =>
             {
                 PermissionOptions options = provider.GetRequiredService<ISettingsService>().Current.Permissions;
-                return options.Mode == ApprovalMode.FullAccess && !provider.GetRequiredService<WindowsFullAccessPreference>().IsConfirmed()
-                    ? options with { Mode = ApprovalMode.Ask } : options;
+                return options.Sanitized();
             },
             () => new[] { provider.GetRequiredService<AssistantStorage>().Directory,
                 provider.GetRequiredService<ISettingsService>().Current.Brain.Directory, Path.Combine(chatGptDirectory, "Credentials"),
-                Path.Combine(credentialDirectory, "google-key.dat"), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "LauraCredentialBroker") }.Where(path => !string.IsNullOrWhiteSpace(path)),
+                Path.Combine(credentialDirectory, "google-key.dat"), Path.Combine(credentialDirectory, "google-key.previous.dat"), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "LauraCredentialBroker") }.Where(path => !string.IsNullOrWhiteSpace(path)),
             Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Workspace"), provider.GetRequiredService<IUiLocalizer>()));
         services.AddSingleton<SqliteConversationMemory>(_ => new SqliteConversationMemory(
             Path.Combine(Path.GetDirectoryName(settingsPath)!, "memory.db")));
@@ -142,6 +140,8 @@ public static class ServiceConfiguration
         services.AddSingleton<IChatGptBrokerSetup>(_ => new ChatGptBrokerSetup(AppContext.BaseDirectory));
         services.AddSingleton<ChatGptConversationEngine>();
         services.AddSingleton(_ => new UserFileWorkspace(Path.Combine(Path.GetDirectoryName(settingsPath)!, "Workspace")));
+        services.AddSingleton<IKnownFolderResolver, WindowsKnownFolderResolver>();
+        services.AddSingleton<IVersionedFileEditor>(provider => new VersionedFileEditor(Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Undo", "Edits")));
 
         services.AddSingleton<ILocalizer>(provider => new JsonLocalizer(
             GetLocalesDirectory(),

@@ -9,7 +9,7 @@ public sealed record CognitiveTaskCheckpoint(Guid Id, string Objective, DateTime
     CognitiveRoundProgress? Rounds = null)
 {
     /// <summary>Gets whether an operation might have occurred without a committed result.</summary>
-    public bool HasUncertainEffect => Operations.Any(operation => operation.Status is "started" or "pending" && operation.MayHaveEffects);
+    public bool HasUncertainEffect => Operations.Any(operation => operation.Status is "started" or "pending" or "interrupted" && operation.MayHaveEffects);
 
     /// <summary>Validates checkpoint bounds and identities before restoring data; no stored name grants a capability.</summary>
     public CognitiveTaskCheckpoint Validated()

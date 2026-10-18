@@ -38,10 +38,10 @@ internal static class MauiToolPermissions
             {
                 "open" => PermissionOperation.Internal,
                 "list" or "search" or "info" => ProviderExecutionScope.Destination.Length == 0 ? PermissionOperation.FileReadLocal : PermissionOperation.FileReadCloud,
-                "read" => ProviderExecutionScope.Destination.Length == 0 ? PermissionOperation.FileReadLocal : PermissionOperation.FileReadCloud, "write" => PermissionOperation.FileWrite,
+                "read" => ProviderExecutionScope.Destination.Length == 0 ? PermissionOperation.FileReadLocal : PermissionOperation.FileReadCloud, "write" or "patch" => PermissionOperation.FileWrite,
                 "mkdir" => PermissionOperation.FileCreateDirectory, "copy" => PermissionOperation.FileCopy,
                 "move" => PermissionOperation.FileMove, "delete" => PermissionOperation.FileTrash,
-                "undo" => PermissionOperation.Undo, _ => PermissionOperation.Unknown
+                "undo" or "rollback" => PermissionOperation.Undo, _ => PermissionOperation.Unknown
             },
             "clipboard" when action == "read" => PermissionOperation.Internal, // guarded by IDesktopTools
             "clipboard" when action == "write" => PermissionOperation.ClipboardWrite,
@@ -57,6 +57,7 @@ internal static class MauiToolPermissions
         {
             PermissionOperation.Process => Text(args, "executable") + "\n" + JsonSerializer.Serialize(Laura.Core.Execution.StructuredProcessParameters.Arguments(args)) + "\n" + Text(args, "directory"),
             PermissionOperation.DesktopInput => Text(args, "window") + "\n" + args.GetRawText(),
+            PermissionOperation.FileWrite when action == "patch" => "Scoped patch\nExpected hash: " + Text(args, "expected_hash") + "\nRemove:\n" + Text(args, "old_text") + "\nInsert:\n" + Text(args, "new_text"),
             PermissionOperation.FileWrite => Text(args, "content"),
             _ when name is "save_memory" or "forget_memory" => Text(args, "key") + "\n" + Text(args, "value"),
             _ when name == "reminder" => action + "\n" + Text(args, "text") + "\n" + Text(args, "due") + "\n" + Text(args, "id"),

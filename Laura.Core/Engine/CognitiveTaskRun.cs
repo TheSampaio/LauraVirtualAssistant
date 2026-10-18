@@ -189,7 +189,8 @@ public sealed class CognitiveTaskRun
         if (name == "start_program" && result.CommandJobId is { } jobId && jobId != Guid.Empty) { _commandJobs.Add(jobId); }
         ObserveSourceWorkflow(name, arguments, result); Record(name, result, initiator);
         string status = result.Status == "success" && result.Failed ? "failed" : result.Status;
-        if (status is not ("success" or "failed" or "blocked" or "cancelled" or "pending")) { status = "failed"; }
+        if (status == "uncertain") { status = "interrupted"; _state = "blocked"; _blocker = "persistence"; }
+        if (status is not ("success" or "failed" or "blocked" or "cancelled" or "pending" or "interrupted")) { status = "failed"; }
         _receipts[^1] = _receipts[^1] with { Status = status, ResultHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(result.Text))) };
         try { await SaveAsync(CancellationToken.None).ConfigureAwait(false); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException)

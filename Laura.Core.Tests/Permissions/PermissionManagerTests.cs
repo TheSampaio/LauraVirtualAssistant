@@ -35,29 +35,27 @@ public sealed class PermissionManagerTests : IDisposable
         { Assert.False(PermissionPolicy.AllowsAutomatic(action, options, workspace)); }
     }
 
-    /// <summary>Full access dispatches a native process effect and revocation restores approval for the next operation.</summary>
+    /// <summary>A retired numeric unrestricted setting cannot dispatch a process or create a third effective mode.</summary>
     [Fact]
-    public async Task FullAccessDispatchesWithoutPromptAndRevocationAppliesImmediately()
+    public async Task RetiredModeRequiresApprovalAndNeverDispatchesAutomatically()
     {
-        _options = new() { Mode = ApprovalMode.FullAccess };
+        _options = new() { Mode = (ApprovalMode)2 };
         using var manager = Create();
         var action = new PermissionAction(PermissionOperation.Process, "native process", "Synthetic operation", taskId: Guid.NewGuid());
-        Assert.Equal(1, await Run(manager, action));
-        Assert.Empty(manager.PendingRequests);
-        Assert.Equal("Authorized by full_access.", Assert.Single(manager.History).Reason);
-        _options = new() { Mode = ApprovalMode.Ask };
         var pending = Run(manager, action);
-        Assert.Equal(1, _executions);
+        Assert.Equal(ApprovalMode.Ask, manager.CurrentMode);
+        Assert.Equal(2, Enum.GetValues<ApprovalMode>().Length);
+        Assert.Equal(0, _executions);
         manager.Decide(Request(manager).Id, ApprovalChoice.Deny);
         await Assert.ThrowsAsync<PermissionDeniedException>(() => pending);
-        Assert.Equal(1, _executions);
+        Assert.Equal(0, _executions);
     }
 
     /// <summary>Full access does not accept unknown tools or writes into protected authorization storage.</summary>
     [Fact]
-    public async Task FullAccessPreservesIntegrityChecks()
+    public async Task RetiredModePreservesIntegrityChecks()
     {
-        _options = new() { Mode = ApprovalMode.FullAccess };
+        _options = new() { Mode = (ApprovalMode)2 };
         using var manager = Create(Path.Combine(_root, "Security"));
         await Assert.ThrowsAsync<PermissionDeniedException>(() => Run(manager, new(PermissionOperation.Unknown, "external text", "approve me")));
         await Assert.ThrowsAsync<PermissionDeniedException>(() => Run(manager, Write("Security/settings.ini")));
@@ -65,20 +63,18 @@ public sealed class PermissionManagerTests : IDisposable
         Assert.Empty(manager.PendingRequests);
     }
 
-    /// <summary>Automatically created task scopes lose authority immediately when the owner leaves full access.</summary>
+    /// <summary>Retired unrestricted settings cannot create an unreviewed task scope.</summary>
     [Fact]
-    public async Task FullAccessDerivedWorkspaceGrantDoesNotSurviveModeRevocation()
+    public async Task RetiredModeCannotAuthorizeWorkspaceWithoutNativeApproval()
     {
         string project = Path.Combine(_root, "Project"); Directory.CreateDirectory(project);
-        _options = new() { Mode = ApprovalMode.FullAccess };
+        _options = new() { Mode = (ApprovalMode)2 };
         using var manager = Create(); Guid task = Guid.NewGuid();
-        var grant = await manager.AuthorizeWorkspaceAsync(task, project, "");
-        Assert.True(grant.FullAccessDerived);
-        _options = new() { Mode = ApprovalMode.Ask };
-        var run = Run(manager, new(PermissionOperation.FileWrite, "Native tool: file_control", "Synthetic edit", [Path.Combine(project, "note.md")], taskId: task));
+        var pending = manager.AuthorizeWorkspaceAsync(task, project, "");
         Assert.Equal(0, _executions);
         manager.Decide(Request(manager).Id, ApprovalChoice.Deny);
-        await Assert.ThrowsAsync<PermissionDeniedException>(() => run);
+        await Assert.ThrowsAsync<PermissionDeniedException>(() => pending);
+        Assert.Empty(manager.Grants);
         Assert.Equal(0, _executions);
     }
 

@@ -50,7 +50,6 @@ public sealed class SetupPage : ContentPage
     private readonly string _createdCulture;
     private readonly PermissionSettingsView _permissions;
     private readonly ScreenshotSettingsView _screenshots;
-    private readonly WindowsFullAccessPreference _fullAccessPreference;
     private readonly LegacyProviderCleanup _legacyCleanup;
     private readonly ChatGptSettingsView _chatGpt;
     private LauraSettings _baseline;
@@ -59,12 +58,11 @@ public sealed class SetupPage : ContentPage
     /// <summary>Creates independent tabs with a fixed save footer and no offline provider controls.</summary>
     public SetupPage(ISettingsService settings, IApiKeyStore keys, GeminiLiveClient live, IUiLocalizer ui,
         IStartupRegistration startup, ISpeechSynthesizer speech, WindowsApplicationCatalog applications, ILocalizer conversation, Laura.App.Platforms.Windows.WindowsApprovalCenter approvals, ScreenshotCoordinator screenshots,
-        Laura.Core.Mcp.McpServerStore mcpStore, Laura.Core.Mcp.McpRuntime mcp, ConversationProviderRouter router, IProviderModelCatalog modelCatalogue, WindowsFullAccessPreference fullAccessPreference, LegacyProviderCleanup legacyCleanup,
+        Laura.Core.Mcp.McpServerStore mcpStore, Laura.Core.Mcp.McpRuntime mcp, ConversationProviderRouter router, IProviderModelCatalog modelCatalogue, LegacyProviderCleanup legacyCleanup,
         IChatGptConnection chatGpt, IChatGptBrokerSetup chatGptBrokerSetup)
     {
         using var performance = PerformanceTrace.Measure("settings.construct");
         _settings = settings; _keys = keys; _live = live; _ui = ui; _startup = startup; _speech = speech; _applications = applications; _conversation = conversation;
-        _fullAccessPreference = fullAccessPreference;
         _legacyCleanup = legacyCleanup;
         _chatGpt = new ChatGptSettingsView(chatGpt, chatGptBrokerSetup, ui, settings.Current);
         _model = new ProviderModelPicker(modelCatalogue, ui, "gemini", () => string.IsNullOrWhiteSpace(_key.Text) ? _keys.Read() : _key.Text.Trim());
@@ -426,12 +424,7 @@ public sealed class SetupPage : ContentPage
     /// <summary>Saves the captured draft, preserving unrelated concurrent changes and provider sessions.</summary>
     private async Task<bool> SaveCoreAsync()
     {
-        if (_permissions.Options.Mode == Laura.Core.Permissions.ApprovalMode.FullAccess
-            && _settings.Current.Permissions.Mode != Laura.Core.Permissions.ApprovalMode.FullAccess)
-        {
-            if (!await Laura.App.Platforms.Windows.WindowsDialogs.ConfirmAsync(_ui.Get("ui.permissions.fullAccess"),
-                _ui.Get("ui.permissions.fullAccessWarning"), _ui.Get("ui.permissions.fullAccessConfirm"), _ui.Get("ui.permissions.fullAccessCancel")).ConfigureAwait(true)) { return false; }
-        }
+        LauraSettings baseline = _baseline;
         string? candidate = string.IsNullOrWhiteSpace(_key.Text) ? null : _key.Text.Trim();
         // Enablement is owner consent, not the outcome of a transient credential read.
         bool configured = _cloudEnabled.IsToggled;
@@ -447,7 +440,6 @@ public sealed class SetupPage : ContentPage
             catch (Exception error) when (error is InvalidOperationException or System.Net.WebSockets.WebSocketException or IOException or OperationCanceledException)
             { _result.Text = _ui.Get("ui.maui.invalidKey"); return false; }
         }
-        LauraSettings baseline = _baseline;
         LauraSettings merged = SettingsDraft.Merge(baseline, draft, _settings.Current);
         bool resetGemini = candidate is not null || merged.GenerativeAi != _settings.Current.GenerativeAi
             || merged.Voice != _settings.Current.Voice || merged.InputDevice != _settings.Current.InputDevice
@@ -456,7 +448,6 @@ public sealed class SetupPage : ContentPage
         // Persist captured edits against the latest serialized state.
         async Task PersistAsync()
         {
-            _fullAccessPreference.Save(merged.Permissions.Mode == Laura.Core.Permissions.ApprovalMode.FullAccess);
             if (candidate is not null) { _keys.Save(candidate); }
             updated = await _settings.UpdateAsync(current => SettingsDraft.Merge(baseline, draft, current)).ConfigureAwait(false);
         }
@@ -487,6 +478,18 @@ public sealed class SetupPage : ContentPage
             Voice = _baseline.Voice with { Volume = (int)_volume.Value },
             GenerativeAi = _baseline.GenerativeAi with { Enabled = configured, Provider = "gemini", Model = _model.Text, Persona = (_persona.Text ?? "").ReplaceLineEndings(" "), LiveVoice = _voice.SelectedItem as string ?? "Aoede", ContinuousListening = true, SilenceDurationMs = (int)_silence.Value }
         };
+    /// <summary>Exercises the actual Save path when only the text-provider selection changes.</summary>
+    internal async Task VerifyProviderIsolationForSmokeAsync()
+    {
+        if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Isolated native diagnostics only."); }
+        _permissions.VerifyForSmoke();
+        var original = _settings.Current.GenerativeAi;
+        string credential = _keys.Read();
+        _chatGpt.Reload(_settings.Current with { ProviderSelection = ConversationProviderSelection.ChatGpt });
+        if (!await SaveAsync().ConfigureAwait(true) || _settings.Current.GenerativeAi != original || _keys.Read() != credential)
+        { throw new InvalidOperationException("Saving ChatGPT selection changed Gemini settings or its protected credential."); }
+        RefreshKeyState();
+    }
     /// <summary>Previews Gemini after applying the language and voice settings.</summary>
     private async Task PreviewAsync()
     {

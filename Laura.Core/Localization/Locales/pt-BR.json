@@ -750,7 +750,7 @@
   "ui.permissions.fullAccessConfirm": "Ativar e salvar acesso completo",
   "ui.permissions.fullAccessCancel": "Cancelar",
   "ui.permissions.mode": "Modo de aprovação",
-  "ui.permissions.modeHelp": "Solicitar aprovação: revisar ações protegidas antes de executar. Aprovar por mim: executar ações cobertas pela política nativa e perguntar sobre outros efeitos. Acesso completo: arquivos, programas, terminal e internet com as permissões da sua conta do Windows.",
+  "ui.permissions.modeHelp": "Solicitar aprovação: revisar ações protegidas antes de executar. Aprovar por mim: executar ações cobertas pela política nativa limitada e perguntar sobre outros efeitos. Configurações antigas de acesso irrestrito migram para Solicitar aprovação.",
   "ui.permissions.openApplications": "Abrir aplicativos instalados automaticamente",
   "ui.permissions.openApplicationsHelp": "Somente aplicativos gráficos em Arquivos de Programas, sem argumentos ou elevação, em locais protegidos contra escrita do usuário. Scripts, instaladores e executáveis desconhecidos continuam protegidos.",
   "ui.permissions.operation.ApplicationLaunch": "Abrir aplicativo instalado",

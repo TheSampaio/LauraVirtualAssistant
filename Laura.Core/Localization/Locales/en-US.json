@@ -797,7 +797,7 @@
   "ui.permissions.fullAccessConfirm": "Enable and save full access",
   "ui.permissions.fullAccessCancel": "Cancel",
   "ui.permissions.mode": "Approval mode",
-  "ui.permissions.modeHelp": "Ask for approval: review protected actions before execution. Approve for me: run actions covered by native policy and ask about other effects. Full access: files, programs, terminal and internet with your Windows account permissions.",
+  "ui.permissions.modeHelp": "Ask for approval: review protected actions before execution. Approve for me: run actions covered by bounded native policy and ask about other effects. Legacy unrestricted settings migrate to Ask.",
   "ui.permissions.openApplications": "Open installed applications automatically",
   "ui.permissions.openApplicationsHelp": "Only graphical applications in Program Files, without arguments or elevation, in locations protected against user writes. Scripts, installers and unknown executables remain protected.",
   "ui.permissions.operation.ApplicationLaunch": "Open installed application",

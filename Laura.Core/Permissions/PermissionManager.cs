@@ -25,9 +25,9 @@ public sealed class PermissionManager : IDisposable
     /// <summary>Loads only local persistent grants. An unreadable/corrupt store starts with no grants.</summary>
     public PermissionManager(PermissionStore store, Func<PermissionOptions> options, Func<IEnumerable<string>>? protectedRoots = null, string? workspaceRoot = null, IUiLocalizer? ui = null)
     {
-        _store = store; _options = options; _protectedRoots = protectedRoots ?? (() => []);
+        _store = store; _options = () => options().Sanitized(); _protectedRoots = protectedRoots ?? (() => []);
         _workspaceRoot = workspaceRoot; _ui = ui;
-        try { var loaded = store.Load(); _grants.AddRange(loaded.Grants); _history.AddRange(loaded.History); }
+        try { var loaded = store.Load(); _grants.AddRange(loaded.Grants.Where(grant => !grant.FullAccessDerived)); _history.AddRange(loaded.History); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or PermissionDeniedException or ArgumentException)
         { StorageWarning = "Permission storage unavailable; no grants were restored."; }
     }
@@ -82,12 +82,12 @@ public sealed class PermissionManager : IDisposable
             PermissionPolicy.ValidateResources(action, _protectedRoots(), _workspaceRoot);
             string[] original = SnapshotResources(action);
             PermissionGrant? grant;
-            lock (_gate) { grant = _grants.FirstOrDefault(item => (!item.FullAccessDerived || _options().Mode == ApprovalMode.FullAccess) && PermissionPolicy.Matches(item, action)); }
+            lock (_gate) { grant = _grants.FirstOrDefault(item => !item.FullAccessDerived && PermissionPolicy.Matches(item, action)); }
             bool nativeConsent = action.UserInitiated && risk <= PermissionRisk.Moderate && action.Operation is PermissionOperation.LocalCapture or PermissionOperation.ScreenshotExport or PermissionOperation.BrainAttachment or PermissionOperation.ClipboardWrite;
             bool automaticPolicy = PermissionPolicy.AllowsAutomatic(action, _options(), _workspaceRoot);
             bool allowed = automaticPolicy || nativeConsent || action.Operation == PermissionOperation.Internal || grant is not null
                 && (grant.TaskId != Guid.Empty || _options().Mode == ApprovalMode.Automatic || !grant.DirectoryScope);
-            string authorization = nativeConsent ? "native_gesture" : automaticPolicy ? _options().Mode == ApprovalMode.FullAccess ? "full_access" : "automatic_policy" : grant?.TaskId != Guid.Empty && grant is not null ? "task_grant" : grant is not null ? "remembered_grant" : action.Operation == PermissionOperation.Internal ? "internal_policy" : "user_approval";
+            string authorization = nativeConsent ? "native_gesture" : automaticPolicy ? "automatic_policy" : grant?.TaskId != Guid.Empty && grant is not null ? "task_grant" : grant is not null ? "remembered_grant" : action.Operation == PermissionOperation.Internal ? "internal_policy" : "user_approval";
             if (allowed) { outcome = nativeConsent ? ApprovalOutcome.Approved : ApprovalOutcome.Automatic; }
             else
             {
@@ -126,7 +126,7 @@ public sealed class PermissionManager : IDisposable
             {
                 if (_stopped || version != _resetVersion || grant is not null && !_grants.Any(item => item.Id == grant.Id))
                 { throw new PermissionDeniedException("Authorization was revoked before dispatch."); }
-                if (grant is { FullAccessDerived: true } && _options().Mode != ApprovalMode.FullAccess)
+                if (grant is { FullAccessDerived: true })
                 { throw new PermissionDeniedException("Full-access task authorization was revoked before dispatch."); }
                 if (pending is not null && pending.Request.Expires <= DateTimeOffset.UtcNow)
                 { outcome = ApprovalOutcome.Expired; throw new PermissionDeniedException("Approval expired before dispatch."); }
@@ -202,7 +202,7 @@ public sealed class PermissionManager : IDisposable
             token.ThrowIfCancellationRequested();
             var grant = new PermissionGrant(Guid.NewGuid(), PermissionOperation.WorkspaceAuthorization, "Native tool: file_control", root,
                 action.Fingerprint, DateTimeOffset.UtcNow, false, true) { TaskId = taskId, Expires = DateTimeOffset.UtcNow.AddHours(1), Destination = destination,
-                    FullAccessDerived = CurrentAuthorization == "full_access" };
+                    FullAccessDerived = false };
             lock (_gate) { _grants.Add(grant); }
             return Task.FromResult(grant);
         }, cancellationToken);
@@ -225,7 +225,7 @@ public sealed class PermissionManager : IDisposable
         {
             var existing = _grants.FirstOrDefault(grant => grant.Operation == PermissionOperation.RepositoryStudyAuthorization
                 && grant.TaskId == taskId && grant.Scope == scope && grant.Destination == destination && grant.Expires > DateTimeOffset.UtcNow && !grant.Persistent);
-            if (existing is not null && (!existing.FullAccessDerived || _options().Mode == ApprovalMode.FullAccess)) { return Task.FromResult(existing); }
+            if (existing is not null && !existing.FullAccessDerived) { return Task.FromResult(existing); }
         }
         var action = new PermissionAction(PermissionOperation.RepositoryStudyAuthorization, "Repository study review",
             (_ui?.Get(LocalizationKeys.Permissions.RepositoryStudyReview) ?? "Authorize bounded repository text reads and untrusted Brain references for this task for one hour. No source code, dependency or script will execute.")
@@ -236,7 +236,7 @@ public sealed class PermissionManager : IDisposable
             token.ThrowIfCancellationRequested();
             var grant = new PermissionGrant(Guid.NewGuid(), PermissionOperation.RepositoryStudyAuthorization, "Repository study", scope,
                 action.Fingerprint, DateTimeOffset.UtcNow, false, !remoteSource) { TaskId = taskId, Expires = DateTimeOffset.UtcNow.AddHours(1), Destination = destination,
-                    FullAccessDerived = CurrentAuthorization == "full_access" };
+                    FullAccessDerived = false };
             lock (_gate) { _grants.Add(grant); } return Task.FromResult(grant);
         }, cancellationToken);
     }

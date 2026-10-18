@@ -69,14 +69,12 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
             ISettingsService settings = services.GetRequiredService<ISettingsService>();
             services.GetRequiredService<RuntimeDiagnosticContext>();
             using (PerformanceTrace.Measure("startup.settings")) { await settings.LoadAsync().ConfigureAwait(true); }
+            if (Environment.GetCommandLineArgs().Any(argument => argument is "--ui-smoke" or "--permissions-smoke" or "--screenshot-smoke" or "--brain-smoke")
+                && settings.Current.Brain.Directory.Length > 0
+                && !Laura.Core.Permissions.PermissionPolicy.Within(settings.Current.Brain.Directory, services.GetRequiredService<AssistantStorage>().Directory))
+            { throw new InvalidOperationException("Diagnostic settings cannot point at a Brain outside isolated storage."); }
             try { await services.GetRequiredService<IChatGptConnection>().ReadAsync().ConfigureAwait(true); }
             catch (Laura.Core.ChatGpt.ChatGptConnectionException) { }
-            if (settings.Current.Permissions.Mode == Laura.Core.Permissions.ApprovalMode.FullAccess
-                && !services.GetRequiredService<Laura.Platform.Windows.System.WindowsFullAccessPreference>().IsConfirmed())
-            {
-                await settings.UpdateAsync(settings.Current with { Permissions = settings.Current.Permissions with { Mode = Laura.Core.Permissions.ApprovalMode.Ask } }).ConfigureAwait(true);
-                Laura.Core.Diagnostics.LauraDiagnostics.Record("permission.full_access_unconfirmed", outcome: "revoked");
-            }
             await Task.Run(services.GetRequiredService<Laura.Core.Files.UserFileWorkspace>().EnsureCreated).ConfigureAwait(true);
             try { await Task.Run(services.GetRequiredService<LegacyProviderCleanup>().RetireCredential).ConfigureAwait(true); }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or Laura.Core.Permissions.PermissionDeniedException)

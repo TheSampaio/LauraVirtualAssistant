@@ -13,18 +13,16 @@ public sealed class PermissionSettingsView : ContentView
     private readonly Switch _notifications;
     private readonly Switch _applications = new() { OnColor = Theme.Accent };
     private readonly Entry _timeout = Theme.Entry(), _retention = Theme.Entry();
-    private readonly Label _fullAccessWarning;
     /// <summary>Creates localized controls without independently saving partial settings.</summary>
     public PermissionSettingsView(ISettingsService settings, IUiLocalizer ui, WindowsApprovalCenter center)
     {
         string T(string key) => ui.Get("ui.permissions." + key);
-        _mode = Theme.Picker([T("ask"), T("automatic"), T("fullAccess")], "");
-        _fullAccessWarning = Theme.Label(T("fullAccessWarning"), 13, Theme.Accent);
+        _mode = Theme.Picker([T("ask"), T("automatic")], "");
         _voice = Theme.Picker([T("voiceAlways"), T("voiceHidden"), T("voiceNever")], T("voiceHidden"));
         _notifications = new Switch { OnColor = Theme.Accent };
         _timeout.Keyboard = _retention.Keyboard = Keyboard.Numeric;
         Content = Theme.Stack(Theme.Label(T("settings"), 22), Theme.Label(T("modeHelp"), 13, Theme.Muted),
-            Field(T("mode"), _mode), _fullAccessWarning, Field(T("voice"), _voice), Field(T("notifications"), _notifications),
+            Field(T("mode"), _mode), Field(T("voice"), _voice), Field(T("notifications"), _notifications),
             Field(T("openApplications"), _applications), Theme.Label(T("openApplicationsHelp"), 12, Theme.Muted),
             Field(T("timeout"), _timeout), Field(T("retention"), _retention),
             Theme.Label(T("voiceHelp"), 12, Theme.Muted),
@@ -43,6 +41,7 @@ public sealed class PermissionSettingsView : ContentView
     /// <summary>Restores the current persisted configuration when cached settings reopen.</summary>
     public void Reload(PermissionOptions options)
     {
+        options = options.Sanitized();
         _mode.SelectedIndex = (int)options.Mode; _voice.SelectedIndex = (int)options.Voice;
         _notifications.IsToggled = options.Notifications;
         _applications.IsToggled = options.OpenInstalledApplications; _applications.IsEnabled = options.Mode == ApprovalMode.Automatic;
@@ -50,11 +49,17 @@ public sealed class PermissionSettingsView : ContentView
         _timeout.Text = options.TimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
         _retention.Text = options.HistoryDays.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
-    /// <summary>Shows the persistent risk notice while full access is selected.</summary>
+    /// <summary>Enables bounded application policy only in automatic mode.</summary>
     private void RefreshMode()
     {
         _applications.IsEnabled = _mode.SelectedIndex == (int)ApprovalMode.Automatic;
-        _fullAccessWarning.IsVisible = _mode.SelectedIndex == (int)ApprovalMode.FullAccess;
+    }
+    /// <summary>Checks the actual native selector cannot offer a retired unrestricted mode.</summary>
+    internal void VerifyForSmoke()
+    {
+        if (!Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)) { throw new InvalidOperationException("Isolated native diagnostics only."); }
+        if (_mode.Items.Count != 2 || Options.Mode is not (ApprovalMode.Ask or ApprovalMode.Automatic))
+        { throw new InvalidOperationException("The native permission selector exposes an unsupported mode."); }
     }
     private static View Field(string title, View control)
     { SemanticProperties.SetDescription(control, title); return Theme.Stack(Theme.Label(title), control); }

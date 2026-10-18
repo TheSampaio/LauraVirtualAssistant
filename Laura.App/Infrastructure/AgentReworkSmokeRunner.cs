@@ -43,12 +43,11 @@ internal static class AgentReworkSmokeRunner
         {
         bool live = flags.Contains("--agent-live-smoke", StringComparer.Ordinal);
         bool resume = flags.Contains("--agent-resume-smoke", StringComparer.Ordinal);
-        services.GetRequiredService<Laura.Platform.Windows.System.WindowsFullAccessPreference>().Save(true);
         await settings.UpdateAsync(settings.Current with
         {
             MicrophoneMuted = true, ClapWakeEnabled = false, GreetOnStartup = false, AnnounceHourly = false,
             Voice = settings.Current.Voice with { Volume = 0 },
-            Permissions = settings.Current.Permissions with { Mode = ApprovalMode.FullAccess, Voice = ApprovalVoiceMode.Never },
+            Permissions = settings.Current.Permissions with { Mode = ApprovalMode.Automatic, Voice = ApprovalVoiceMode.Never },
             GenerativeAi = settings.Current.GenerativeAi with { Enabled = live, Provider = "gemini" }
         }, timeout.Token).ConfigureAwait(true);
         memory.SetWorkingContext(new ConversationWorkingContext(Guid.NewGuid(), "Verify actual typed Gemini process arguments."));
@@ -114,7 +113,7 @@ internal static class AgentReworkSmokeRunner
             { throw new InvalidOperationException("Denied PowerShell was dispatched."); }
             observations.Add(new { arbitraryScriptRequiredReview = true, denied = request.Id });
         }
-        await settings.UpdateAsync(settings.Current with { Permissions = settings.Current.Permissions with { Mode = ApprovalMode.FullAccess } }, timeout.Token).ConfigureAwait(true);
+        await settings.UpdateAsync(settings.Current with { Permissions = settings.Current.Permissions with { Mode = ApprovalMode.Automatic } }, timeout.Token).ConfigureAwait(true);
         await File.WriteAllTextAsync(Path.Combine(directory, "native-tools.json"), JsonSerializer.Serialize(observations, EvidenceJson), timeout.Token).ConfigureAwait(true);
         }
         if (flags.Contains("--agent-auto-clone-smoke", StringComparer.Ordinal))
@@ -129,7 +128,7 @@ internal static class AgentReworkSmokeRunner
                 await File.WriteAllTextAsync(Path.Combine(directory, "automatic-clone.json"), JsonSerializer.Serialize(new { target, result.Failed, result.Status, result.Text }, EvidenceJson), timeout.Token).ConfigureAwait(true);
                 if (result.Failed || permissions.PendingRequests.Count != 0 || !Directory.Exists(Path.Combine(target, ".git"))) { throw new InvalidOperationException("The bounded automatic clone did not succeed."); }
             }
-            await settings.UpdateAsync(settings.Current with { Permissions = settings.Current.Permissions with { Mode = ApprovalMode.FullAccess } }, timeout.Token).ConfigureAwait(true);
+            await settings.UpdateAsync(settings.Current with { Permissions = settings.Current.Permissions with { Mode = ApprovalMode.Automatic } }, timeout.Token).ConfigureAwait(true);
         }
         var navigation = (NavigationPage)window.Page!;
         var ui = services.GetRequiredService<IUiLocalizer>();

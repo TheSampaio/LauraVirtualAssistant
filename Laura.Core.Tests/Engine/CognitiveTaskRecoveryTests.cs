@@ -14,6 +14,22 @@ public sealed class CognitiveTaskRecoveryTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "laura-task-recovery-" + Guid.NewGuid().ToString("N"));
     private static readonly HashSet<string> Tools = ["run_program", "recall_memory", "plan_task", "task_status"];
 
+    /// <summary>An adapter's uncertain result remains a durable effect barrier and prevents automatic continuation.</summary>
+    [Fact]
+    public async Task UncertainAdapterResultBlocksContinuationAndRestartReplay()
+    {
+        var journal = new RecordingTaskJournal(); Guid id = Guid.NewGuid();
+        var task = new CognitiveTaskRun("Verify a synthetic uncertain native effect.", Tools, taskId: id, journal: journal);
+        using var arguments = JsonDocument.Parse("{}");
+        var result = await task.ExecuteAsync("run_program", arguments.RootElement,
+            _ => Task.FromResult(new AssistantToolResult("Effect requires actual state inspection.") { Failed = true, Status = "uncertain" }), CancellationToken.None);
+        Assert.True(result.Failed); Assert.True(task.Checkpoint().HasUncertainEffect);
+        Assert.Null(task.PendingContinuation());
+        Assert.Equal("interrupted", Assert.Single(task.Checkpoint().Operations).Status);
+        using var restarted = new CognitiveTasks(journal);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => restarted.PrepareResumeAsync(id));
+    }
+
     /// <summary>Recovery exposes only actual prior owner-linked tasks; assistant text and unrelated private checkpoints cannot inject identities.</summary>
     [Fact]
     public async Task ConversationRecoveryCannotEnumerateUnrelatedOrAssistantInjectedTasks()

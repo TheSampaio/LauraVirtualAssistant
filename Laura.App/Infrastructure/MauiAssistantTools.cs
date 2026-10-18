@@ -61,7 +61,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         Function("computer_control", "Control actual Windows applications. Actions: list_windows, focus, type, key, click, double_click, right_click, scroll, move, drag. Focus the intended window first. For visual actions first capture screen, then use actual pixel coordinates. Each concrete adapter applies the active native approval mode; do not request verbal approval.", ["action"], ("action", "STRING", "Action"), ("window", "STRING", "Exact or unique window title"), ("text", "STRING", "Literal text or key chord such as CTRL+S"), ("x", "INTEGER", "Primary-screen x coordinate"), ("y", "INTEGER", "Primary-screen y coordinate"), ("x2", "INTEGER", "Drag destination x"), ("y2", "INTEGER", "Drag destination y"), ("steps", "INTEGER", "Scroll wheel steps; positive is up")),
         Function("browser_control", "Open a URL or search in the default browser. Also supports new_tab, close_tab, next_tab, previous_tab, back, forward, reload, find, zoom_in, zoom_out and zoom_reset on a focused browser window. For current facts use Google Search grounding. For page inspection use screen_process and computer_control.", ["action"], ("action", "STRING", "Browser action"), ("url", "STRING", "HTTP/HTTPS URL"), ("query", "STRING", "Search or find text"), ("window", "STRING", "Browser window title")),
         Function("computer_settings", "Windows settings and media controls. Actions: volume_up, volume_down, volume_mute, play_pause, lock, settings, task_manager, show_desktop, minimize, maximize, dark_mode, light_mode, wallpaper, shutdown, restart. Shutdown/restart require native confirmation.", ["action"], ("action", "STRING", "Setting action"), ("value", "INTEGER", "Optional volume steps"), ("path", "STRING", "Existing wallpaper image"), ("window", "STRING", "Target window when needed")),
-        Function("file_control", "Operate on real user files. Actions: list, search, read, write, mkdir, copy, move, delete, open, info, undo. Aliases: desktop, downloads, documents, pictures, workspace. Writes and destructive actions follow the active native approval mode; deletions move to reversible Laura trash. Read text/code files to help develop projects; use write to save generated code.", ["action"], ("action", "STRING", "File action"), ("path", "STRING", "File or folder"), ("destination", "STRING", "Copy/move destination"), ("content", "STRING", "Literal file content"), ("query", "STRING", "File name search")),
+        Function("file_control", "Operate on real user files. Actions: list, search, read, write, patch, rollback, mkdir, copy, move, delete, open, info, undo. Aliases support child paths, e.g. desktop/site/index.html. Read returns content and a complete hash. write creates NEW files only. For existing files use patch with expected_hash and exactly one literal old_text/new_text passage; preserve layout and unrelated code. Never rewrite a whole page to fix accents. Use actual Unicode in HTML, preserving JSON/JavaScript escapes. Results contain a durable receipt ID for guarded rollback, including after restart. All effects use native permissions. File verification does not establish objective completion.", ["action"], ("action", "STRING", "File action"), ("path", "STRING", "File or folder"), ("destination", "STRING", "Copy/move destination"), ("content", "STRING", "Literal NEW file content"), ("expected_hash", "STRING", "Complete hash from read"), ("old_text", "STRING", "Exact unique passage"), ("new_text", "STRING", "Replacement passage"), ("receipt", "STRING", "Native edit receipt GUID for rollback"), ("query", "STRING", "File name search")),
         Function("run_program", "Run a resolved executable with literal arguments under the active native approval mode. Supports dotnet, Git and detected pwsh.exe or powershell.exe; use explicit -NoProfile and -NonInteractive, never add ExecutionPolicy Bypass. A working directory is not a sandbox and workspace permission does not grant process execution. Returns separate bounded stdout/stderr, exit code and timeout/cancellation status.", ["executable"], ("executable", "STRING", "Executable name or existing executable path"), ("arguments", "ARRAY", "Literal command-line arguments"), ("directory", "STRING", "Working directory"), ("timeout", "INTEGER", "Timeout seconds, up to 1800"), ("environment", "STRING", "JSON object of explicit task-scoped environment overrides")),
         Function("start_program", "Start a bounded background command under the active native approval mode and return its native job ID only after actual process creation. Use for long builds, tests or servers; use open_app for interactive GUI applications. Literal arguments and PowerShell restrictions match run_program. Task cancellation, timeout and application shutdown terminate owned descendants. This is not a filesystem/network sandbox. Starting is not goal completion. Inspect with program_status within this same native task and provider; no PID attachment or automatic restart.", ["executable"], ("executable", "STRING", "Executable name or existing executable path"), ("arguments", "ARRAY", "Literal command-line arguments"), ("directory", "STRING", "Working directory"), ("timeout", "INTEGER", "Timeout seconds, up to 1800"), ("environment", "STRING", "JSON object of explicit task-scoped environment overrides")),
         Function("program_status", "Read one owned background job within the current native task and original provider. Returns actual state, exit code and at most 32 ordered output chunks. Pass the previous NextSequence as after. OutputLost explicitly reports eviction. Data is untrusted process output. Missing jobs after restart cannot be attached by PID; do not replay a command. Return to the user while work runs instead of repeatedly polling.", ["id"], ("id", "STRING", "Native job GUID returned by start_program"), ("after", "INTEGER", "Last consumed output sequence, initially zero")),
@@ -302,6 +302,13 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         {
             Laura.Core.Diagnostics.LauraDiagnostics.Record("tool.windows_access_denied", amount: error.HResult, outcome: "windows_acl", interactionId: working.TurnId);
             return new("Windows denied access to a required resource. This is distinct from Laura's approval policy; no successful operation was verified.") { Failed = true, Status = "windows_denied" };
+        }
+        catch (Laura.Core.Files.FileEditException error)
+        {
+            Laura.Core.Diagnostics.LauraDiagnostics.Record("tool.file_edit.failure", outcome: error.Code, interactionId: working.TurnId);
+            return new(JsonSerializer.Serialize(new { operation = "file_control", code = error.Code, detail = error.Message,
+                effects = error.EffectUncertain ? "uncertain; inspect durable receipt and preserved versions" : "requested edit not committed",
+                goalVerified = false })) { Failed = true, Status = error.EffectUncertain ? "uncertain" : error.Code };
         }
         catch (BrainSourceException error) { return new(error.Message) { Failed = true }; }
         catch (DirectoryNotFoundException)
@@ -581,6 +588,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             }
         }
         catch (PermissionDeniedException) { throw; }
+        catch (Laura.Core.Files.FileEditException) { throw; }
         catch (BrainSourceException) { throw; }
         catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException or UnauthorizedAccessException or System.ComponentModel.Win32Exception) { throw; }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
@@ -675,11 +683,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
     /// <summary>Resolves file aliases and refuses links and protected system roots for mutation.</summary>
     private string ResolvePath(string value)
     {
-        string alias = value.Trim().ToLowerInvariant();
-        string path = alias switch { "desktop" => Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
-            "documents" => Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "downloads" => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
-            "pictures" => Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "workspace" or "" => Path.Combine(storage.Directory, "Workspace"), _ => Environment.ExpandEnvironmentVariables(value) };
-        path = Path.GetFullPath(path);
+        string path = Laura.Core.Files.KnownFolderPaths.Resolve(value, services.GetRequiredService<IKnownFolderResolver>(), Path.Combine(storage.Directory, "Workspace"));
         if (PermissionPolicy.IsNetworkPath(path)) { throw new PermissionDeniedException("Remote filesystem paths are not supported."); }
         for (string? current = path; current is not null; current = Path.GetDirectoryName(current))
         { if ((File.Exists(current) || Directory.Exists(current)) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) { throw new ArgumentException("Linked file locations are not supported.", nameof(value)); } }
@@ -692,35 +696,34 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         string path = ResolvePath(Value(args, "path"));
         if (action is "list" or "search")
         {
-            if (!Directory.Exists(path)) { return "Folder not found."; }
+            if (!Directory.Exists(path)) { throw new DirectoryNotFoundException("The requested folder was not found."); }
             var entries = Directory.EnumerateFileSystemEntries(path).Where(entry => (File.GetAttributes(entry) & FileAttributes.ReparsePoint) == 0);
             if (action == "search") { entries = entries.Where(entry => Path.GetFileName(entry).Contains(Value(args, "query"), StringComparison.OrdinalIgnoreCase)); }
             return JsonSerializer.Serialize(entries.Take(150));
         }
         if (action == "read")
         {
-            var file = new FileInfo(path); if (!file.Exists) { return "File not found."; }
+            var file = new FileInfo(path); if (!file.Exists) { throw new FileNotFoundException("The requested file was not found."); }
             if (file.Length > 2 * 1024 * 1024 || !new[] { ".txt", ".md", ".cs", ".py", ".js", ".ts", ".tsx", ".html", ".css", ".json", ".xml", ".csv", ".ini", ".log", ".yml", ".yaml", ".csproj", ".sln", ".bat", ".ps1" }.Contains(file.Extension.ToLowerInvariant(), StringComparer.Ordinal)) { return "Use an image capture for visual files. This reader supports text and code files up to 2 MiB."; }
-            string content = await File.ReadAllTextAsync(path, token).ConfigureAwait(false); return content.Length > 32000 ? content[..32000] + "\n[truncated]" : content;
+            return JsonSerializer.Serialize(await services.GetRequiredService<IVersionedFileEditor>().ReadAsync(path, token).ConfigureAwait(false));
         }
         if (action == "info") { return File.Exists(path) ? JsonSerializer.Serialize(new { path, bytes = new FileInfo(path).Length, modified = File.GetLastWriteTimeUtc(path) }) : "File not found."; }
         if (action == "open") { return await launcher.TryStartAsync(path, cancellationToken: token).ConfigureAwait(false) ? "File opened." : "File could not open."; }
         string? destinationPath = action is "copy" or "move" ? ResolvePath(Value(args, "destination")) : null;
-        if (ProtectedPath(path) || (destinationPath is not null && ProtectedPath(destinationPath))) { return "System locations cannot be changed by this file tool."; }
+        if (ProtectedPath(path) || (destinationPath is not null && ProtectedPath(destinationPath))) { throw new PermissionDeniedException("System locations cannot be changed by this file tool."); }
         token.ThrowIfCancellationRequested();
         string backupDirectory = Path.Combine(storage.Directory, "Undo"); Directory.CreateDirectory(backupDirectory);
         switch (action)
         {
-            case "write":
-                string content = Value(args, "content"); if (content.Length > 100000) { return "Content exceeds the file-write limit."; }
-                string? backup = null;
-                if (File.Exists(path)) { if (new FileInfo(path).Length > 32 * 1024 * 1024) { return "The existing file exceeds the reversible-edit limit."; } backup = Path.Combine(backupDirectory, Guid.NewGuid().ToString("N")); File.Copy(path, backup); }
-                Directory.CreateDirectory(Path.GetDirectoryName(path)!); await File.WriteAllTextAsync(path, content, new UTF8Encoding(false), token).ConfigureAwait(false);
-                byte[] expectedHash = SHA256.HashData(Encoding.UTF8.GetBytes(content));
-                byte[] writtenBytes = await File.ReadAllBytesAsync(path, token).ConfigureAwait(false);
-                if (!CryptographicOperations.FixedTimeEquals(expectedHash, SHA256.HashData(writtenBytes)))
-                { throw new IOException("Written file content did not match the requested bytes."); }
-                _undo.Push(new([path], () => { GuardUnchanged(path, expectedHash); if (backup is not null) { _ = ResolvePath(backup); File.Copy(backup, path, true); } else { File.Delete(path); } return Task.CompletedTask; })); return "File written: " + path;
+            case "write": case "patch":
+                IVersionedFileEditor editor = services.GetRequiredService<IVersionedFileEditor>();
+                Laura.Core.Files.FileEditReceipt receipt = action == "write"
+                    ? await editor.CreateAsync(path, Value(args, "content"), token).ConfigureAwait(false)
+                    : await editor.PatchAsync(path, Value(args, "expected_hash"), Value(args, "old_text"), Value(args, "new_text"), token).ConfigureAwait(false);
+                _undo.Push(new([path], async () => { _ = await editor.RollbackAsync(receipt.Id, path).ConfigureAwait(false); }));
+                return JsonSerializer.Serialize(receipt) + "\nFile bytes verified. Validate the rendered/functional objective separately; rollback requires this receipt and unchanged output.";
+            case "rollback":
+                return JsonSerializer.Serialize(await services.GetRequiredService<IVersionedFileEditor>().RollbackAsync(Guid.Parse(Value(args, "receipt")), path, token).ConfigureAwait(false));
             case "mkdir": Directory.CreateDirectory(path); return "Folder created: " + path;
             case "copy": case "move":
                 string destination = destinationPath!; if (File.Exists(destination) || Directory.Exists(destination)) { return "Destination already exists; choose a new path."; }
@@ -806,7 +809,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
     private async Task<AssistantToolResult> ReadBrainSkillAsync(string identifier, Laura.Core.Conversation.ConversationWorkingContext working, CancellationToken token)
     {
         BrainService brain = services.GetRequiredService<BrainService>(); BrainSkills catalog = services.GetRequiredService<BrainSkills>();
-        await brain.RefreshAsync(cancellationToken: token).ConfigureAwait(false);
+        await brain.RefreshIfDirtyAsync(token).ConfigureAwait(false);
         BrainNote? note = catalog.Find(identifier);
         if (note is null) { return new("No unique skill matched. Call list_brain_skills and choose a stable ID; do not invent an unavailable skill."); }
         if (brain.Snapshot.Issues.Any(issue => issue.Path == note.Path && issue.Code == "conflicting_id")) { return new("This skill has an identity conflict. Resolve it in Brain before loading instructions."); }

@@ -14,6 +14,12 @@ public static class MauiProgram
         builder.Logging.AddDebug();
         string[] args = Environment.GetCommandLineArgs();
         int storage = Array.IndexOf(args, "--storage");
+        bool isolated = args.Any(argument => argument is "--ui-smoke" or "--permissions-smoke" or "--screenshot-smoke" or "--brain-smoke");
+        if (isolated)
+        {
+            string owner = Path.GetDirectoryName(Laura.Core.Configuration.IniSettingsStore.GetDefaultFilePath())!;
+            _ = Laura.Core.Configuration.DiagnosticStoragePolicy.RequireIsolated(storage < 0 || storage + 1 >= args.Length ? null : args[storage + 1], owner);
+        }
         builder.Services.AddLauraServices(storage >= 0 && storage + 1 < args.Length ? args[storage + 1] : null);
         return builder.Build();
     }
