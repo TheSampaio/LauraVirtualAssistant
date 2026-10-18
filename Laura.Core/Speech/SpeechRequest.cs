@@ -10,6 +10,8 @@ namespace Laura.Core.Speech;
 /// <param name="Culture">Text culture, in BCP-47 format, used for pronunciation.</param>
 public sealed record SpeechRequest(string Text, VoiceProfile Voice, string Culture)
 {
+    /// <summary>Gets the response identity carried through synthesis and native playback diagnostics.</summary>
+    public Guid ResponseId { get; init; } = Guid.NewGuid();
     /// <summary>Gets the playback device, or -1 for the default.</summary>
     public int OutputDevice { get; init; } = -1;
 }

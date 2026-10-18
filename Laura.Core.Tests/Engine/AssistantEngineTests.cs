@@ -1,5 +1,6 @@
 using Laura.Core.Abstractions;
 using Laura.Core.Configuration;
+using Laura.Core.Conversation;
 using Laura.Core.Engine;
 using Laura.Core.Skills;
 using Laura.Core.Tests.TestDoubles;
@@ -10,6 +11,21 @@ namespace Laura.Core.Tests.Engine;
 /// <summary>Verifies actual queued cancellation, worker recovery and concise internal briefing history.</summary>
 public sealed class AssistantEngineTests
 {
+    /// <summary>Unavailable voice preserves the response and the next command remains usable.</summary>
+    [Fact]
+    public async Task UnavailableVoice_PreservesTextAndDoesNotFailTheCommand()
+    {
+        var speech = new RecordingSpeechSynthesizer { Available = false };
+        var dispatcher = new CallbackSkillDispatcher((_, _) => Task.FromResult(SkillResponse.Speak("Verified text")));
+        await using var engine = CreateEngine(dispatcher, speech);
+        await engine.StartAsync();
+        await engine.SubmitCommandAsync("first").WaitAsync(TimeSpan.FromSeconds(3));
+        await engine.SubmitCommandAsync("second").WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Equal(2, engine.ConversationHistory.Count(message => message.Source == ConversationMessageSource.Assistant && message.Text == "Verified text"));
+        Assert.Equal(AssistantState.Ready, engine.State);
+        Assert.Empty(speech.SpokenTexts);
+    }
+
     /// <summary>Exercises real bounded admission, cancellation before dispatch and priority interruption of active/queued stale work.</summary>
     [Fact]
     public async Task BoundedQueueBackpressureDoesNotBlockCallerAndStopInterruptsActiveWork()

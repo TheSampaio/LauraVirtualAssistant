@@ -42,4 +42,8 @@ public interface ISettingsService
     ///     The settings effectively applied after sanitization.
     /// </summary>
     Task<LauraSettings> UpdateAsync(LauraSettings settings, CancellationToken cancellationToken = default);
+
+    /// <summary>Atomically edits the latest settings. Args: edit: Pure synchronous transformation; cancellationToken: Write cancellation. Returns: Persisted settings.</summary>
+    Task<LauraSettings> UpdateAsync(Func<LauraSettings, LauraSettings> edit, CancellationToken cancellationToken = default) =>
+        UpdateAsync(edit(Current), cancellationToken);
 }

@@ -17,7 +17,6 @@ public sealed class SetupPage : ContentPage
     private readonly ISettingsService _settings;
     private readonly IApiKeyStore _keys;
     private readonly GeminiLiveClient _live;
-    private readonly ConversationProviderRouter _router;
     private readonly ProviderModelPicker _model;
     private readonly IUiLocalizer _ui;
     private readonly IStartupRegistration _startup;
@@ -54,6 +53,8 @@ public sealed class SetupPage : ContentPage
     private readonly WindowsFullAccessPreference _fullAccessPreference;
     private readonly LegacyProviderCleanup _legacyCleanup;
     private readonly ChatGptSettingsView _chatGpt;
+    private LauraSettings _baseline;
+    private bool _saving;
 
     /// <summary>Creates independent tabs with a fixed save footer and no offline provider controls.</summary>
     public SetupPage(ISettingsService settings, IApiKeyStore keys, GeminiLiveClient live, IUiLocalizer ui,
@@ -63,13 +64,13 @@ public sealed class SetupPage : ContentPage
     {
         using var performance = PerformanceTrace.Measure("settings.construct");
         _settings = settings; _keys = keys; _live = live; _ui = ui; _startup = startup; _speech = speech; _applications = applications; _conversation = conversation;
-        _router = router;
         _fullAccessPreference = fullAccessPreference;
         _legacyCleanup = legacyCleanup;
         _chatGpt = new ChatGptSettingsView(chatGpt, chatGptBrokerSetup, ui, settings.Current);
         _model = new ProviderModelPicker(modelCatalogue, ui, "gemini", () => string.IsNullOrWhiteSpace(_key.Text) ? _keys.Read() : _key.Text.Trim());
         _createdCulture = ui.Culture.Name;
         LauraSettings current = settings.Current;
+        _baseline = DraftBaseline(current);
         _cloudEnabled = Toggle(current.GenerativeAi.Enabled);
         Title = ui.Get("ui.maui.setup"); BackgroundColor = Theme.Background; NavigationPage.SetHasNavigationBar(this, false);
         _voice = Theme.Picker(GeminiLiveOptions.Voices, current.GenerativeAi.LiveVoice);
@@ -135,6 +136,7 @@ public sealed class SetupPage : ContentPage
     public void ReloadFromSettings()
     {
         var current = _settings.Current;
+        _baseline = DraftBaseline(current);
         _chatGpt.Reload(current);
         _cloudEnabled.IsToggled = current.GenerativeAi.Enabled;
         _key.Text = ""; _key.IsPassword = true; _revealKey.Source = Theme.IconSource("eye");
@@ -326,7 +328,8 @@ public sealed class SetupPage : ContentPage
     /// <summary>Shows a fixed mask for a stored credential without placing the secret or a fake key in editable text.</summary>
     private void RefreshKeyState()
     {
-        bool saved = !string.IsNullOrWhiteSpace(_keys.Read());
+        CredentialState state = _keys.Inspect();
+        bool saved = state != CredentialState.NotConfigured;
         _key.Placeholder = saved ? "••••••••••••••••" : _ui.Get("ui.maui.keyPlaceholder");
         _key.PlaceholderColor = saved ? Theme.Text : Theme.Muted;
         if (string.IsNullOrEmpty(_key.Text))
@@ -334,8 +337,8 @@ public sealed class SetupPage : ContentPage
             _key.IsPassword = true; _revealKey.Source = Theme.IconSource("eye");
             Theme.DescribeAction(_revealKey, _ui.Get("ui.settings.revealKey"));
         }
-        _keyState.Text = _ui.Get(saved ? "ui.maui.keySaved" : "ui.maui.noKey");
-        _providerState.Text = _ui.Get(saved ? "ui.settings.configured" : "ui.settings.notConfigured");
+        _keyState.Text = _ui.Get("ui.credential." + state);
+        _providerState.Text = _ui.Get("ui.credential." + _live.CredentialState);
         _providerState.TextColor = saved ? Theme.Text : Theme.Muted;
     }
     /// <summary>Refreshes application discovery in the background.</summary>
@@ -402,7 +405,7 @@ public sealed class SetupPage : ContentPage
         }
     }
     /// <summary>Removes the credential and closes the previous connection.</summary>
-    private async Task RemoveKeyAsync() { await _router.ResetSessionAsync(() => { _keys.Save(""); return Task.CompletedTask; }).ConfigureAwait(true); _key.Text = ""; RefreshKeyState(); }
+    private async Task RemoveKeyAsync() { await _live.ResetSessionAsync(() => { _keys.Save(""); return Task.CompletedTask; }).ConfigureAwait(true); _key.Text = ""; RefreshKeyState(); }
     /// <summary>Offers explicit cleanup of verified Laura-owned former model files without removing shared or edited artifacts.</summary>
     private async Task CleanLegacyModelsAsync()
     {
@@ -411,8 +414,17 @@ public sealed class SetupPage : ContentPage
         int removed = await Task.Run(() => _legacyCleanup.CleanModelsAsync()).ConfigureAwait(true);
         _result.Text = string.Format(_ui.Culture, _ui.Get("ui.legacy.cleanupResult"), removed);
     }
-    /// <summary>Saves all tabs through the existing settings service.</summary>
+    /// <summary>Serializes save gestures so credential validation and writes cannot overlap.</summary>
     private async Task<bool> SaveAsync()
+    {
+        if (_saving) { return false; }
+        _saving = true;
+        try { return await SaveCoreAsync().ConfigureAwait(true); }
+        finally { _saving = false; }
+    }
+
+    /// <summary>Saves the captured draft, preserving unrelated concurrent changes and provider sessions.</summary>
+    private async Task<bool> SaveCoreAsync()
     {
         if (_permissions.Options.Mode == Laura.Core.Permissions.ApprovalMode.FullAccess
             && _settings.Current.Permissions.Mode != Laura.Core.Permissions.ApprovalMode.FullAccess)
@@ -421,21 +433,49 @@ public sealed class SetupPage : ContentPage
                 _ui.Get("ui.permissions.fullAccessWarning"), _ui.Get("ui.permissions.fullAccessConfirm"), _ui.Get("ui.permissions.fullAccessCancel")).ConfigureAwait(true)) { return false; }
         }
         string? candidate = string.IsNullOrWhiteSpace(_key.Text) ? null : _key.Text.Trim();
-        bool configured = _cloudEnabled.IsToggled && (candidate is not null || !string.IsNullOrWhiteSpace(_keys.Read()));
+        // Enablement is owner consent, not the outcome of a transient credential read.
+        bool configured = _cloudEnabled.IsToggled;
+        LauraSettings draft = CaptureDraft(configured);
         if (candidate is not null)
         {
             _result.Text = _ui.Get("ui.maui.validatingKey");
             using var validation = new CancellationTokenSource(TimeSpan.FromSeconds(45));
             try
             {
-                await _live.ValidateCredentialAsync(candidate, _settings.Current.GenerativeAi with
-                    { Model = _model.Text ?? "", LiveVoice = _voice.SelectedItem as string ?? "Aoede" },
-                    _culture.SelectedItem as string ?? "pt-BR", validation.Token).ConfigureAwait(true);
+                await _live.ValidateCredentialAsync(candidate, draft.GenerativeAi, draft.Culture, validation.Token).ConfigureAwait(true);
             }
             catch (Exception error) when (error is InvalidOperationException or System.Net.WebSockets.WebSocketException or IOException or OperationCanceledException)
             { _result.Text = _ui.Get("ui.maui.invalidKey"); return false; }
         }
-        LauraSettings updated = _settings.Current with
+        LauraSettings baseline = _baseline;
+        LauraSettings merged = SettingsDraft.Merge(baseline, draft, _settings.Current);
+        bool resetGemini = candidate is not null || merged.GenerativeAi != _settings.Current.GenerativeAi
+            || merged.Voice != _settings.Current.Voice || merged.InputDevice != _settings.Current.InputDevice
+            || merged.OutputDevice != _settings.Current.OutputDevice || merged.Culture != _settings.Current.Culture;
+        LauraSettings updated = merged;
+        // Persist captured edits against the latest serialized state.
+        async Task PersistAsync()
+        {
+            _fullAccessPreference.Save(merged.Permissions.Mode == Laura.Core.Permissions.ApprovalMode.FullAccess);
+            if (candidate is not null) { _keys.Save(candidate); }
+            updated = await _settings.UpdateAsync(current => SettingsDraft.Merge(baseline, draft, current)).ConfigureAwait(false);
+        }
+        if (resetGemini) { await _live.ResetSessionAsync(PersistAsync).ConfigureAwait(true); }
+        else { await PersistAsync().ConfigureAwait(true); }
+        _baseline = draft;
+        if (candidate is not null && _key.Text?.Trim() == candidate) { _key.Text = ""; }
+        if (candidate is not null) { await _model.RefreshAsync(true).ConfigureAwait(true); }
+        _ui.SetCulture(updated.ResolveUiCulture());
+        if (_startup.IsEnabled() != updated.StartWithWindows) { _startup.SetEnabled(updated.StartWithWindows); }
+        RefreshKeyState(); _result.Text = _ui.Get("ui.maui.saved"); return true;
+    }
+
+    /// <summary>Normalizes displayed defaults for change detection without rewriting untouched persisted model choices.</summary>
+    private static LauraSettings DraftBaseline(LauraSettings current) => current with
+    { GenerativeAi = current.GenerativeAi with { Model = string.IsNullOrWhiteSpace(current.GenerativeAi.Model) ? GeminiLiveOptions.Model : current.GenerativeAi.Model } };
+
+    /// <summary>Captures native fields before asynchronous validation can yield to further edits.</summary>
+    private LauraSettings CaptureDraft(bool configured) => _baseline with
         {
             ChatGpt = _chatGpt.Options, ProviderSelection = _chatGpt.Selection,
             Culture = _culture.SelectedItem as string ?? "pt-BR", UiCulture = _uiCulture.SelectedItem as string ?? "pt-BR",
@@ -444,21 +484,9 @@ public sealed class SetupPage : ContentPage
             InputDevice = _inputIds[Math.Max(0, _input.SelectedIndex)], OutputDevice = _outputIds[Math.Max(0, _output.SelectedIndex)],
             GreetOnStartup = _greeting.IsToggled, AnnounceHourly = _hourly.IsToggled, StartWithWindows = _autoStart.IsToggled,
             Permissions = _permissions.Options, Screenshots = _screenshots.Options,
-            Voice = _settings.Current.Voice with { VoiceName = null, Volume = (int)_volume.Value },
-            GenerativeAi = _settings.Current.GenerativeAi with { Enabled = configured, Provider = "gemini", Model = _model.Text ?? "", Persona = (_persona.Text ?? "").ReplaceLineEndings(" "), LiveVoice = _voice.SelectedItem as string ?? "Aoede", ContinuousListening = true, SilenceDurationMs = (int)_silence.Value }
+            Voice = _baseline.Voice with { Volume = (int)_volume.Value },
+            GenerativeAi = _baseline.GenerativeAi with { Enabled = configured, Provider = "gemini", Model = _model.Text, Persona = (_persona.Text ?? "").ReplaceLineEndings(" "), LiveVoice = _voice.SelectedItem as string ?? "Aoede", ContinuousListening = true, SilenceDurationMs = (int)_silence.Value }
         };
-        await _router.ResetSessionAsync(async () =>
-        {
-            _fullAccessPreference.Save(updated.Permissions.Mode == Laura.Core.Permissions.ApprovalMode.FullAccess);
-            if (candidate is not null) { _keys.Save(candidate); }
-            await _settings.UpdateAsync(updated).ConfigureAwait(false);
-        }).ConfigureAwait(true);
-        if (candidate is not null && _key.Text?.Trim() == candidate) { _key.Text = ""; }
-        if (candidate is not null) { await _model.RefreshAsync(true).ConfigureAwait(true); }
-        _ui.SetCulture(updated.ResolveUiCulture());
-        if (_startup.IsEnabled() != updated.StartWithWindows) { _startup.SetEnabled(updated.StartWithWindows); }
-        RefreshKeyState(); _result.Text = _ui.Get("ui.maui.saved"); return true;
-    }
     /// <summary>Previews Gemini after applying the language and voice settings.</summary>
     private async Task PreviewAsync()
     {

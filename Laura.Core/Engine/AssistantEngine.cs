@@ -491,6 +491,11 @@ public sealed class AssistantEngine : IAssistantEngine
             PublishConversation(ConversationMessageSource.Assistant, text);
             await _synthesizer.SpeakAsync(request, cancellationToken).ConfigureAwait(false);
         }
+        catch (SpeechUnavailableException)
+        {
+            // Keep the verified text response; an unavailable voice is not a failed objective.
+            _logger.LogWarning("Voice unavailable; the text response remains available.");
+        }
         finally
         {
             SetState(previousState);

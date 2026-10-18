@@ -993,5 +993,15 @@
   "ui.ai.failure.request": "O provedor rejeitou a solicitação. Revise o modelo configurado e os tipos de entrada suportados.",
   "ui.ai.failure.limit": "A operação atingiu o limite de trabalho configurado. Revise o progresso da tarefa antes de retomar.",
   "ui.ai.failure.priorEffects": "Ferramentas podem já ter sido executadas. Confira os resultados da tarefa antes de repetir a solicitação; nenhuma repetição automática foi feita.",
-  "ui.ai.textHint": "Enter envia · Shift + Enter quebra a linha"
+  "ui.ai.textHint": "Enter envia · Shift + Enter quebra a linha",
+  "ui.credential.NotConfigured": "Nenhuma credencial salva",
+  "ui.credential.Stored": "Credencial salva · validação pendente",
+  "ui.credential.Unavailable": "Credencial protegida indisponível",
+  "ui.credential.DecryptionFailed": "Não foi possível descriptografar a credencial",
+  "ui.credential.ValidationPending": "Validando credencial",
+  "ui.credential.Validated": "Credencial validada · sessão conectada",
+  "ui.credential.AuthenticationFailed": "Falha de autenticação · credencial preservada",
+  "ui.credential.NetworkUnavailable": "Rede indisponível · credencial preservada",
+  "ui.voice.provider": "Voz",
+  "ui.voice.disabled": "Voz Gemini desativada nas configurações"
 }

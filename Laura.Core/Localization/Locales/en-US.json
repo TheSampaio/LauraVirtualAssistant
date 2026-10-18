@@ -1040,5 +1040,15 @@
   "ui.ai.failure.request": "The provider rejected the request. Review the configured model and supported inputs.",
   "ui.ai.failure.limit": "The operation reached its configured work budget. Review the task progress before resuming.",
   "ui.ai.failure.priorEffects": "Tools may already have executed. Inspect the task results before repeating the request; no automatic retry was made.",
-  "ui.ai.textHint": "Enter to send · Shift + Enter for a new line"
+  "ui.ai.textHint": "Enter to send · Shift + Enter for a new line",
+  "ui.credential.NotConfigured": "No credential stored",
+  "ui.credential.Stored": "Credential stored · validation pending",
+  "ui.credential.Unavailable": "Protected credential unavailable",
+  "ui.credential.DecryptionFailed": "Protected credential could not be decrypted",
+  "ui.credential.ValidationPending": "Validating credential",
+  "ui.credential.Validated": "Credential validated · session connected",
+  "ui.credential.AuthenticationFailed": "Authentication failed · credential retained",
+  "ui.credential.NetworkUnavailable": "Network unavailable · credential retained",
+  "ui.voice.provider": "Voice",
+  "ui.voice.disabled": "Gemini voice disabled in settings"
 }

@@ -217,8 +217,8 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _devices.Text = DeviceSummary();
         string activeProvider = _services.GetRequiredService<ConversationProviderRouter>().ActiveProvider;
         _emptyTitle.Text = _ui.Get("ui.hud.ready"); _emptyHint.Text = _ui.Get("ui.hud.prompt");
-        _shortcutHint.Text = _ui.Get(activeProvider == "gemini" ? "ui.hud.talkHint" : "ui.ai.textHint");
-        ToolTipProperties.SetText(_shortcutHint, activeProvider == "gemini" ? _ui.Get("ui.maui.shortcutHelp") + "\n" + _ui.Get("ui.hud.hotkey") : _shortcutHint.Text);
+        _shortcutHint.Text = _ui.Get(_live.IsAvailable ? "ui.hud.talkHint" : "ui.ai.textHint");
+        ToolTipProperties.SetText(_shortcutHint, _live.IsAvailable ? _ui.Get("ui.maui.shortcutHelp") + "\n" + _ui.Get("ui.hud.hotkey") : _shortcutHint.Text);
         ToolTipProperties.SetText(_networkMeter, _ui.Get("ui.maui.networkHint"));
         _diskUnavailable.Text = _ui.Get("ui.hud.disksUnavailable");
         RefreshFeedback(); UpdateSendAction(); _nextMetrics = 0;
@@ -238,10 +238,10 @@ public sealed partial class MainPage : ContentPage, IDisposable
     {
         bool muted = _settings.Current.MicrophoneMuted, listening = _live.IsListening;
         string activeProvider = _services.GetRequiredService<ConversationProviderRouter>().ActiveProvider;
-        string providerText = "GEMINI LIVE · " + _settings.Current.GenerativeAi.LiveVoice
+        string providerText = activeProvider.ToUpperInvariant() + " · " + _ui.Get("ui.voice.provider") + ": GEMINI LIVE · " + _settings.Current.GenerativeAi.LiveVoice
             + (_services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().CurrentMode == Laura.Core.Permissions.ApprovalMode.FullAccess ? " · " + _ui.Get("ui.permissions.fullAccess") : "");
         if (_provider.Text != providerText) { _provider.Text = providerText; }
-        bool voiceSupported = activeProvider == "gemini";
+        bool voiceSupported = _live.IsAvailable;
         _listen.IsEnabled = voiceSupported; _microphoneButton.IsEnabled = voiceSupported;
         string micAction = _ui.Get(muted ? "ui.hud.unmute" : "ui.hud.mute");
         _microphoneButton.Source = Theme.IconSource(muted ? "mic_off" : "mic"); _micIcon.Source = _microphoneButton.Source;
@@ -252,7 +252,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _micStatus.Text = _ui.Get(muted ? "ui.maui.muted" : listening && _live.IsSpeaking ? "ui.hud.capturePaused" : listening ? "ui.maui.streaming" : _clapListener.IsCapturing ? "ui.hud.clapLocal" : "ui.maui.micReady");
         _voiceHint.Text = _ui.Get(muted ? "ui.hud.micMuted" : listening ? "ui.maui.listening" : _clapListener.IsCapturing ? "ui.hud.clapArmed" : "ui.hud.micReady");
         _voiceHint.TextColor = listening ? Theme.Accent : Theme.Muted;
-        if (!voiceSupported) { _micStatus.Text = _ui.Get("ui.maui.noKey"); _voiceHint.Text = _micStatus.Text; }
+        if (!voiceSupported) { _micStatus.Text = VoiceUnavailableText(); _voiceHint.Text = _micStatus.Text; }
         string state = _visualMode switch { ReactorMode.Speaking => "Speaking", ReactorMode.Thinking => "Thinking", ReactorMode.Listening => "Listening", ReactorMode.Working => "Working", _ => _reportedStatus };
         _status.Text = state switch { "Ready" => _ui.Get("ui.state.ready"), "Speaking" => _ui.Get("ui.state.speaking"), "Thinking" => _ui.Get("ui.state.thinking"), "Connecting" => _ui.Get("ui.state.connecting"), "Working" => _ui.Get("ui.state.working"), "Listening" => _ui.Get("ui.maui.listening"), "Stopped" => _ui.Get("ui.hud.stopped"), _ => state };
         _status.TextColor = _visualMode == ReactorMode.Speaking ? Theme.Speaking : Theme.Accent;
@@ -260,6 +260,9 @@ public sealed partial class MainPage : ContentPage, IDisposable
     }
     /// <summary>Enables sending only when a draft exists and the previous command has completed.</summary>
     private void UpdateSendAction() => _sendButton.IsEnabled = CanSend();
+    /// <summary>Explains disabled voice separately from protected credential health.</summary>
+    private string VoiceUnavailableText() => !_settings.Current.GenerativeAi.Enabled ? _ui.Get("ui.voice.disabled")
+        : _ui.Get("ui.credential." + _live.CredentialState);
     /// <summary>Checks the same submission condition for typing and action completion.</summary>
     private bool CanSend() => !_clearing && !_conversations.IsResetting && _command is null && !string.IsNullOrWhiteSpace(_draft.Text);
     /// <summary>Opens the native settings workspace.</summary>
@@ -295,7 +298,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     /// <summary>Animates vector rings and refreshes measured system statistics at one-second intervals.</summary>
     private void Tick(object? sender, EventArgs args)
     {
-        _core.Mode = _smokeMode ?? (_live.IsSpeaking || _engine.State == AssistantState.Speaking ? ReactorMode.Speaking : _live.IsThinking || _engine.State == AssistantState.Thinking ? ReactorMode.Thinking : _live.IsListening ? ReactorMode.Listening : _engine.State == AssistantState.Working ? ReactorMode.Working : ReactorMode.Idle);
+        _core.Mode = _smokeMode ?? (_live.IsSpeaking ? ReactorMode.Speaking : _live.IsThinking || _engine.State == AssistantState.Thinking ? ReactorMode.Thinking : _live.IsListening ? ReactorMode.Listening : _engine.State == AssistantState.Working ? ReactorMode.Working : ReactorMode.Idle);
         if (_visualMode != _core.Mode) { _visualMode = _core.Mode; RefreshFeedback(); _reactor.Invalidate(); }
         bool animate = _accessibility.AnimationsEnabled;
         long frame = Stopwatch.GetTimestamp();
@@ -423,7 +426,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     /// <summary>Toggles automatic turn detection; a natural speech pause triggers a response without another click.</summary>
     private async Task ToggleListeningAsync()
     {
-        if (_services.GetRequiredService<ConversationProviderRouter>().ActiveProvider != "gemini") { Notice(_ui.Get("ui.maui.noKey")); return; }
+        if (!_live.IsAvailable) { Notice(VoiceUnavailableText()); return; }
         if (_settings.Current.MicrophoneMuted) { await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync("Laura", _ui.Get("ui.maui.unmuteFirst"), "OK").ConfigureAwait(true); return; }
         if (_live.IsListening) { await _live.StopListeningAsync().ConfigureAwait(true); }
         else
@@ -448,7 +451,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     /// <summary>Captures only while the global Ctrl+Space chord is held, including connection cancellation on release.</summary>
     public async Task SetPushToTalkAsync(bool held)
     {
-        if (held && _services.GetRequiredService<ConversationProviderRouter>().ActiveProvider != "gemini") { Notice(_ui.Get("ui.maui.noKey")); return; }
+        if (held && !_live.IsAvailable) { Notice(VoiceUnavailableText()); return; }
         if (!held)
         { var lifetime = _holdLifetime; _holdLifetime = null; lifetime?.Cancel(); await _live.StopListeningAsync().ConfigureAwait(true); lifetime?.Dispose(); Reload(); return; }
         if (_settings.Current.MicrophoneMuted) { _micStatus.Text = _ui.Get("ui.maui.unmuteFirst"); return; }
