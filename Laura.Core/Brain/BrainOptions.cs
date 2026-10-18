@@ -11,6 +11,8 @@ public sealed record BrainOptions
     public bool MaintenanceEnabled { get; init; }
     /// <summary>Gets the maximum characters of recalled data per model turn.</summary>
     public int ContextCharacters { get; init; } = 5000;
+    /// <summary>Gets the fallback full reconciliation interval; file watcher changes still reconcile incrementally each second.</summary>
+    public int ReconciliationSeconds { get; init; } = 300;
     /// <summary>Gets the optional local BERT/WordPiece ONNX model.</summary>
     public string EmbeddingModel { get; init; } = "";
     /// <summary>Gets the matching local WordPiece vocabulary.</summary>
@@ -38,6 +40,7 @@ public sealed record BrainOptions
     {
         Directory = Directory.Trim(), EmbeddingModel = EmbeddingModel.Trim(), EmbeddingVocabulary = EmbeddingVocabulary.Trim(),
         ContextCharacters = Math.Clamp(ContextCharacters, 500, 16000), GraphLimit = Math.Clamp(GraphLimit, 50, 1000),
+        ReconciliationSeconds = Math.Clamp(ReconciliationSeconds, 30, 1800),
         RetrievalGraphDepth = Math.Clamp(RetrievalGraphDepth, 0, 4), RetrievalGraphCandidates = Math.Clamp(RetrievalGraphCandidates, 8, 500),
         RetrievalGraphMilliseconds = Math.Clamp(RetrievalGraphMilliseconds, 5, 250),
         LexicalWeight = Weight(LexicalWeight, .45), SemanticWeight = Weight(SemanticWeight, .3),

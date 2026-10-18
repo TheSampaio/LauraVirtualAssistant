@@ -38,7 +38,7 @@ public static partial class BrainMarkdown
         return new()
         {
             Id = id, Path = path.Replace('\\', '/'), Title = Scalar(map, "title", Scalar(map, "name", System.IO.Path.GetFileNameWithoutExtension(path))),
-            Description = Scalar(map, "description", ""), OriginAgent = Scalar(map, "origin_agent", ""),
+            Description = Scalar(map, "description", ""), OriginAgent = Scalar(map, "origin_agent", ""), LastUpdatedBy = Scalar(map, "last_updated_by", ""),
             Procedure = Node(map, "laura_skill") is YamlMappingNode procedure ? BrainSkillCodec.Read(procedure) : null,
             Type = Scalar(map, "type", path.StartsWith("skills/", StringComparison.OrdinalIgnoreCase) ? "skill" : "document"),
             MemoryType = Scalar(map, "memory_type", "semantic"), Status = Scalar(map, "status", "active"),
@@ -64,6 +64,7 @@ public static partial class BrainMarkdown
         if (note.Type == "skill" && !map.Children.ContainsKey(new YamlScalarNode("name")))
         { map.Children[new YamlScalarNode("name")] = new YamlScalarNode(note.Title); }
         if (note.OriginAgent.Length > 0) { map.Children[new YamlScalarNode("origin_agent")] = new YamlScalarNode(note.OriginAgent); }
+        if (note.LastUpdatedBy.Length > 0) { map.Children[new YamlScalarNode("last_updated_by")] = new YamlScalarNode(note.LastUpdatedBy); }
         map.Children[new YamlScalarNode("tags")] = new YamlSequenceNode(Tags(map).Concat(BrainProvenance.Tags(note)).Distinct(StringComparer.Ordinal).Select(tag => new YamlScalarNode(tag)));
         map.Children[new YamlScalarNode("aliases")] = new YamlSequenceNode(note.Aliases.Select(alias => new YamlScalarNode(alias)));
         map.Children[new YamlScalarNode("relations")] = new YamlSequenceNode(note.Relations.Select(relation => new YamlMappingNode

@@ -6,7 +6,7 @@ public static class BrainProvenance
     /// <summary>Returns the creator color, or null to retain the theme default.</summary>
     public static string? Color(string origin) => origin switch
     {
-        "laura" => "#D83A49", "codex" => "#3B82F6", "claude" => "#F59E0B", _ => null
+        "laura" => "#f63350", "codex" => "#5b6cf6", "claude" => "#d87757", _ => null
     };
 
     /// <summary>Returns creator fill and a separate selection outline so selection never hides provenance.</summary>

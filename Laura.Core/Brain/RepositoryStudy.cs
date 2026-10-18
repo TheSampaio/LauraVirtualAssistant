@@ -74,7 +74,7 @@ public sealed class RepositoryStudy(BrainService brain, BrainSources sources, Pe
                 state.Remote ? [] : selected.Select(file => LocalPath(state.Source, file.Path)).ToArray());
             return await permissions.ExecuteAsync(action, async token =>
             {
-                await brain.RefreshAsync(cancellationToken: token).ConfigureAwait(false);
+                await brain.RefreshIfDirtyAsync(token).ConfigureAwait(false);
                 var files = state.Files.ToDictionary(file => file.Path, StringComparer.Ordinal); var documents = new List<BrainRemoteDocument>();
                 var budget = new RemoteBrainBudget(); string failure = "";
                 try

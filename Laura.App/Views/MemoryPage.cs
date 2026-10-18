@@ -480,7 +480,7 @@ public sealed class MemoryPage : ContentPage
                 {
                     BrainNote? original = _brain.Snapshot.Notes.FirstOrDefault(candidate => candidate.Id == note.Relations.First(relation => relation.Type == "contradicts").Target);
                     if (original is null || !await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync(T("acceptCorrection"), T("confirmCorrection"), T("acceptCorrection"), _ui.Get("ui.maui.cancel")).ConfigureAwait(true)) { return; }
-                    await _brain.SaveAsync(original with { Body = note.Body, Source = "user_reviewed_correction", Relations = note.Relations.Where(relation => relation.Type != "contradicts").ToArray() }).ConfigureAwait(true); await _brain.DeleteAsync(note.Path).ConfigureAwait(true); await OpenAsync(original.Path, true).ConfigureAwait(true);
+                    await _brain.SaveManualAsync(original with { Body = note.Body, Source = "user_reviewed_correction", Relations = note.Relations.Where(relation => relation.Type != "contradicts").ToArray() }).ConfigureAwait(true); await _brain.DeleteAsync(note.Path).ConfigureAwait(true); await OpenAsync(original.Path, true).ConfigureAwait(true);
                 }));
             }
         }
@@ -558,7 +558,7 @@ public sealed class MemoryPage : ContentPage
     }
     /// <summary>Creates a user-named note under a stable identity.</summary>
     private async Task NewAsync()
-    { if (!await CanLeaveAsync().ConfigureAwait(true)) { return; } string? path = await Laura.App.Platforms.Windows.WindowsDialogs.PromptAsync(T("new"), T("relativePath"), initialValue: "Inbox/note.md").ConfigureAwait(true); if (string.IsNullOrWhiteSpace(path)) { return; } BrainNote saved = await _brain.SaveAsync(new BrainNote { Path = path, Title = Path.GetFileNameWithoutExtension(path), Body = "# " + Path.GetFileNameWithoutExtension(path) + "\n" }).ConfigureAwait(true); await OpenAsync(saved.Path, false).ConfigureAwait(true); SetMode("edit"); }
+    { if (!await CanLeaveAsync().ConfigureAwait(true)) { return; } string? path = await Laura.App.Platforms.Windows.WindowsDialogs.PromptAsync(T("new"), T("relativePath"), initialValue: "Inbox/note.md").ConfigureAwait(true); if (string.IsNullOrWhiteSpace(path)) { return; } BrainNote saved = await _brain.SaveManualAsync(new BrainNote { Path = path, Title = Path.GetFileNameWithoutExtension(path), Body = "# " + Path.GetFileNameWithoutExtension(path) + "\n" }).ConfigureAwait(true); await OpenAsync(saved.Path, false).ConfigureAwait(true); SetMode("edit"); }
     /// <summary>Creates only a user-requested folder.</summary>
     private async Task FolderAsync() { string? path = await Laura.App.Platforms.Windows.WindowsDialogs.PromptAsync(T("folder"), T("relativePath")).ConfigureAwait(true); if (!string.IsNullOrWhiteSpace(path)) { await _brain.CreateFolderAsync(path).ConfigureAwait(true); await RefreshFilesAsync().ConfigureAwait(true); } }
     /// <summary>Saves raw Markdown with a stable identity and the last observed file hash.</summary>
@@ -567,7 +567,7 @@ public sealed class MemoryPage : ContentPage
         if (!_selectedPath.EndsWith(".md", StringComparison.OrdinalIgnoreCase)) { return; }
         BrainNote parsed = _editingSource || _selected is null ? BrainMarkdown.Parse(_editor.Text ?? "", _selectedPath) : _selected with { Body = _editor.Text ?? "" };
         if (_selected is not null && parsed.Id != _selected.Id) { throw new FormatException("Editing cannot change a stable note id; duplicate instead."); }
-        _selected = await _brain.SaveAsync(parsed with { Hash = _observedHash }).ConfigureAwait(true); await OpenAsync(_selected.Path, false, true).ConfigureAwait(true); _status.Text = T("saved");
+        _selected = await _brain.SaveManualAsync(parsed with { Hash = _observedHash }).ConfigureAwait(true); await OpenAsync(_selected.Path, false, true).ConfigureAwait(true); _status.Text = T("saved");
     }
     /// <summary>Renames a selected note while preserving former link aliases.</summary>
     private async Task RenameAsync()
@@ -588,7 +588,7 @@ public sealed class MemoryPage : ContentPage
         string? id = title is null ? null : BrainService.ResolveLink(title, _selected.Path, _brain.Snapshot.Notes); if (id is null) { _status.Text = T("ambiguous"); return; }
         string? relation = await Laura.App.Platforms.Windows.WindowsDialogs.ChooseAsync(T("relation"), _ui.Get("ui.maui.cancel"), null, BrainMarkdown.RelationTypes.Order(StringComparer.Ordinal).ToArray()).ConfigureAwait(true); if (relation is null || !BrainMarkdown.RelationTypes.Contains(relation)) { return; }
         string? evidence = await Laura.App.Platforms.Windows.WindowsDialogs.PromptAsync(T("relation"), T("evidence")).ConfigureAwait(true); if (string.IsNullOrWhiteSpace(evidence)) { return; }
-        _selected = await _brain.SaveAsync(_selected with { Relations = _selected.Relations.Concat([new BrainRelation(id, relation, .7, .8, evidence)]).ToArray() }).ConfigureAwait(true); await OpenAsync(_selected.Path, false).ConfigureAwait(true);
+        _selected = await _brain.SaveManualAsync(_selected with { Relations = _selected.Relations.Concat([new BrainRelation(id, relation, .7, .8, evidence)]).ToArray() }).ConfigureAwait(true); await OpenAsync(_selected.Path, false).ConfigureAwait(true);
     }
     /// <summary>Imports Markdown as disabled instructions without executing scripts or installing dependencies.</summary>
     private async Task ImportSkillAsync()

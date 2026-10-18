@@ -145,6 +145,7 @@ public sealed class IniSettingsStore : ISettingsStore
                 AutoLearn = document.GetBoolean("Brain", "AutoLearn", true),
                 MaintenanceEnabled = document.GetBoolean("Brain", "MaintenanceEnabled", false),
                 ContextCharacters = document.GetInt32("Brain", "ContextCharacters", 5000),
+                ReconciliationSeconds = document.GetInt32("Brain", "ReconciliationSeconds", 300),
                 EmbeddingModel = document.GetString("Brain", "EmbeddingModel", ""),
                 EmbeddingVocabulary = document.GetString("Brain", "EmbeddingVocabulary", ""),
                 LexicalWeight = document.GetDouble("Brain", "LexicalWeight", .45), SemanticWeight = document.GetDouble("Brain", "SemanticWeight", .3),
@@ -233,6 +234,7 @@ public sealed class IniSettingsStore : ISettingsStore
         document.SetBoolean("Brain", "AutoLearn", settings.Brain.AutoLearn);
         document.SetBoolean("Brain", "MaintenanceEnabled", settings.Brain.MaintenanceEnabled);
         document.SetNumber("Brain", "ContextCharacters", settings.Brain.ContextCharacters);
+        document.SetNumber("Brain", "ReconciliationSeconds", settings.Brain.ReconciliationSeconds);
         document.Set("Brain", "EmbeddingModel", settings.Brain.EmbeddingModel);
         document.Set("Brain", "EmbeddingVocabulary", settings.Brain.EmbeddingVocabulary);
         document.SetNumber("Brain", "LexicalWeight", settings.Brain.LexicalWeight);

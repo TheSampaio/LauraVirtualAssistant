@@ -78,7 +78,7 @@ public sealed class BrainExperiences(BrainService brain, ISettingsService settin
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            string vault = brain.Location; await brain.RefreshAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+            string vault = brain.Location; await brain.RefreshIfDirtyAsync(cancellationToken).ConfigureAwait(false);
             BrainNote? source = brain.Snapshot.Notes.SingleOrDefault(note => note.Id == noteId && note.Hash == expectedHash && note.IsKnowledge && note.Type == "experience" && note.Verification == "observed_execution");
             if (source is null || !source.Body.Contains(evidence, StringComparison.Ordinal)) { return new("rejected", Reason: "Missing current execution evidence."); }
             string key = "reflection." + source.Id + "." + source.Hash;

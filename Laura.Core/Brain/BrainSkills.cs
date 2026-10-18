@@ -22,7 +22,7 @@ public sealed partial class BrainSkills(BrainService brain, ISettingsService set
     public async Task<BrainNote> SetEnabledAsync(BrainNote note, bool enabled, CancellationToken cancellationToken = default)
     {
         if (note.Type != "skill") { throw new InvalidOperationException("Selected document is not a skill."); }
-        await brain.RefreshAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        await brain.RefreshIfDirtyAsync(cancellationToken).ConfigureAwait(false);
         if (!Current(note)) { throw new IOException("Review the current exact skill version."); }
         if (enabled && Inspect(note).Missing.Count > 0) { throw new InvalidOperationException("Skill requirements or source versions are unavailable; review its availability details."); }
         BrainNote saved = await brain.SaveAsync(note with { Status = enabled ? "active" : "draft" }, cancellationToken).ConfigureAwait(false);

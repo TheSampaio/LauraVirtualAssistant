@@ -5,11 +5,28 @@ namespace Laura.Core.Tests.Brain;
 /// <summary>Exercises provenance with synthetic Markdown and isolated vaults.</summary>
 public sealed partial class BrainTests
 {
+    /// <summary>Editing changes the latest actor while the creator, its tag and its color remain stable.</summary>
+    [Fact]
+    public async Task ManualEditPreservesCreatorAndRecordsActualLatestEditor()
+    {
+        BrainService brain = Create();
+        BrainNote note = await brain.SaveAsync(Note("Knowledge/actor.md", "Actors", "Original") with { OriginAgent = "codex" });
+        Assert.Equal("laura", note.LastUpdatedBy);
+        BrainNote edited = await brain.SaveManualAsync(note with { Body = "Owner correction", OriginAgent = "claude", LastUpdatedBy = "forged" });
+        Assert.Equal("codex", edited.OriginAgent); Assert.Equal("manual", edited.LastUpdatedBy);
+        Assert.Contains("origin/codex", edited.Tags);
+        BrainService restarted = Create(cache: "actor-restart"); await restarted.InitializeAsync();
+        BrainNote restored = restarted.Snapshot.Notes.Single(item => item.Id == note.Id);
+        Assert.Equal("codex", restored.OriginAgent); Assert.Equal("manual", restored.LastUpdatedBy);
+        BrainNote legacy = BrainMarkdown.Parse("Legacy content without attribution.", "legacy.md");
+        Assert.Empty(legacy.OriginAgent); Assert.Empty(legacy.LastUpdatedBy);
+    }
+
     /// <summary>Checks the three creator categories and the neutral fallback.</summary>
     [Theory]
-    [InlineData("laura", "#D83A49")]
-    [InlineData("codex", "#3B82F6")]
-    [InlineData("claude", "#F59E0B")]
+    [InlineData("laura", "#f63350")]
+    [InlineData("codex", "#5b6cf6")]
+    [InlineData("claude", "#d87757")]
     [InlineData("", null)]
     [InlineData("unknown", null)]
     public void CreatorColorsAndMetadataRoundTrip(string origin, string? color)
@@ -63,7 +80,7 @@ public sealed partial class BrainTests
     {
         BrainService brain = Create();
         BrainNote saved = await brain.SaveAsync(Note("conflict.md", "Synthetic", "Synthetic") with { OriginAgent = "codex", Tags = ["origin/claude"] });
-        Assert.Equal("#3B82F6", BrainProvenance.Color(saved.OriginAgent));
+        Assert.Equal("#5b6cf6", BrainProvenance.Color(saved.OriginAgent));
         Assert.Contains("origin/claude", saved.Tags); Assert.Contains("origin/codex", saved.Tags);
         Assert.Contains(brain.Snapshot.Issues, issue => issue.Path == saved.Path && issue.Code == "origin_tag_conflict");
     }
@@ -90,9 +107,12 @@ public sealed partial class BrainTests
         var storage = new FileBrainStorage(brain.Location);
         const string path = ".obsidian/graph.json";
         Assert.ThrowsAny<IOException>(() => storage.Read(path));
-        storage.Write(path, "{\"showTags\":false,\"custom\":{\"kept\":true},\"colorGroups\":[{\"query\":\"tag:#personal\",\"color\":{\"a\":1,\"rgb\":123}}]}", null);
+        const string original = "{\"showTags\":false,\"custom\":{\"kept\":true},\"colorGroups\":[{\"query\":\"tag:#personal\",\"color\":{\"a\":1,\"rgb\":123}},{\"query\":\"tag:#origin/codex\",\"color\":{\"a\":1,\"rgb\":123}}]}";
+        storage.Write(path, original, null);
         await brain.ConfigureObsidianGroupsAsync(); string first = storage.Read(path);
         await brain.ConfigureObsidianGroupsAsync(); Assert.Equal(first, storage.Read(path));
+        string backup = Assert.Single(storage.EnumerateFiles(), file => file.StartsWith(".obsidian/LauraBackups/", StringComparison.Ordinal));
+        Assert.Equal(original, storage.Read(backup));
         using var document = System.Text.Json.JsonDocument.Parse(first);
         Assert.False(document.RootElement.GetProperty("showTags").GetBoolean());
         Assert.True(document.RootElement.GetProperty("custom").GetProperty("kept").GetBoolean());
