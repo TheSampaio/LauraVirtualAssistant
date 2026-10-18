@@ -9,6 +9,7 @@ public static class SettingsDraft
         Culture = Choose(baseline.Culture, edited.Culture, current.Culture),
         UiCulture = Choose(baseline.UiCulture, edited.UiCulture, current.UiCulture),
         UserNickname = Choose(baseline.UserNickname, edited.UserNickname, current.UserNickname),
+        WeatherLocation = Choose(baseline.WeatherLocation, edited.WeatherLocation, current.WeatherLocation),
         MicrophoneMuted = Choose(baseline.MicrophoneMuted, edited.MicrophoneMuted, current.MicrophoneMuted),
         RememberConversations = Choose(baseline.RememberConversations, edited.RememberConversations, current.RememberConversations),
         ClapWakeEnabled = Choose(baseline.ClapWakeEnabled, edited.ClapWakeEnabled, current.ClapWakeEnabled),

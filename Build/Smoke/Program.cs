@@ -62,6 +62,8 @@ if (args.Contains("--sandbox-probe", StringComparer.Ordinal))
 { await SandboxSmoke.RunAsync(directory, timeout.Token); return 0; }
 if (args.Contains("--powershell-smoke", StringComparer.Ordinal))
 { await PowerShellSmoke.RunAsync(directory, timeout.Token); return 0; }
+if (args.Contains("--permission-autonomy-smoke", StringComparer.Ordinal))
+{ await PermissionAutonomySmoke.RunAsync(directory, timeout.Token); return 0; }
 if (args.Contains("--silent-thinking", StringComparer.Ordinal))
 {
     await using var live = new GeminiLiveClient(settings, new ProtectedApiKeyStore(directory), memory, Array.Empty<ISkill>(), new SmokeShell());

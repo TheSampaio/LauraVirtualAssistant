@@ -53,6 +53,8 @@ public sealed record LauraSettings
     /// so a fresh install still greets the user by name.
     /// </summary>
     public string UserNickname { get; init; } = string.Empty;
+    /// <summary>Gets an optional city for weather queries; empty uses provider IP detection.</summary>
+    public string WeatherLocation { get; init; } = string.Empty;
 
     /// <summary>Gets the voice timbre.</summary>
     public VoiceProfile Voice { get; init; } = VoiceProfile.Default;
@@ -122,6 +124,7 @@ public sealed record LauraSettings
             OutputDevice = Math.Max(-1, OutputDevice),
             ClapWakeSensitivity = Math.Clamp(ClapWakeSensitivity, 0, 100),
             UserNickname = UserNickname.Trim(),
+            WeatherLocation = SanitizeWeatherLocation(WeatherLocation),
             Voice = Voice.Sanitized(),
             GenerativeAi = GenerativeAi.Sanitized(),
             ChatGpt = ChatGpt.Sanitized(),
@@ -132,5 +135,12 @@ public sealed record LauraSettings
             Permissions = Permissions.Sanitized(),
             Screenshots = Screenshots.Sanitized(),
         };
+    }
+
+    /// <summary>Bounds a user-entered weather place to a single short line.</summary>
+    private static string SanitizeWeatherLocation(string? value)
+    {
+        string cleaned = (value ?? string.Empty).ReplaceLineEndings(" ").Trim();
+        return cleaned.Length <= 100 ? cleaned : cleaned[..100];
     }
 }

@@ -52,7 +52,8 @@ public static class PermissionSmokeRunner
                 await CaptureAsync(independent, Path.Combine(directory, "approval-" + state + ".png")).ConfigureAwait(true);
                 center.InvokeForSmoke("once");
                 var result = await pending.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
-                if (!File.Exists(path) || !result.Text.StartsWith("File written:", StringComparison.Ordinal)) { throw new InvalidOperationException("Approved tool failed to dispatch the actual write."); }
+                if (result.Failed || !File.Exists(path) || await File.ReadAllTextAsync(path).ConfigureAwait(true) != "# Synthetic permission integration\n")
+                { throw new InvalidOperationException("Approved tool failed to dispatch the actual write."); }
                 results.Add(state + ": independent UI, actual approval button, real file write passed.");
             }
             string deniedPath = Path.Combine(targets, "denied.md");
@@ -81,6 +82,44 @@ public static class PermissionSmokeRunner
             }
             using (var arguments = JsonDocument.Parse(JsonSerializer.Serialize(new { action = "write", path = Path.Combine(services.GetRequiredService<AssistantStorage>().Directory, "Security", "permissions.json"), content = "malicious policy" })))
             { await tools.ExecuteAsync("file_control", arguments.RootElement, CancellationToken.None).ConfigureAwait(true); if (permissions.PendingRequests.Count != 0) { throw new InvalidOperationException("Tool offered an approval for its security storage."); } results.Add("Generic model file tools cannot alter application/security storage."); }
+            await settings.UpdateAsync(settings.Current with { Permissions = settings.Current.Permissions with { Mode = ApprovalMode.Automatic } }).ConfigureAwait(true);
+            services.GetRequiredService<Laura.Core.Abstractions.IConversationMemory>().SetWorkingContext(
+                new Laura.Core.Conversation.ConversationWorkingContext(Guid.NewGuid(), "Create a code file in Laura Workspace."));
+            string workspace = Path.Combine(services.GetRequiredService<AssistantStorage>().Directory, "Workspace");
+            Directory.CreateDirectory(workspace);
+            string automaticFile = Path.Combine(workspace, "AutomaticProgram.cs");
+            using (var arguments = JsonDocument.Parse(JsonSerializer.Serialize(new { action = "write", path = automaticFile, content = "class AutomaticFixture {}" })))
+            {
+                AssistantToolResult result = await tools.ExecuteAsync("file_control", arguments.RootElement, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+                if (result.Failed || !File.Exists(automaticFile) || permissions.PendingRequests.Count != 0
+                    || permissions.History[^1].Outcome != ApprovalOutcome.Automatic) { throw new InvalidOperationException("Automatic task write required review or failed to create code."); }
+                results.Add("Automatic mode created a real code file in the assigned Workspace without a pending approval.");
+            }
+            await settings.UpdateAsync(settings.Current with { Permissions = settings.Current.Permissions with { Mode = ApprovalMode.FullAccess } }).ConfigureAwait(true);
+            if (permissions.CurrentMode != ApprovalMode.Ask) { throw new InvalidOperationException("Saved full access became active without a native owner gesture."); }
+            permissions.ActivateFullAccess();
+            shell.RevealForConfirmation(); await Task.Delay(150).ConfigureAwait(true);
+            await CaptureAsync(native, Path.Combine(directory, "full-access-hud.png")).ConfigureAwait(true);
+            string fullAccessFile = Path.Combine(targets, "full-access.md");
+            using (var arguments = JsonDocument.Parse(JsonSerializer.Serialize(new { action = "write", path = fullAccessFile, content = "# Native full-access fixture" })))
+            {
+                AssistantToolResult result = await tools.ExecuteAsync("file_control", arguments.RootElement, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+                if (result.Failed || !File.Exists(fullAccessFile) || permissions.PendingRequests.Count != 0
+                    || !permissions.History[^1].Reason.Contains("full_access", StringComparison.Ordinal)) { throw new InvalidOperationException("Activated full access did not dispatch the real tool."); }
+                results.Add("Session-activated full access created a real external fixture file without per-action approval.");
+            }
+            permissions.DeactivateFullAccess();
+            string revokedFile = Path.Combine(targets, "full-access-revoked.md");
+            using (var arguments = JsonDocument.Parse(JsonSerializer.Serialize(new { action = "write", path = revokedFile, content = "must not write" })))
+            {
+                Task<AssistantToolResult> pending = tools.ExecuteAsync("file_control", arguments.RootElement, CancellationToken.None);
+                await WaitPendingAsync(permissions).ConfigureAwait(true);
+                permissions.Decide(permissions.PendingRequests.Single().Id, ApprovalChoice.Deny);
+                await pending.ConfigureAwait(true);
+                if (File.Exists(revokedFile)) { throw new InvalidOperationException("Revoked full access dispatched an unapproved write."); }
+                results.Add("Turning off full access immediately restored native review and denial.");
+            }
+            await settings.UpdateAsync(settings.Current with { Permissions = settings.Current.Permissions with { Mode = ApprovalMode.Ask } }).ConfigureAwait(true);
             shell.RevealForConfirmation();
             var setup = services.GetRequiredService<Views.SetupPage>();
             await ((NavigationPage)main.Page!).PushAsync(setup, false).ConfigureAwait(true); setup.SelectTab(4); await Task.Delay(250).ConfigureAwait(true);

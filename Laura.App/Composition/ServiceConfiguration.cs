@@ -153,6 +153,7 @@ public static class ServiceConfiguration
         // A short timeout keeps a slow network from making the weather skill hang.
         services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromSeconds(8) });
         services.AddSingleton<IWeatherProvider, WttrWeatherProvider>();
+        services.AddSingleton<WeatherGreetingFormatter>();
 
         services.AddSingleton<GeminiLiveClient>();
         services.AddSingleton<ListeningControl>();

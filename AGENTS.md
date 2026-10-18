@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 Guidelines for working in this repository. Read this before changing code.
 

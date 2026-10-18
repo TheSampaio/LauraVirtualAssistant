@@ -160,6 +160,7 @@ public sealed class IniSettingsStore : ISettingsStore
             StartWithWindows = document.GetBoolean(GeneralSection, "StartWithWindows", defaults.StartWithWindows),
 
             UserNickname = document.GetString(UserSection, "Nickname", defaults.UserNickname),
+            WeatherLocation = document.GetString(GeneralSection, "WeatherLocation", defaults.WeatherLocation),
 
             Voice = new VoiceProfile
             {
@@ -251,6 +252,7 @@ public sealed class IniSettingsStore : ISettingsStore
         document.SetBoolean(GeneralSection, "StartWithWindows", settings.StartWithWindows);
 
         document.Set(UserSection, "Nickname", settings.UserNickname);
+        document.Set(GeneralSection, "WeatherLocation", settings.WeatherLocation);
 
         document.Set(VoiceSection, "Voice", settings.Voice.VoiceName ?? string.Empty);
         document.SetNumber(VoiceSection, "Rate", settings.Voice.Rate);

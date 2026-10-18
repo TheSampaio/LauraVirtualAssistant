@@ -50,6 +50,56 @@ public static class LocalizationKeys
 
         /// <summary>Date-and-time summary spoken at startup.</summary>
         public const string Summary = "greeting.summary";
+        /// <summary>Observed weather and forecast phrases.</summary>
+        public const string WeatherCurrent = "greeting.weather.current";
+        /// <summary>Forecast condition when no current observation is available.</summary>
+        public const string WeatherForecastCondition = "greeting.weather.forecastCondition";
+        /// <summary>Sunny observed condition.</summary>
+        public const string WeatherSunny = "greeting.weather.sunny";
+        /// <summary>Clear nighttime condition.</summary>
+        public const string WeatherClear = "greeting.weather.clear";
+        /// <summary>Partially cloudy observed condition.</summary>
+        public const string WeatherPartlyCloudy = "greeting.weather.partlyCloudy";
+        /// <summary>Cloudy observed condition.</summary>
+        public const string WeatherCloudy = "greeting.weather.cloudy";
+        /// <summary>Rainy observed condition.</summary>
+        public const string WeatherRaining = "greeting.weather.raining";
+        /// <summary>Heavy rainy observed condition.</summary>
+        public const string WeatherHeavyRaining = "greeting.weather.heavyRaining";
+        /// <summary>Stormy observed condition.</summary>
+        public const string WeatherStorming = "greeting.weather.storming";
+        /// <summary>Snowy observed condition.</summary>
+        public const string WeatherSnowing = "greeting.weather.snowing";
+        /// <summary>Possible forecast rain.</summary>
+        public const string WeatherRain = "greeting.weather.rain";
+        /// <summary>Forecast heavy rain.</summary>
+        public const string WeatherHeavyRain = "greeting.weather.heavyRain";
+        /// <summary>Possible thunderstorms.</summary>
+        public const string WeatherThunder = "greeting.weather.thunder";
+        /// <summary>Explicit low rain probability.</summary>
+        public const string WeatherNoRain = "greeting.weather.noRain";
+        /// <summary>Forecast temperature range.</summary>
+        public const string WeatherTemperatures = "greeting.weather.temperatures";
+        /// <summary>Forecast minimum when the maximum is unavailable.</summary>
+        public const string WeatherMinimum = "greeting.weather.minimum";
+        /// <summary>Forecast maximum when the minimum is unavailable.</summary>
+        public const string WeatherMaximum = "greeting.weather.maximum";
+        /// <summary>Provider-issued weather alert.</summary>
+        public const string WeatherAlert = "greeting.weather.alert";
+        /// <summary>Near-term forecast period.</summary>
+        public const string WeatherNextHours = "greeting.weather.nextHours";
+        /// <summary>Morning forecast period.</summary>
+        public const string WeatherMorning = "greeting.weather.morning";
+        /// <summary>Afternoon forecast period.</summary>
+        public const string WeatherAfternoon = "greeting.weather.afternoon";
+        /// <summary>Evening forecast period.</summary>
+        public const string WeatherEvening = "greeting.weather.evening";
+        /// <summary>Overnight forecast period.</summary>
+        public const string WeatherOvernight = "greeting.weather.overnight";
+        /// <summary>Tomorrow morning forecast period.</summary>
+        public const string WeatherTomorrowMorning = "greeting.weather.tomorrowMorning";
+        /// <summary>Dated Banco Central sale reference.</summary>
+        public const string CurrencyReference = "greeting.currency.reference";
 
         /// <summary>Announcement of any full hour.</summary>
         public const string HourlyChime = "greeting.hourlyChime";

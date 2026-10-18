@@ -5,8 +5,10 @@ public enum ApprovalMode
 {
     /// <summary>Ask for every ungranted protected effect.</summary>
     Ask,
-    /// <summary>Also honor explicit directory and bounded installed-application opening policies.</summary>
-    Automatic
+    /// <summary>Run eligible native task operations and bounded installed-application profiles automatically.</summary>
+    Automatic,
+    /// <summary>Run registered effects without per-operation review after native session activation.</summary>
+    FullAccess
 }
 /// <summary>When the existing voice service announces a pending request.</summary>
 public enum ApprovalVoiceMode

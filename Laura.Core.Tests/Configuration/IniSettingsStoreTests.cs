@@ -26,14 +26,14 @@ public sealed class IniSettingsStoreTests : IDisposable
         Assert.Equal(migrated.GenerativeAi, (await store.LoadAsync()).GenerativeAi);
     }
 
-    /// <summary>Retired unrestricted settings migrate to Ask while diagnostics remain intact.</summary>
+    /// <summary>The explicit full-access choice round-trips while diagnostics remain intact.</summary>
     [Fact]
-    public async Task RetiredModeMigratesSafelyAndDiagnosticLevelRoundTrips()
+    public async Task FullAccessChoiceAndDiagnosticLevelRoundTrip()
     {
         var value = LauraSettings.Default with { Permissions = new() { Mode = (Laura.Core.Permissions.ApprovalMode)2 }, DiagnosticLevel = Microsoft.Extensions.Logging.LogLevel.Debug };
         var store = CreateStore(); await store.SaveAsync(value);
         var loaded = await store.LoadAsync();
-        Assert.Equal(Laura.Core.Permissions.ApprovalMode.Ask, loaded.Permissions.Mode);
+        Assert.Equal(Laura.Core.Permissions.ApprovalMode.FullAccess, loaded.Permissions.Mode);
         Assert.Equal(value.DiagnosticLevel, loaded.DiagnosticLevel);
         Assert.Equal(Microsoft.Extensions.Logging.LogLevel.Information, (value with { DiagnosticLevel = (Microsoft.Extensions.Logging.LogLevel)999 }).Sanitized().DiagnosticLevel);
     }

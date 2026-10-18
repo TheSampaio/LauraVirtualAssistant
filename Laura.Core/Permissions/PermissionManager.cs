@@ -20,6 +20,7 @@ public sealed class PermissionManager : IDisposable
     private readonly CancellationTokenSource _lifetime = new();
     private readonly AsyncLocal<string?> _executionAuthorization = new();
     private bool _stopped;
+    private bool _fullAccessActivated;
     private long _resetVersion;
 
     /// <summary>Loads only local persistent grants. An unreadable/corrupt store starts with no grants.</summary>
@@ -36,7 +37,23 @@ public sealed class PermissionManager : IDisposable
     /// <summary>Gets descriptive authorization metadata only inside the current native execution callback; it grants no capability.</summary>
     public string? CurrentAuthorization => _executionAuthorization.Value;
     /// <summary>Gets the effective native mode, including revocation of a separately protected owner preference.</summary>
-    public ApprovalMode CurrentMode => _options().Mode;
+    public ApprovalMode CurrentMode { get { lock (_gate) { return _options().Mode == ApprovalMode.FullAccess && !_fullAccessActivated ? ApprovalMode.Ask : _options().Mode; } } }
+    /// <summary>Activates unrestricted registered effects for this process only after the native owner confirmation.</summary>
+    public void ActivateFullAccess()
+    {
+        lock (_gate)
+        {
+            if (_stopped || _options().Mode != ApprovalMode.FullAccess) { throw new PermissionDeniedException("Full access must first be selected in native settings."); }
+            _fullAccessActivated = true;
+        }
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+    /// <summary>Immediately withdraws the session activation for every new dispatch.</summary>
+    public void DeactivateFullAccess()
+    {
+        lock (_gate) { _fullAccessActivated = false; _grants.RemoveAll(grant => grant.FullAccessDerived); }
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
     /// <summary>Signals UI subscribers; authorization never depends on a model or prompt.</summary>
     public event EventHandler? Changed;
     /// <summary>Gets immutable snapshots of waiting actions.</summary>
@@ -85,9 +102,10 @@ public sealed class PermissionManager : IDisposable
             lock (_gate) { grant = _grants.FirstOrDefault(item => !item.FullAccessDerived && PermissionPolicy.Matches(item, action)); }
             bool nativeConsent = action.UserInitiated && risk <= PermissionRisk.Moderate && action.Operation is PermissionOperation.LocalCapture or PermissionOperation.ScreenshotExport or PermissionOperation.BrainAttachment or PermissionOperation.ClipboardWrite;
             bool automaticPolicy = PermissionPolicy.AllowsAutomatic(action, _options(), _workspaceRoot);
-            bool allowed = automaticPolicy || nativeConsent || action.Operation == PermissionOperation.Internal || grant is not null
+            bool fullAccess = CurrentMode == ApprovalMode.FullAccess;
+            bool allowed = fullAccess || automaticPolicy || nativeConsent || action.Operation == PermissionOperation.Internal || grant is not null
                 && (grant.TaskId != Guid.Empty || _options().Mode == ApprovalMode.Automatic || !grant.DirectoryScope);
-            string authorization = nativeConsent ? "native_gesture" : automaticPolicy ? "automatic_policy" : grant?.TaskId != Guid.Empty && grant is not null ? "task_grant" : grant is not null ? "remembered_grant" : action.Operation == PermissionOperation.Internal ? "internal_policy" : "user_approval";
+            string authorization = fullAccess ? "full_access" : nativeConsent ? "native_gesture" : automaticPolicy ? "automatic_policy" : grant?.TaskId != Guid.Empty && grant is not null ? "task_grant" : grant is not null ? "remembered_grant" : action.Operation == PermissionOperation.Internal ? "internal_policy" : "user_approval";
             if (allowed) { outcome = nativeConsent ? ApprovalOutcome.Approved : ApprovalOutcome.Automatic; }
             else
             {
@@ -134,6 +152,7 @@ public sealed class PermissionManager : IDisposable
                 { throw new PermissionDeniedException("Approval mode changed before dispatch."); }
                 if (grant is { TaskId: var activeTask } && activeTask != Guid.Empty && !PermissionPolicy.Matches(grant, action)) { throw new PermissionDeniedException("Task scope expired before dispatch."); }
                 if (automaticPolicy && !PermissionPolicy.AllowsAutomatic(action, _options(), _workspaceRoot)) { throw new PermissionDeniedException("Automatic policy changed before dispatch."); }
+                if (fullAccess && (_options().Mode != ApprovalMode.FullAccess || !_fullAccessActivated)) { throw new PermissionDeniedException("Full access was deactivated before dispatch."); }
                 if (proposedGrant is not null)
                 { _grants.Add(proposedGrant); try { Save(); } catch { _grants.Remove(proposedGrant); throw; } }
                 cancellationToken.ThrowIfCancellationRequested();
@@ -180,7 +199,7 @@ public sealed class PermissionManager : IDisposable
         }
     }
     /// <summary>Applies retention after settings are loaded or changed; persistence errors remain visible to the caller.</summary>
-    public void RefreshOptions() { lock (_gate) { Save(); } Changed?.Invoke(this, EventArgs.Empty); }
+    public void RefreshOptions() { lock (_gate) { if (_options().Mode != ApprovalMode.FullAccess) { _fullAccessActivated = false; _grants.RemoveAll(grant => grant.FullAccessDerived); } Save(); } Changed?.Invoke(this, EventArgs.Empty); }
     /// <summary>Revokes one grant before persisting. A failed write leaves this process fail closed.</summary>
     public void Revoke(Guid id) { lock (_gate) { _grants.RemoveAll(item => item.Id == id); Save(); } Changed?.Invoke(this, EventArgs.Empty); }
     /// <summary>Requests one native review of project edits and an optional explicit cloud read recipient. Args: taskId: Trusted active task; directory: Existing project root; destination: Actual provider host. Returns: Revocable session-only grant.</summary>
@@ -200,10 +219,11 @@ public sealed class PermissionManager : IDisposable
         return ExecuteAsync(action, token =>
         {
             token.ThrowIfCancellationRequested();
+            bool derived = CurrentAuthorization == "full_access";
             var grant = new PermissionGrant(Guid.NewGuid(), PermissionOperation.WorkspaceAuthorization, "Native tool: file_control", root,
                 action.Fingerprint, DateTimeOffset.UtcNow, false, true) { TaskId = taskId, Expires = DateTimeOffset.UtcNow.AddHours(1), Destination = destination,
-                    FullAccessDerived = false };
-            lock (_gate) { _grants.Add(grant); }
+                    FullAccessDerived = derived };
+            lock (_gate) { if (derived && !_fullAccessActivated) { throw new PermissionDeniedException("Full access ended before task scope creation."); } _grants.Add(grant); }
             return Task.FromResult(grant);
         }, cancellationToken);
     }
@@ -234,10 +254,11 @@ public sealed class PermissionManager : IDisposable
         return ExecuteAsync(action, token =>
         {
             token.ThrowIfCancellationRequested();
+            bool derived = CurrentAuthorization == "full_access";
             var grant = new PermissionGrant(Guid.NewGuid(), PermissionOperation.RepositoryStudyAuthorization, "Repository study", scope,
                 action.Fingerprint, DateTimeOffset.UtcNow, false, !remoteSource) { TaskId = taskId, Expires = DateTimeOffset.UtcNow.AddHours(1), Destination = destination,
-                    FullAccessDerived = false };
-            lock (_gate) { _grants.Add(grant); } return Task.FromResult(grant);
+                    FullAccessDerived = derived };
+            lock (_gate) { if (derived && !_fullAccessActivated) { throw new PermissionDeniedException("Full access ended before task scope creation."); } _grants.Add(grant); } return Task.FromResult(grant);
         }, cancellationToken);
     }
 
@@ -262,7 +283,7 @@ public sealed class PermissionManager : IDisposable
         return Directory.Exists(path) ? "directory:" + Directory.GetCreationTimeUtc(path).Ticks : "absent";
     }).ToArray();
     /// <summary>Cancels waiting work on application shutdown. Never saves session grants.</summary>
-    public void Stop() { lock (_gate) { if (_stopped) { return; } _stopped = true; _resetVersion++; _grants.RemoveAll(item => !item.Persistent); _lifetime.Cancel(); foreach (var item in _pending.Values) { item.Completion.TrySetCanceled(); } } }
+    public void Stop() { lock (_gate) { if (_stopped) { return; } _stopped = true; _fullAccessActivated = false; _resetVersion++; _grants.RemoveAll(item => !item.Persistent); _lifetime.Cancel(); foreach (var item in _pending.Values) { item.Completion.TrySetCanceled(); } } }
     /// <inheritdoc />
     public void Dispose() { Stop(); _lifetime.Dispose(); }
 }

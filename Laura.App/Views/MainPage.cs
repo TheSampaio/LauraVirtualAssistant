@@ -546,10 +546,12 @@ public sealed partial class MainPage : ContentPage, IDisposable
     private void OnApprovalsChanged(object? sender, EventArgs args) => MainThread.BeginInvokeOnMainThread(UpdateApprovals);
     private void UpdateApprovals()
     {
-        int count = _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().PendingRequests.Count;
-        _approvalsButton.Text = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        Theme.DescribeAction(_approvalsButton, _ui.Get("ui.permissions.center") + " · " + count);
-        _approvalsButton.BackgroundColor = count > 0 ? Theme.Primary : Theme.Field;
+        var permissions = _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>();
+        int count = permissions.PendingRequests.Count;
+        bool fullAccess = permissions.CurrentMode == Laura.Core.Permissions.ApprovalMode.FullAccess;
+        _approvalsButton.Text = fullAccess ? _ui.Get("ui.permissions.fullAccessBadge") : count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Theme.DescribeAction(_approvalsButton, _ui.Get("ui.permissions.center") + " · " + (fullAccess ? _ui.Get("ui.permissions.fullAccessActive") : count));
+        _approvalsButton.BackgroundColor = fullAccess || count > 0 ? Theme.Primary : Theme.Field;
     }
     /// <inheritdoc />
     public void Dispose()

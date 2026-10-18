@@ -24,7 +24,7 @@ public sealed class SetupPage : ContentPage
     private readonly ILocalizer _conversation;
     private readonly WindowsApplicationCatalog _applications;
     private readonly Picker _voice, _culture, _uiCulture, _input, _output;
-    private readonly Entry _key = Theme.Entry(), _nickname = Theme.Entry(), _appSearch = Theme.Entry();
+    private readonly Entry _key = Theme.Entry(), _nickname = Theme.Entry(), _weatherLocation = Theme.Entry(), _appSearch = Theme.Entry();
     private readonly Editor _persona = new() { TextColor = Theme.Text, BackgroundColor = Theme.Field, HeightRequest = 120 };
     private readonly Switch _muted, _remember, _greeting, _hourly, _autoStart, _clapWake;
     private readonly Switch _cloudEnabled;
@@ -49,6 +49,7 @@ public sealed class SetupPage : ContentPage
     private readonly ContentView _active = new();
     private readonly string _createdCulture;
     private readonly PermissionSettingsView _permissions;
+    private readonly Laura.Core.Permissions.PermissionManager _permissionManager;
     private readonly ScreenshotSettingsView _screenshots;
     private readonly LegacyProviderCleanup _legacyCleanup;
     private readonly ChatGptSettingsView _chatGpt;
@@ -59,11 +60,11 @@ public sealed class SetupPage : ContentPage
     public SetupPage(ISettingsService settings, IApiKeyStore keys, GeminiLiveClient live, IUiLocalizer ui,
         IStartupRegistration startup, ISpeechSynthesizer speech, WindowsApplicationCatalog applications, ILocalizer conversation, Laura.App.Platforms.Windows.WindowsApprovalCenter approvals, ScreenshotCoordinator screenshots,
         Laura.Core.Mcp.McpServerStore mcpStore, Laura.Core.Mcp.McpRuntime mcp, ConversationProviderRouter router, IProviderModelCatalog modelCatalogue, LegacyProviderCleanup legacyCleanup,
-        IChatGptConnection chatGpt, IChatGptBrokerSetup chatGptBrokerSetup)
+        IChatGptConnection chatGpt, IChatGptBrokerSetup chatGptBrokerSetup, Laura.Core.Permissions.PermissionManager permissionManager)
     {
         using var performance = PerformanceTrace.Measure("settings.construct");
         _settings = settings; _keys = keys; _live = live; _ui = ui; _startup = startup; _speech = speech; _applications = applications; _conversation = conversation;
-        _legacyCleanup = legacyCleanup;
+        _legacyCleanup = legacyCleanup; _permissionManager = permissionManager;
         _chatGpt = new ChatGptSettingsView(chatGpt, chatGptBrokerSetup, ui, settings.Current);
         _model = new ProviderModelPicker(modelCatalogue, ui, "gemini", () => string.IsNullOrWhiteSpace(_key.Text) ? _keys.Read() : _key.Text.Trim());
         _createdCulture = ui.Culture.Name;
@@ -74,7 +75,7 @@ public sealed class SetupPage : ContentPage
         _voice = Theme.Picker(GeminiLiveOptions.Voices, current.GenerativeAi.LiveVoice);
         _culture = Theme.Picker(["pt-BR", "en-US"], current.Culture); _uiCulture = Theme.Picker(["pt-BR", "en-US"], current.UiCulture);
         _model.Text = string.IsNullOrWhiteSpace(current.GenerativeAi.Model) ? GeminiLiveOptions.Model : current.GenerativeAi.Model;
-        _nickname.Text = current.UserNickname; _persona.Text = current.GenerativeAi.Persona;
+        _nickname.Text = current.UserNickname; _weatherLocation.Text = current.WeatherLocation; _persona.Text = current.GenerativeAi.Persona;
         _key.IsPassword = true; _key.Placeholder = ui.Get("ui.maui.keyPlaceholder");
         SemanticProperties.SetDescription(_key, ui.Get("ui.maui.key"));
         _muted = Toggle(current.MicrophoneMuted); _remember = Toggle(current.RememberConversations);
@@ -106,7 +107,7 @@ public sealed class SetupPage : ContentPage
         });
         _key.TextChanged += (_, _) => _revealKey.IsEnabled = !string.IsNullOrWhiteSpace(_key.Text);
         _revealKey.IsEnabled = false;
-        _permissions = new(settings, ui, approvals);
+        _permissions = new(settings, ui, approvals, permissionManager);
         _screenshots = new(settings, ui, screenshots);
         _pages = [ConnectionPanel(), VoicePanel(), PreferencesPanel(), ApplicationsPanel(), Panel(_permissions), Panel(new McpSettingsView(mcpStore, mcp, ui)), Panel(_chatGpt)];
         string[] names = ["ui.maui.connectionTab", "ui.tab.voice", "ui.maui.preferencesTab", "ui.maui.appsTab", "ui.permissions.tab", "ui.mcp.title", "ui.chatgpt.tab"];
@@ -139,7 +140,7 @@ public sealed class SetupPage : ContentPage
         _cloudEnabled.IsToggled = current.GenerativeAi.Enabled;
         _key.Text = ""; _key.IsPassword = true; _revealKey.Source = Theme.IconSource("eye");
         Theme.DescribeAction(_revealKey, _ui.Get("ui.settings.revealKey")); _result.Text = "";
-        _nickname.Text = current.UserNickname; _persona.Text = current.GenerativeAi.Persona;
+        _nickname.Text = current.UserNickname; _weatherLocation.Text = current.WeatherLocation; _persona.Text = current.GenerativeAi.Persona;
         _permissions.Reload(current.Permissions);
         _screenshots.Reload(current.Screenshots);
         _model.Text = string.IsNullOrWhiteSpace(current.GenerativeAi.Model) ? GeminiLiveOptions.Model : current.GenerativeAi.Model;
@@ -262,6 +263,7 @@ public sealed class SetupPage : ContentPage
         Row("ui.maui.uiLanguage", "globe", _uiCulture, "ui.settings.uiLanguageHelp"),
         Row("ui.maui.language", "message_square", _culture, "ui.settings.languageHelp"),
         Row("ui.maui.nickname", "user_round", _nickname, "ui.settings.nicknameHelp"),
+        Row("ui.maui.weatherLocation", "cloud", _weatherLocation, "ui.settings.weatherLocationHelp"),
         Row("ui.memory.remember", "message_square", _remember, "ui.settings.rememberHelp"),
         Row("ui.maui.greeting", "play", _greeting, "ui.settings.greetingHelp"),
         Row("ui.maui.hourly", "clock", _hourly, "ui.settings.hourlyHelp"),
@@ -375,6 +377,7 @@ public sealed class SetupPage : ContentPage
             if (_appList.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.ListViewBase list && list.Items.Count > 0 && list.ContainerFromIndex(0) is null)
             { throw new InvalidOperationException("The application inventory did not realize its first visible row."); }
         }
+        if (_activeTab == 4) { _permissions.VerifyForSmoke(); }
         if (!_key.IsPassword && string.IsNullOrEmpty(_key.Text)) { throw new InvalidOperationException("The empty credential entry was left unmasked."); }
     }
     /// <summary>Exercises tab preservation before the native layout verification begins.</summary>
@@ -429,6 +432,12 @@ public sealed class SetupPage : ContentPage
         // Enablement is owner consent, not the outcome of a transient credential read.
         bool configured = _cloudEnabled.IsToggled;
         LauraSettings draft = CaptureDraft(configured);
+        bool activateFullAccess = draft.Permissions.Mode == Laura.Core.Permissions.ApprovalMode.FullAccess
+            && _permissionManager.CurrentMode != Laura.Core.Permissions.ApprovalMode.FullAccess;
+        if (activateFullAccess && !await Laura.App.Platforms.Windows.WindowsConfirmation.AskAsync(
+            _ui.Get("ui.permissions.fullAccessWarning"), _ui.Get("ui.permissions.fullAccessConfirm"),
+            _ui.Get("ui.permissions.fullAccessCancel"), CancellationToken.None).ConfigureAwait(true))
+        { return false; }
         if (candidate is not null)
         {
             _result.Text = _ui.Get("ui.maui.validatingKey");
@@ -453,6 +462,9 @@ public sealed class SetupPage : ContentPage
         }
         if (resetGemini) { await _live.ResetSessionAsync(PersistAsync).ConfigureAwait(true); }
         else { await PersistAsync().ConfigureAwait(true); }
+        if (activateFullAccess && updated.Permissions.Mode == Laura.Core.Permissions.ApprovalMode.FullAccess) { _permissionManager.ActivateFullAccess(); }
+        else if (updated.Permissions.Mode != Laura.Core.Permissions.ApprovalMode.FullAccess) { _permissionManager.DeactivateFullAccess(); }
+        _permissions.RefreshModeStatus();
         _baseline = draft;
         if (candidate is not null && _key.Text?.Trim() == candidate) { _key.Text = ""; }
         if (candidate is not null) { await _model.RefreshAsync(true).ConfigureAwait(true); }
@@ -470,7 +482,7 @@ public sealed class SetupPage : ContentPage
         {
             ChatGpt = _chatGpt.Options, ProviderSelection = _chatGpt.Selection,
             Culture = _culture.SelectedItem as string ?? "pt-BR", UiCulture = _uiCulture.SelectedItem as string ?? "pt-BR",
-            UserNickname = _nickname.Text ?? "", MicrophoneMuted = _muted.IsToggled, RememberConversations = _remember.IsToggled,
+            UserNickname = _nickname.Text ?? "", WeatherLocation = _weatherLocation.Text ?? "", MicrophoneMuted = _muted.IsToggled, RememberConversations = _remember.IsToggled,
             ClapWakeEnabled = _clapWake.IsToggled, ClapWakeSensitivity = (int)_clapSensitivity.Value,
             InputDevice = _inputIds[Math.Max(0, _input.SelectedIndex)], OutputDevice = _outputIds[Math.Max(0, _output.SelectedIndex)],
             GreetOnStartup = _greeting.IsToggled, AnnounceHourly = _hourly.IsToggled, StartWithWindows = _autoStart.IsToggled,

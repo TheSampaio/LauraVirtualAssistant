@@ -1,6 +1,6 @@
 namespace Laura.Core.Permissions;
 
-/// <summary>Code-defined risk and scope rules. Commands, disclosure and input injection require explicit approval; installed GUI opening has a separate bounded policy.</summary>
+/// <summary>Code-defined risk and scope rules shared by every registered effect adapter.</summary>
 public static class PermissionPolicy
 {
     private static readonly HashSet<string> DataExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -29,6 +29,16 @@ public static class PermissionPolicy
     /// <summary>Only trusted native application adapters may describe this bounded effect; arbitrary processes never inherit the policy.</summary>
     public static bool AllowsAutomatic(PermissionAction action, PermissionOptions options, string? workspaceRoot = null)
     {
+        if (options.Mode == ApprovalMode.Automatic && action.TaskId != Guid.Empty && workspaceRoot is not null
+            && action.Resources.Length is > 0 and <= 2
+            && action.Resources.All(path => Within(path, workspaceRoot) && !SensitivePath(path))
+            && action.Operation is PermissionOperation.FileReadLocal or PermissionOperation.FileReadCloud or PermissionOperation.FileWrite
+                or PermissionOperation.FileCreateDirectory or PermissionOperation.FileCopy or PermissionOperation.FileMove or PermissionOperation.FileTrash)
+        {
+            return action.Operation == PermissionOperation.FileReadCloud
+                ? action.Destination is "generativelanguage.googleapis.com" or "api.openai.com"
+                : action.Destination.Length == 0;
+        }
         if (options.Mode == ApprovalMode.Automatic && action.Operation == PermissionOperation.Process)
         {
             return action.Origin == "Native command executor" && action.AutomaticEligible && action.TaskId != Guid.Empty

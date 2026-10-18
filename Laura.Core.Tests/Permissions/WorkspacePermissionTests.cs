@@ -110,6 +110,26 @@ public sealed class WorkspacePermissionTests : IDisposable
         Assert.Empty(restarted.Grants);
     }
 
+    /// <summary>Task scopes obtained only through Full access expire with that session activation.</summary>
+    [Fact]
+    public async Task FullAccessTaskScopesAreRemovedWhenTheModeIsTurnedOff()
+    {
+        string project = Path.Combine(_root, "Project"); Directory.CreateDirectory(project);
+        using var manager = new PermissionManager(new PermissionStore(Path.Combine(_root, "Security", "permissions.json")),
+            () => new() { Mode = ApprovalMode.FullAccess });
+        manager.ActivateFullAccess();
+        Guid task = Guid.NewGuid();
+        PermissionGrant grant = await manager.AuthorizeWorkspaceAsync(task, project, "");
+        Assert.True(grant.FullAccessDerived);
+        Assert.Single(manager.Grants);
+        manager.DeactivateFullAccess();
+        Assert.Empty(manager.Grants);
+        var edit = new PermissionAction(PermissionOperation.FileWrite, "Native tool: file_control", "Edit after deactivation", [Path.Combine(project, "main.cs")], taskId: task);
+        Task<int> pending = manager.ExecuteAsync<int>(edit, _ => throw new InvalidOperationException("Revoked scope dispatched."));
+        manager.Decide(Assert.Single(manager.PendingRequests).Id, ApprovalChoice.Deny);
+        await Assert.ThrowsAsync<PermissionDeniedException>(() => pending);
+    }
+
     [Fact]
     public async Task ExplicitProjectDisclosureNeverTransfersToAnotherRecipient()
     {
