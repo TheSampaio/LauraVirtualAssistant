@@ -65,6 +65,7 @@ public sealed partial class BrainLearning(BrainService brain, ISettingsService s
     {
         if (!Eligible(text)) { return; }
         await brain.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (await LearnApplicationDeclarationAsync(text, vault, cancellationToken).ConfigureAwait(false)) { return; }
         foreach ((string key, string type, string folder) in new[] { ("editor", "preference", "Owner/Preferences"), ("language", "preference", "Owner/Preferences"),
             ("style", "preference", "Owner/Preferences"), ("goal", "goal", "Owner/Goals"), ("project", "project", "Projects"), ("decision", "decision", "Memories/Decisions"), ("routine", "procedure", "Procedures") })
         {
@@ -127,11 +128,13 @@ public sealed partial class BrainLearning(BrainService brain, ISettingsService s
         existing ??= brain.Snapshot.Notes.FirstOrDefault(note => note.IsKnowledge && TextNormalizer.Normalize(note.Body) == TextNormalizer.Normalize(incoming.Body));
         if (existing is null) { return await brain.SaveAtLocationAsync(incoming, vault, cancellationToken).ConfigureAwait(false); }
         if (TextNormalizer.Normalize(existing.Body) == TextNormalizer.Normalize(incoming.Body)
-            || (!explicitCorrection && existing.Key == incoming.Key && TextNormalizer.Normalize(existing.Title) == TextNormalizer.Normalize(incoming.Title))) { return existing; }
+            || (!explicitCorrection && existing.Key == incoming.Key && existing.Application == incoming.Application
+                && TextNormalizer.Normalize(existing.Title) == TextNormalizer.Normalize(incoming.Title))) { return existing; }
         if (explicitCorrection)
         {
             return await brain.SaveAtLocationAsync(existing with { Body = incoming.Body, Title = incoming.Title, UpdatedAt = DateTimeOffset.UtcNow,
-                Source = incoming.Source, Verification = incoming.Verification, Confidence = incoming.Confidence, Relations = incoming.Relations.Count > 0 ? incoming.Relations : existing.Relations }, vault, cancellationToken).ConfigureAwait(false);
+                Source = incoming.Source, Verification = incoming.Verification, Confidence = incoming.Confidence, Application = incoming.Application ?? existing.Application,
+                Relations = incoming.Relations.Count > 0 ? incoming.Relations : existing.Relations }, vault, cancellationToken).ConfigureAwait(false);
         }
         var conflict = incoming with { Id = Guid.NewGuid().ToString("D"), Path = "Inbox/" + Guid.NewGuid().ToString("N") + ".md", Status = "draft",
             Relations = incoming.Relations.Concat([new BrainRelation(existing.Id, "contradicts", 1, incoming.Confidence, incoming.Body, incoming.Source)]).ToArray() };

@@ -8,6 +8,53 @@ namespace Laura.Core.Tests.Engine;
 public sealed class CognitiveTaskRunTests
 {
     private static readonly HashSet<string> Tools = ["recall_memory", "study_github_repository", "list_brain_skills", "propose_brain_skill", "plan_task", "task_status", "list_capabilities", "run_program"];
+    /// <summary>A general pending plan cannot cause unsolicited source acquisition, repeated memory recall or skill discovery.</summary>
+    [Fact]
+    public void GeneralPlanDoesNotInventSourceWorkflowOperations()
+    {
+        var task = new CognitiveTaskRun("Complete the requested native investigation.", Tools);
+        task.Plan(["run_program", "list_capabilities"]);
+        Assert.NotNull(task.PendingContinuation()); Assert.Null(task.NextSourceOperation());
+    }
+    /// <summary>Reading study coverage cannot create a background acquisition objective or continue unrelated work.</summary>
+    [Fact]
+    public async Task StatusQuestionCannotStartAutomaticAcquisition()
+    {
+        var tools = new HashSet<string>(Tools) { "repository_study_status", "continue_repository_study" };
+        var task = new CognitiveTaskRun("Report the existing study coverage.", tools);
+        var progress = new AssistantToolResult(JsonSerializer.Serialize(new { Id = Guid.NewGuid(), PendingFiles = 3000, Cursor = "current", Documents = Array.Empty<object>(), Failure = "" }));
+        await task.ExecuteAsync("repository_study_status", JsonSerializer.SerializeToElement(new { }), _ => Task.FromResult(progress), CancellationToken.None);
+        Assert.Null(task.PendingContinuation()); Assert.Null(task.NextSourceOperation()); Assert.Empty(task.Checkpoint().RepositoryStudies!);
+    }
+
+    /// <summary>Keeps adapter refusals consistent in returned model results and durable task receipts, even when an adapter omitted its status label.</summary>
+    [Fact]
+    public async Task AdapterFailureCannotRetainTheDefaultSuccessLabel()
+    {
+        var task = new CognitiveTaskRun("Inspect an observed adapter refusal.", Tools); using var arguments = JsonDocument.Parse("{}");
+        var result = await task.ExecuteAsync("run_program", arguments.RootElement, _ => Task.FromResult(new AssistantToolResult("Synthetic validation refused.") { Failed = true }), CancellationToken.None);
+        Assert.True(result.Failed); Assert.Equal("failed", result.Status); Assert.Equal("failed", Assert.Single(task.Checkpoint().Operations).Status);
+    }
+
+    /// <summary>Continues real persisted inventory cursors without the old identical-operation loop guard blocking later batches.</summary>
+    [Fact]
+    public async Task PersistedStudyContinuesDistinctCursorsAndRestoresItsNativeIdentity()
+    {
+        var tools = new HashSet<string>(Tools) { "start_repository_study", "continue_repository_study", "repository_study_status" };
+        Guid id = Guid.NewGuid(); var task = new CognitiveTaskRun("Study the entire synthetic repository incrementally.", tools);
+        using var start = JsonDocument.Parse("{\"source\":\"synthetic-project\"}");
+        AssistantToolResult Progress(int pending, string cursor) => new(JsonSerializer.Serialize(new { Id = id, PendingFiles = pending, Cursor = cursor, Documents = Array.Empty<object>(), Failure = "" }));
+        await task.ExecuteAsync("start_repository_study", start.RootElement, _ => Task.FromResult(Progress(5000, "cursor-0")), CancellationToken.None);
+        for (int step = 0; step < 3; step++)
+        {
+            var next = task.NextSourceOperation(); Assert.NotNull(next); Assert.Equal("continue_repository_study", next.Name);
+            Assert.Equal("cursor-" + step, next.Arguments.GetProperty("cursor").GetString());
+            Assert.False((await task.ExecuteAsync(next.Name, next.Arguments, _ => Task.FromResult(Progress(4936 - step * 64, "cursor-" + (step + 1))), CancellationToken.None)).Failed);
+        }
+        Assert.Equal(id, Assert.Single(task.Checkpoint().RepositoryStudies!));
+        var restored = new CognitiveTaskRun(task.Checkpoint().Objective, tools, taskId: task.Checkpoint().Id, restored: task.Checkpoint());
+        var status = restored.NextSourceOperation(); Assert.NotNull(status); Assert.Equal("repository_study_status", status.Name); Assert.Equal(id, status.Arguments.GetProperty("id").GetGuid());
+    }
 
     [Fact]
     public async Task MultipleToolsRetainOriginalObjectiveAndObservedIntermediateResults()

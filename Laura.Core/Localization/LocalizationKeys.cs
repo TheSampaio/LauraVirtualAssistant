@@ -50,6 +50,56 @@ public static class LocalizationKeys
 
         /// <summary>Date-and-time summary spoken at startup.</summary>
         public const string Summary = "greeting.summary";
+        /// <summary>Observed weather and forecast phrases.</summary>
+        public const string WeatherCurrent = "greeting.weather.current";
+        /// <summary>Forecast condition when no current observation is available.</summary>
+        public const string WeatherForecastCondition = "greeting.weather.forecastCondition";
+        /// <summary>Sunny observed condition.</summary>
+        public const string WeatherSunny = "greeting.weather.sunny";
+        /// <summary>Clear nighttime condition.</summary>
+        public const string WeatherClear = "greeting.weather.clear";
+        /// <summary>Partially cloudy observed condition.</summary>
+        public const string WeatherPartlyCloudy = "greeting.weather.partlyCloudy";
+        /// <summary>Cloudy observed condition.</summary>
+        public const string WeatherCloudy = "greeting.weather.cloudy";
+        /// <summary>Rainy observed condition.</summary>
+        public const string WeatherRaining = "greeting.weather.raining";
+        /// <summary>Heavy rainy observed condition.</summary>
+        public const string WeatherHeavyRaining = "greeting.weather.heavyRaining";
+        /// <summary>Stormy observed condition.</summary>
+        public const string WeatherStorming = "greeting.weather.storming";
+        /// <summary>Snowy observed condition.</summary>
+        public const string WeatherSnowing = "greeting.weather.snowing";
+        /// <summary>Possible forecast rain.</summary>
+        public const string WeatherRain = "greeting.weather.rain";
+        /// <summary>Forecast heavy rain.</summary>
+        public const string WeatherHeavyRain = "greeting.weather.heavyRain";
+        /// <summary>Possible thunderstorms.</summary>
+        public const string WeatherThunder = "greeting.weather.thunder";
+        /// <summary>Explicit low rain probability.</summary>
+        public const string WeatherNoRain = "greeting.weather.noRain";
+        /// <summary>Forecast temperature range.</summary>
+        public const string WeatherTemperatures = "greeting.weather.temperatures";
+        /// <summary>Forecast minimum when the maximum is unavailable.</summary>
+        public const string WeatherMinimum = "greeting.weather.minimum";
+        /// <summary>Forecast maximum when the minimum is unavailable.</summary>
+        public const string WeatherMaximum = "greeting.weather.maximum";
+        /// <summary>Provider-issued weather alert.</summary>
+        public const string WeatherAlert = "greeting.weather.alert";
+        /// <summary>Near-term forecast period.</summary>
+        public const string WeatherNextHours = "greeting.weather.nextHours";
+        /// <summary>Morning forecast period.</summary>
+        public const string WeatherMorning = "greeting.weather.morning";
+        /// <summary>Afternoon forecast period.</summary>
+        public const string WeatherAfternoon = "greeting.weather.afternoon";
+        /// <summary>Evening forecast period.</summary>
+        public const string WeatherEvening = "greeting.weather.evening";
+        /// <summary>Overnight forecast period.</summary>
+        public const string WeatherOvernight = "greeting.weather.overnight";
+        /// <summary>Tomorrow morning forecast period.</summary>
+        public const string WeatherTomorrowMorning = "greeting.weather.tomorrowMorning";
+        /// <summary>Dated Banco Central sale reference.</summary>
+        public const string CurrencyReference = "greeting.currency.reference";
 
         /// <summary>Announcement of any full hour.</summary>
         public const string HourlyChime = "greeting.hourlyChime";
@@ -64,6 +114,8 @@ public static class LocalizationKeys
     /// <summary>Texts and triggers for each skill.</summary>
     public static class Skills
     {
+        /// <summary>A sequence stopped after a native capability declined; previous effects must not be replayed.</summary>
+        public const string SequenceStopped = "tools.sequenceStopped";
         /// <summary>Triggers for the time skill.</summary>
         public const string TimePhrases = "phrases.time";
 
@@ -171,7 +223,59 @@ public static class LocalizationKeys
     /// <summary>Texts for the optional generative mode.</summary>
     public static class GenerativeAi
     {
+        /// <summary>Requests explicit provider configuration.</summary>
+        public const string ConfigureProvider = "ui.ai.configureProvider";
+        /// <summary>Explains an unavailable local-first model without implying cloud authorization.</summary>
+        public const string NoProvider = "ui.models.noProvider";
+        /// <summary>Reports a provider failure without inventing a cause.</summary>
+        public const string ProviderFailed = "ui.ai.providerFailed";
+        /// <summary>Identifies a rejected credential.</summary>
+        public const string AuthenticationFailed = "ui.ai.failure.authentication";
+        /// <summary>Identifies denied provider access.</summary>
+        public const string AccessDenied = "ui.ai.failure.access";
+        /// <summary>Identifies a reported billing or account limit.</summary>
+        public const string UsageLimit = "ui.ai.failure.usage";
+        /// <summary>Identifies throttling or an undifferentiated quota limit.</summary>
+        public const string CapacityLimit = "ui.ai.failure.capacity";
+        /// <summary>Identifies an unavailable configured model.</summary>
+        public const string ModelUnavailable = "ui.ai.failure.model";
+        /// <summary>Identifies excessive current context.</summary>
+        public const string ContextExceeded = "ui.ai.failure.context";
+        /// <summary>Identifies an elapsed generation deadline.</summary>
+        public const string Timeout = "ui.ai.failure.timeout";
+        /// <summary>Identifies a failed transport.</summary>
+        public const string NetworkFailed = "ui.ai.failure.network";
+        /// <summary>Identifies incomplete or malformed provider output.</summary>
+        public const string InvalidResponse = "ui.ai.failure.response";
+        /// <summary>Identifies unavailable provider service.</summary>
+        public const string ServiceUnavailable = "ui.ai.failure.unavailable";
+        /// <summary>Identifies failed local weight verification.</summary>
+        public const string LocalIntegrity = "ui.ai.failure.integrity";
+        /// <summary>Identifies insufficient currently available RAM.</summary>
+        public const string InsufficientMemory = "ui.ai.failure.memory";
+        /// <summary>Identifies a provider request rejection.</summary>
+        public const string RequestRejected = "ui.ai.failure.request";
+        /// <summary>Identifies exhausted operation budgets.</summary>
+        public const string OperationLimit = "ui.ai.failure.limit";
+        /// <summary>A bounded protocol cycle saved its already confirmed tool results for continuation.</summary>
+        public const string TaskCycleSaved = "ui.ai.taskCycleSaved";
+        /// <summary>Explains that previous tool effects require inspection before retry.</summary>
+        public const string PriorEffects = "ui.ai.failure.priorEffects";
+        /// <summary>Refuses an unsupported image before dispatch.</summary>
+        public const string ImagesUnsupported = "ui.models.imagesUnsupported";
         /// <summary>Notice that the generative model did not answer.</summary>
         public const string Unavailable = "ai.unavailable";
+    }
+    /// <summary>Trusted workspace reviews use the independent interface culture.</summary>
+    public static class Permissions
+    {
+        /// <summary>Gets the native bounded repository study review text.</summary>
+        public const string RepositoryStudyReview = "ui.permissions.repositoryStudyReview";
+        /// <summary>One-hour bounded workspace capability review.</summary>
+        public const string WorkspaceReview = "ui.permissions.workspaceReview";
+        /// <summary>Actual runtime disclosure destination.</summary>
+        public const string WorkspaceCloudReview = "ui.permissions.workspaceCloudReview";
+        /// <summary>Strictly local workspace access.</summary>
+        public const string WorkspaceLocalReview = "ui.permissions.workspaceLocalReview";
     }
 }

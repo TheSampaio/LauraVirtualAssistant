@@ -1,5 +1,7 @@
 # LAURA Brain
 
+> Historical architecture and validation record. The 2026-10-17 [agent rework](laura-agent-execution.md) supersedes provider, model and approval descriptions below. Gemini is now the sole conversation/voice provider; local inference and ONNX adapters are retired.
+
 ## Architecture and integration
 
 The existing application is native Windows MAUI/WinUI. Gemini Live remains the conversation and voice provider. The previous SQLite memory combined explicit facts and raw transcripts; Brain replaces durable fact storage with Markdown while retaining the existing bounded transcript database. `BrainConversationMemory` implements the existing `IConversationMemory` contract, so native save/recall/forget tools and conversation history continue to work. All legacy facts are copied once, including their dates, without deleting source rows. An archived Markdown receipt prevents deleted facts from returning on restart.

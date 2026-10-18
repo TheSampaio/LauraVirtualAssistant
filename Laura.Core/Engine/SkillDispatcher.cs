@@ -68,13 +68,32 @@ public sealed class SkillDispatcher : ISkillDispatcher
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (request.Source == SkillRequestSource.Context)
-        { return await AskConversationEngineAsync(request, cancellationToken).ConfigureAwait(false); }
+        SkillResponse native = await DispatchNativeAsync(request, cancellationToken).ConfigureAwait(false);
+        return native.Handled ? native : await AskConversationEngineAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Checks registered native capabilities without inferring intent from keywords or invoking a model.</summary>
+    public bool CanHandleNatively(SkillRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return request.Source != SkillRequestSource.Context && request.Image is null && request.ContinuingTaskTurnId == Guid.Empty
+            && (CommandSequence.Parse(request.RawText, _localizer.GetPhrases("phrases.sequencePrefix")) is not null
+                || _skills.Any(skill => skill.CanHandle(request)));
+    }
+
+    /// <summary>Runs only recognized native skills, preserving permission checks and never calling a model.</summary>
+    public async Task<SkillResponse> DispatchNativeAsync(SkillRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (request.Source == SkillRequestSource.Context || request.Image is not null || request.ContinuingTaskTurnId != Guid.Empty)
+        { return SkillResponse.NotHandled; }
 
         IReadOnlyList<string>? steps = CommandSequence.Parse(request.RawText, _localizer.GetPhrases("phrases.sequencePrefix"));
         if (steps is not null)
         {
-            SkillRequest[] requests = [.. steps.Select(text => SkillRequest.Create(text, request.Culture, request.Timestamp, request.Source))];
+            SkillRequest[] requests = [.. steps.Select(text => SkillRequest.Create(text, request.Culture, request.Timestamp, request.Source) with { TurnId = request.TurnId })];
             if (requests.Length == 0 || requests.Any(step => !_skills.Any(skill => skill.CanHandle(step))))
             {
                 return SkillResponse.Speak(_localizer.Get("tools.sequenceInvalid"));
@@ -83,7 +102,9 @@ public sealed class SkillDispatcher : ISkillDispatcher
             foreach (SkillRequest step in requests)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                SkillResponse response = await DispatchAsync(step, cancellationToken).ConfigureAwait(false);
+                SkillResponse response = await DispatchNativeAsync(step, cancellationToken).ConfigureAwait(false);
+                // A declined step must never replay earlier effects through a generative fallback.
+                if (!response.Handled) { return SkillResponse.Speak(string.Join(" ", answers.Append(_localizer.Get(LocalizationKeys.Skills.SequenceStopped)))); }
                 if (!string.IsNullOrWhiteSpace(response.SpokenText)) { answers.Add(response.SpokenText); }
                 if (response.RequestsShutdown) { return response; }
             }
@@ -101,12 +122,12 @@ public sealed class SkillDispatcher : ISkillDispatcher
 
             if (response.Handled)
             {
-                _logger.LogInformation("Command \"{Command}\" handled by {Skill}.", request.RawText, skill.Id);
+                _logger.LogInformation("Local command handled by {Skill}.", skill.Id);
                 return response;
             }
         }
 
-        return await AskConversationEngineAsync(request, cancellationToken).ConfigureAwait(false);
+        return SkillResponse.NotHandled;
     }
 
     /// <inheritdoc />
@@ -116,7 +137,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
 
         return _settings.Current.GenerativeAi.Enabled
             && _conversationEngine.IsAvailable
-            && (request.Source == SkillRequestSource.Context || !_skills.Any(skill => skill.CanHandle(request)));
+            && !CanHandleNatively(request);
     }
 
     /// <summary>
@@ -148,7 +169,7 @@ public sealed class SkillDispatcher : ISkillDispatcher
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Skill {Skill} failed while handling \"{Command}\".", skill.Id, request.RawText);
+            _logger.LogError("Skill {Skill} failed ({ErrorType}).", skill.Id, exception.GetType().Name);
             return SkillResponse.Speak(_localizer.Get(LocalizationKeys.Assistant.SkillFailed));
         }
     }
@@ -170,28 +191,26 @@ public sealed class SkillDispatcher : ISkillDispatcher
     {
         if (!_settings.Current.GenerativeAi.Enabled || !_conversationEngine.IsAvailable)
         {
-            _logger.LogInformation("No skill recognized \"{Command}\".", request.RawText);
+            _logger.LogInformation("No native skill recognized the request ({Characters} characters).", request.RawText.Length);
             return SkillResponse.NotHandled;
         }
 
-        var turn = new ConversationTurn(request.RawText, request.Culture, _userContext.DisplayName);
+        if (request.Image is not null && !_conversationEngine.SupportsImages)
+        { return SkillResponse.Speak(_localizer.Get(LocalizationKeys.GenerativeAi.ImagesUnsupported)); }
+        var turn = new ConversationTurn(request.RawText, request.Culture, _userContext.DisplayName) { TurnId = request.TurnId, ContinuingTaskTurnId = request.ContinuingTaskTurnId, Image = request.Image };
         if (_memory is not null && _settings.Current.RememberConversations)
         {
             try
             {
-                var history = _memory.ReadRecent(8).ToList();
-                if (history.LastOrDefault() is { Source: ConversationMessageSource.UserTyped } last && last.Text == request.RawText)
-                {
-                    history.RemoveAt(history.Count - 1);
-                }
-                turn = turn with { History = history, Memories = [.. _memory.Search("").Take(3).Select(static fact => fact.Text)] };
+                var history = _memory.ReadRecent(9).Where(message => request.TurnId == Guid.Empty || message.TurnId != request.TurnId).TakeLast(8).ToArray();
+                turn = turn with { History = history };
             }
             catch (Exception exception) { _logger.LogWarning(exception, "Context memory unavailable."); }
         }
         string? answer = await _conversationEngine.AskAsync(turn, cancellationToken).ConfigureAwait(false);
 
         return string.IsNullOrWhiteSpace(answer)
-            ? SkillResponse.NotHandled
+            ? SkillResponse.Speak((_conversationEngine.LastFailure ?? new(ConversationFailureKind.Unknown)).Describe(_localizer))
             : SkillResponse.Speak(answer);
     }
 }

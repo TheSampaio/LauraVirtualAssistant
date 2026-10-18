@@ -71,6 +71,8 @@ public sealed class MemoryPage : ContentPage
     private string _renderedQuery = "";
     private IReadOnlyList<string> _inventoryFiles = [], _inventoryFolders = [];
     private bool _needsRefresh = true;
+    private bool _brainRefreshQueued;
+    private int _brainChangeVersion;
     private int _renderedLimit;
     private int _layoutBucket = -1;
     private string _layoutMode = "";
@@ -286,7 +288,26 @@ public sealed class MemoryPage : ContentPage
     /// <inheritdoc />
     protected override void OnDisappearing() { _visible = false; _findShortcut.IsEnabled = false; _brain.Changed -= OnBrainChanged; base.OnDisappearing(); }
     /// <summary>Marshals storage notifications while preserving unsaved editor buffers.</summary>
-    private void OnBrainChanged(object? sender, EventArgs args) { _needsRefresh = true; _inventorySnapshot = null; if (_visible) { Dispatcher.Dispatch(async () => await RefreshSafelyAsync().ConfigureAwait(true)); } }
+    private void OnBrainChanged(object? sender, EventArgs args) => Dispatcher.Dispatch(() =>
+    {
+        _brainChangeVersion++; _needsRefresh = true; _inventorySnapshot = null;
+        ScheduleBrainRefresh();
+    });
+    /// <summary>Coalesces bursts while allowing bounded intermediate updates and preserving unsaved buffers.</summary>
+    private void ScheduleBrainRefresh()
+    { if (_visible && !_brainRefreshQueued) { _brainRefreshQueued = true; _ = RefreshBrainChangesAsync(); } }
+    private async Task RefreshBrainChangesAsync()
+    {
+        try
+        {
+            await Task.Delay(120).ConfigureAwait(true);
+            if (!_visible) { return; }
+            int observed = _brainChangeVersion;
+            await RefreshSafelyAsync().ConfigureAwait(true);
+            _needsRefresh = observed != _brainChangeVersion;
+        }
+        finally { _brainRefreshQueued = false; if (_needsRefresh) { ScheduleBrainRefresh(); } }
+    }
     /// <summary>Handles access failures without embedding note contents in exception reports.</summary>
     private async Task RefreshSafelyAsync()
     { try { await RefreshAsync().ConfigureAwait(true); } catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException) { _status.Text = T("failure") + " · " + error.GetType().Name; } }
@@ -459,7 +480,7 @@ public sealed class MemoryPage : ContentPage
                 {
                     BrainNote? original = _brain.Snapshot.Notes.FirstOrDefault(candidate => candidate.Id == note.Relations.First(relation => relation.Type == "contradicts").Target);
                     if (original is null || !await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync(T("acceptCorrection"), T("confirmCorrection"), T("acceptCorrection"), _ui.Get("ui.maui.cancel")).ConfigureAwait(true)) { return; }
-                    await _brain.SaveAsync(original with { Body = note.Body, Source = "user_reviewed_correction", Relations = note.Relations.Where(relation => relation.Type != "contradicts").ToArray() }).ConfigureAwait(true); await _brain.DeleteAsync(note.Path).ConfigureAwait(true); await OpenAsync(original.Path, true).ConfigureAwait(true);
+                    await _brain.SaveManualAsync(original with { Body = note.Body, Source = "user_reviewed_correction", Relations = note.Relations.Where(relation => relation.Type != "contradicts").ToArray() }).ConfigureAwait(true); await _brain.DeleteAsync(note.Path).ConfigureAwait(true); await OpenAsync(original.Path, true).ConfigureAwait(true);
                 }));
             }
         }
@@ -537,7 +558,7 @@ public sealed class MemoryPage : ContentPage
     }
     /// <summary>Creates a user-named note under a stable identity.</summary>
     private async Task NewAsync()
-    { if (!await CanLeaveAsync().ConfigureAwait(true)) { return; } string? path = await Laura.App.Platforms.Windows.WindowsDialogs.PromptAsync(T("new"), T("relativePath"), initialValue: "Inbox/note.md").ConfigureAwait(true); if (string.IsNullOrWhiteSpace(path)) { return; } BrainNote saved = await _brain.SaveAsync(new BrainNote { Path = path, Title = Path.GetFileNameWithoutExtension(path), Body = "# " + Path.GetFileNameWithoutExtension(path) + "\n" }).ConfigureAwait(true); await OpenAsync(saved.Path, false).ConfigureAwait(true); SetMode("edit"); }
+    { if (!await CanLeaveAsync().ConfigureAwait(true)) { return; } string? path = await Laura.App.Platforms.Windows.WindowsDialogs.PromptAsync(T("new"), T("relativePath"), initialValue: "Inbox/note.md").ConfigureAwait(true); if (string.IsNullOrWhiteSpace(path)) { return; } BrainNote saved = await _brain.SaveManualAsync(new BrainNote { Path = path, Title = Path.GetFileNameWithoutExtension(path), Body = "# " + Path.GetFileNameWithoutExtension(path) + "\n" }).ConfigureAwait(true); await OpenAsync(saved.Path, false).ConfigureAwait(true); SetMode("edit"); }
     /// <summary>Creates only a user-requested folder.</summary>
     private async Task FolderAsync() { string? path = await Laura.App.Platforms.Windows.WindowsDialogs.PromptAsync(T("folder"), T("relativePath")).ConfigureAwait(true); if (!string.IsNullOrWhiteSpace(path)) { await _brain.CreateFolderAsync(path).ConfigureAwait(true); await RefreshFilesAsync().ConfigureAwait(true); } }
     /// <summary>Saves raw Markdown with a stable identity and the last observed file hash.</summary>
@@ -546,7 +567,7 @@ public sealed class MemoryPage : ContentPage
         if (!_selectedPath.EndsWith(".md", StringComparison.OrdinalIgnoreCase)) { return; }
         BrainNote parsed = _editingSource || _selected is null ? BrainMarkdown.Parse(_editor.Text ?? "", _selectedPath) : _selected with { Body = _editor.Text ?? "" };
         if (_selected is not null && parsed.Id != _selected.Id) { throw new FormatException("Editing cannot change a stable note id; duplicate instead."); }
-        _selected = await _brain.SaveAsync(parsed with { Hash = _observedHash }).ConfigureAwait(true); await OpenAsync(_selected.Path, false, true).ConfigureAwait(true); _status.Text = T("saved");
+        _selected = await _brain.SaveManualAsync(parsed with { Hash = _observedHash }).ConfigureAwait(true); await OpenAsync(_selected.Path, false, true).ConfigureAwait(true); _status.Text = T("saved");
     }
     /// <summary>Renames a selected note while preserving former link aliases.</summary>
     private async Task RenameAsync()
@@ -567,7 +588,7 @@ public sealed class MemoryPage : ContentPage
         string? id = title is null ? null : BrainService.ResolveLink(title, _selected.Path, _brain.Snapshot.Notes); if (id is null) { _status.Text = T("ambiguous"); return; }
         string? relation = await Laura.App.Platforms.Windows.WindowsDialogs.ChooseAsync(T("relation"), _ui.Get("ui.maui.cancel"), null, BrainMarkdown.RelationTypes.Order(StringComparer.Ordinal).ToArray()).ConfigureAwait(true); if (relation is null || !BrainMarkdown.RelationTypes.Contains(relation)) { return; }
         string? evidence = await Laura.App.Platforms.Windows.WindowsDialogs.PromptAsync(T("relation"), T("evidence")).ConfigureAwait(true); if (string.IsNullOrWhiteSpace(evidence)) { return; }
-        _selected = await _brain.SaveAsync(_selected with { Relations = _selected.Relations.Concat([new BrainRelation(id, relation, .7, .8, evidence)]).ToArray() }).ConfigureAwait(true); await OpenAsync(_selected.Path, false).ConfigureAwait(true);
+        _selected = await _brain.SaveManualAsync(_selected with { Relations = _selected.Relations.Concat([new BrainRelation(id, relation, .7, .8, evidence)]).ToArray() }).ConfigureAwait(true); await OpenAsync(_selected.Path, false).ConfigureAwait(true);
     }
     /// <summary>Imports Markdown as disabled instructions without executing scripts or installing dependencies.</summary>
     private async Task ImportSkillAsync()
@@ -575,7 +596,20 @@ public sealed class MemoryPage : ContentPage
     /// <summary>Offers location, integrity, retrieval and private backup controls as concrete native actions.</summary>
     private async Task ManageAsync()
     {
-        string? action = await Laura.App.Platforms.Windows.WindowsDialogs.ChooseAsync(T("manage"), _ui.Get("ui.maui.cancel"), null, T("newBrain"), T("existingBrain"), T("migrate"), _ui.Get("ui.maintenance.title"), _ui.Get("ui.evidence.learning"), T("integrity"), T("rebuild"), T("embedding"), T("learning"), T("budget"), T("backup"), T("restore"), T("clearHistory")).ConfigureAwait(true);
+        string? action = await Laura.App.Platforms.Windows.WindowsDialogs.ChooseAsync(T("manage"), _ui.Get("ui.maui.cancel"), null, T("newBrain"), T("existingBrain"), _ui.Get("ui.brain.shared"), _ui.Get("ui.brain.obsidianGroups"), T("migrate"), _ui.Get("ui.maintenance.title"), _ui.Get("ui.evidence.learning"), T("integrity"), T("rebuild"), T("learning"), T("budget"), T("backup"), T("restore"), T("clearHistory")).ConfigureAwait(true);
+        if (action == _ui.Get("ui.brain.obsidianGroups"))
+        { await _brain.ConfigureObsidianGroupsAsync().ConfigureAwait(true); _status.Text = _ui.Get("ui.brain.obsidianConfigured"); return; }
+        if (action == _ui.Get("ui.brain.shared"))
+        {
+            if (!await CanLeaveAsync().ConfigureAwait(true)) { return; }
+            string? candidate = SharedBrainConfiguration.ReadCandidate(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".shared-brain", "config.json"));
+            if (candidate is null) { await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync(T("manage"), _ui.Get("ui.brain.sharedMissing"), "OK").ConfigureAwait(true); return; }
+            if (!await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync(_ui.Get("ui.brain.shared"),
+                string.Format(System.Globalization.CultureInfo.CurrentCulture, _ui.Get("ui.brain.sharedChoice"), _brain.Location, candidate), T("existingBrain"), _ui.Get("ui.maui.cancel")).ConfigureAwait(true)) { return; }
+            await _brain.ChangeLocationAsync(candidate, false, true).ConfigureAwait(true);
+            _selected = null; _selectedPath = ""; _editor.Text = _loadedText = ""; _reader.Clear(); ShowEmptyDetails();
+            await RefreshAsync().ConfigureAwait(true); return;
+        }
         if (action == _ui.Get("ui.evidence.learning")) { await ShowLearningActivityAsync().ConfigureAwait(true); return; }
         if (action == _ui.Get("ui.maintenance.title"))
         { if (await CanLeaveAsync().ConfigureAwait(true)) { await NavigationMotion.PushAsync(Navigation, new BrainMaintenancePage(_brain, _maintenance, _settings, _ui, path => OpenAsync(path, true))).ConfigureAwait(true); } return; }
@@ -585,8 +619,6 @@ public sealed class MemoryPage : ContentPage
         { await _brain.RefreshAsync(action == T("rebuild")).ConfigureAwait(true); if (_brain.Snapshot.Issues.Count > 0) { await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync(T("integrity"), string.Join("\n", _brain.Snapshot.Issues.Take(20).Select(issue => issue.Path + " · " + issue.Code)), "OK").ConfigureAwait(true); } else { _status.Text = T("healthy"); } }
         else if (action == T("learning")) { await _settings.UpdateAsync(_settings.Current with { Brain = _settings.Current.Brain with { AutoLearn = !_settings.Current.Brain.AutoLearn } }).ConfigureAwait(true); _status.Text = _settings.Current.Brain.AutoLearn ? T("learningOn") : T("learningOff"); }
         else if (action == T("budget")) { string? value = await Laura.App.Platforms.Windows.WindowsDialogs.PromptAsync(T("budget"), T("budgetHelp"), initialValue: _settings.Current.Brain.ContextCharacters.ToString(System.Globalization.CultureInfo.InvariantCulture), keyboard: Keyboard.Numeric).ConfigureAwait(true); if (int.TryParse(value, out int budget)) { await _settings.UpdateAsync(_settings.Current with { Brain = _settings.Current.Brain with { ContextCharacters = budget } }).ConfigureAwait(true); } }
-        else if (action == T("embedding"))
-        { FileResult? model = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = T("modelHelp") }).ConfigureAwait(true); if (model is null || !model.FileName.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase)) { return; } FileResult? vocabulary = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = T("vocabularyHelp") }).ConfigureAwait(true); if (vocabulary is null) { return; } await _settings.UpdateAsync(_settings.Current with { Brain = _settings.Current.Brain with { EmbeddingModel = model.FullPath, EmbeddingVocabulary = vocabulary.FullPath } }).ConfigureAwait(true); await _brain.RefreshAsync().ConfigureAwait(true); }
         else if (action == T("backup")) { string? path = await Laura.App.Platforms.Windows.WindowsDialogs.PromptAsync(T("backup"), T("backupHelp"), initialValue: Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "brain-backup-" + DateTime.Now.ToString("yyyyMMdd-HHmm", System.Globalization.CultureInfo.InvariantCulture) + ".zip")).ConfigureAwait(true); if (!string.IsNullOrWhiteSpace(path)) { await _brain.BackupAsync(path).ConfigureAwait(true); } }
         else if (action == T("restore")) { FileResult? file = await FilePicker.Default.PickAsync().ConfigureAwait(true); if (file is null) { return; } string? destination = await PickFolderAsync().ConfigureAwait(true); if (destination is not null) { await _brain.RestoreAsync(file.FullPath, destination).ConfigureAwait(true); await RefreshAsync().ConfigureAwait(true); } }
         else if (action == T("clearHistory") && await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync(T("clearHistory"), _ui.Get("ui.memory.clearConfirm"), _ui.Get("ui.maui.delete"), _ui.Get("ui.maui.cancel")).ConfigureAwait(true)) { await Task.Run(_memory.ClearHistory).ConfigureAwait(true); }

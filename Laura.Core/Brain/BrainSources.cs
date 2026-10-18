@@ -19,7 +19,8 @@ public sealed partial class BrainSources(BrainService brain, PermissionManager p
     {
         [".md"] = "markdown", [".txt"] = "text", [".json"] = "json", [".csproj"] = "csharp-project", [".cs"] = "csharp", [".fs"] = "fsharp",
         [".ts"] = "typescript", [".tsx"] = "typescript", [".js"] = "javascript", [".jsx"] = "javascript", [".py"] = "python", [".go"] = "go",
-        [".rs"] = "rust", [".java"] = "java", [".cpp"] = "cpp", [".c"] = "c", [".h"] = "c", [".html"] = "html", [".css"] = "css", [".sql"] = "sql"
+        [".rs"] = "rust", [".java"] = "java", [".cpp"] = "cpp", [".c"] = "c", [".h"] = "c", [".html"] = "html", [".css"] = "css", [".sql"] = "sql",
+        [".sln"] = "text", [".slnx"] = "text", [".toml"] = "text", [".yaml"] = "text", [".yml"] = "text", [".xml"] = "text", [".props"] = "text", [".targets"] = "text"
     };
     /// <summary>Freezes an explicit local source inventory, requests exact disclosure/storage approval and imports only bounded allowed text.</summary>
     public async Task<BrainAcquisitionResult> AcquireAsync(string path, string topic, string destination, CancellationToken cancellationToken = default)
@@ -118,6 +119,8 @@ public sealed partial class BrainSources(BrainService brain, PermissionManager p
             XDocument project = XDocument.Load(reader);
             foreach (XElement element in project.Descendants().Where(element => element.Name.LocalName == "PackageReference").Take(64))
             { string? name = element.Attribute("Include")?.Value; if (dependencies.Count < 128 && name is { Length: > 0 and <= 120 }) { dependencies.Add(name); } }
+            foreach (XElement element in project.Descendants().Where(element => element.Name.LocalName == "ProjectReference").Take(64))
+            { string? name = element.Attribute("Include")?.Value; if (dependencies.Count < 128 && name is { Length: > 0 and <= 112 }) { dependencies.Add("project:" + name.Replace('\\', '/')); } }
         }
     }
     private static readonly string[] DependencySections = ["dependencies", "devDependencies", "peerDependencies"];

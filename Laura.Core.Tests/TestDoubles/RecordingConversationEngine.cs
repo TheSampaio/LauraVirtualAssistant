@@ -25,18 +25,24 @@ public sealed class RecordingConversationEngine : IConversationEngine
 
     /// <inheritdoc />
     public bool IsAvailable { get; }
+    /// <inheritdoc />
+    public bool SupportsImages { get; init; }
+    /// <inheritdoc />
+    public ConversationFailure? LastFailure { get; init; }
 
     /// <summary>Gets how many times the engine was queried.</summary>
     public int CallCount { get; private set; }
 
     /// <summary>Gets the actual last request for language and context assertions.</summary>
     public ConversationTurn? LastTurn { get; private set; }
+    /// <summary>Gets optional native assertions performed at the actual model-dispatch boundary.</summary>
+    public Func<ConversationTurn, CancellationToken, Task<string?>>? Respond { get; init; }
 
     /// <inheritdoc />
     public Task<string?> AskAsync(ConversationTurn turn, CancellationToken cancellationToken = default)
     {
         CallCount++;
         LastTurn = turn;
-        return Task.FromResult(_answer);
+        return Respond?.Invoke(turn, cancellationToken) ?? Task.FromResult(_answer);
     }
 }

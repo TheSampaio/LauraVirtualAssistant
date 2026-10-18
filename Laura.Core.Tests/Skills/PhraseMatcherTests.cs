@@ -8,6 +8,16 @@ namespace Laura.Core.Tests.Skills;
 /// </summary>
 public sealed class PhraseMatcherTests
 {
+    /// <summary>Native prefixes must occur at the start, rather than inside descriptions or negations.</summary>
+    [Theory]
+    [InlineData("do not open calculator")]
+    [InlineData("explain how to open calculator")]
+    [InlineData("reopen calculator")]
+    public void EmbeddedPrefixIsNotACommand(string text)
+    {
+        Assert.False(PhraseMatcher.TryMatchPrefix(text, ["open"], out _));
+    }
+
     private static readonly string[] SearchPrefixes = ["pesquise por", "pesquise", "procure por"];
 
     [Fact]

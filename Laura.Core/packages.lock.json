@@ -28,15 +28,6 @@
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.10"
         }
       },
-      "Microsoft.ML.OnnxRuntime": {
-        "type": "Direct",
-        "requested": "[1.31.0, )",
-        "resolved": "1.31.0",
-        "contentHash": "7v58S0xqY1ZmLui5BnK3FQEWagRhmhkR/9yLrxF5rQGppGfcMaw7W0a2wgT1SWnT6ug0dmr1B2I4VWhlY/yvng==",
-        "dependencies": {
-          "Microsoft.ML.OnnxRuntime.Managed": "1.31.0"
-        }
-      },
       "SQLitePCLRaw.bundle_e_sqlite3": {
         "type": "Direct",
         "requested": "[2.1.12, )",
@@ -66,14 +57,6 @@
         "resolved": "10.0.10",
         "contentHash": "z/2xXlFw2aLGjHyEm6E0tQ+In6VfzQzTrtArbQ2c0TQE16ZbyDCMGPvaUT9I0s8rgy9sRWlU2P9waW37qV04qA=="
       },
-      "Microsoft.ML.OnnxRuntime.Managed": {
-        "type": "Transitive",
-        "resolved": "1.31.0",
-        "contentHash": "o9nvEiddLLlAMOHN0XZ/06Oal0W6S7iWiSb8lzQAwfQKNOZtX4C8he5/I7Mc/DlSprNfovAW6kCkwX2BAE0JHw==",
-        "dependencies": {
-          "System.Numerics.Tensors": "9.0.0"
-        }
-      },
       "SQLitePCLRaw.core": {
         "type": "Transitive",
         "resolved": "2.1.12",
@@ -91,23 +74,9 @@
         "dependencies": {
           "SQLitePCLRaw.core": "2.1.12"
         }
-      },
-      "System.Numerics.Tensors": {
-        "type": "Transitive",
-        "resolved": "9.0.0",
-        "contentHash": "hyJB4UlpAi19Xr9AXzu2NuagKC4lPfHObNMEAA0HmqFz2rX7wKgzeYzO/jM/eBHDhnUGFFEjk5cOoJaxqg5J4A=="
       }
     },
     "net10.0/win-x64": {
-      "Microsoft.ML.OnnxRuntime": {
-        "type": "Direct",
-        "requested": "[1.31.0, )",
-        "resolved": "1.31.0",
-        "contentHash": "7v58S0xqY1ZmLui5BnK3FQEWagRhmhkR/9yLrxF5rQGppGfcMaw7W0a2wgT1SWnT6ug0dmr1B2I4VWhlY/yvng==",
-        "dependencies": {
-          "Microsoft.ML.OnnxRuntime.Managed": "1.31.0"
-        }
-      },
       "SQLitePCLRaw.lib.e_sqlite3": {
         "type": "Transitive",
         "resolved": "2.1.12",

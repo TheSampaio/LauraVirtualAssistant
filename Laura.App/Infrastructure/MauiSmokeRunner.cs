@@ -17,8 +17,44 @@ public static class MauiSmokeRunner
     public static async Task RunAsync(IServiceProvider services, Window window, string directory)
     {
         Directory.CreateDirectory(directory);
+        VerifyReactorTransitions();
         try
         {
+            if (Environment.GetCommandLineArgs().Contains("--reliability-ui-smoke", StringComparer.Ordinal))
+            { await ReliabilityUiSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal) && Environment.GetCommandLineArgs().Contains("--provider-handoff-smoke", StringComparer.Ordinal))
+            { await ProviderHandoffSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal) && Environment.GetCommandLineArgs().Contains("--rea-application-smoke", StringComparer.Ordinal))
+            { await ChatGptApplicationSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal) && Environment.GetCommandLineArgs().Contains("--rea-continuation-smoke", StringComparer.Ordinal))
+            { await ChatGptReaSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal))
+            { await ChatGptLiveSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--chatgpt-ui-smoke", StringComparer.Ordinal))
+            { await ChatGptUiSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--agent-rework-smoke", StringComparer.Ordinal))
+            { await AgentReworkSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--command-jobs-smoke", StringComparer.Ordinal))
+            { await CommandJobsSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--task-recovery-smoke", StringComparer.Ordinal))
+            { await TaskRecoverySmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--chat-diagnostics-smoke", StringComparer.Ordinal))
+            { await ChatDiagnosticsSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--voice-cancellation-smoke", StringComparer.Ordinal))
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                await services.GetRequiredService<Laura.Platform.Windows.Conversation.GeminiLiveClient>().VerifyVoiceCancellationForSmokeAsync(timeout.Token).ConfigureAwait(true);
+                await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "Eight reconfigurations and four client disposals drained/canceled completed-voice callbacks; no late history notification, retained availability or microphone capture occurred.").ConfigureAwait(true); return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--audio-fragment-smoke", StringComparer.Ordinal))
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                var metrics = await Laura.Platform.Windows.Conversation.GeminiLiveClient.VerifyFragmentedPlaybackForSmokeAsync(timeout.Token).ConfigureAwait(true);
+                await File.WriteAllTextAsync(Path.Combine(directory, "audio-fragment.json"), System.Text.Json.JsonSerializer.Serialize(metrics, DiagnosticJson)).ConfigureAwait(true);
+                await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "Native fragmented PCM byte preservation measured; alignment counters are in audio-fragment.json.").ConfigureAwait(true); return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("--brain-performance-smoke", StringComparer.Ordinal))
+            { await BrainPerformanceSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             await Task.Delay(1000).ConfigureAwait(true);
             var shell = services.GetRequiredService<Laura.App.Shell.MauiShellController>();
             Laura.App.Platforms.Windows.WindowsWindowTheme.VerifyCloseAndReopenForSmoke((Microsoft.UI.Xaml.Window)window.Handler!.PlatformView!, shell.RevealForConfirmation);
@@ -99,6 +135,20 @@ public static class MauiSmokeRunner
             await CaptureAsync(window, Path.Combine(directory, "hud-conversation-en-US.png")).ConfigureAwait(true);
             foreach (var mode in new[] { Controls.ReactorMode.Listening, Controls.ReactorMode.Thinking, Controls.ReactorMode.Working, Controls.ReactorMode.Speaking })
             { main.PreviewReactorForSmoke(mode); await Task.Delay(180).ConfigureAwait(true); await CaptureAsync(window, Path.Combine(directory, "reactor-" + mode + ".png")).ConfigureAwait(true); }
+            main.PreviewReactorForSmoke(Controls.ReactorMode.Thinking);
+            main.PreviewReactorAngleForSmoke(0); await Task.Delay(100).ConfigureAwait(true);
+            byte[] thinkingStart = await VisualPixelsAsync(main.ReactorVisualForSmoke()).ConfigureAwait(true);
+            await CaptureAsync(window, Path.Combine(directory, "thinking-frame-0.png")).ConfigureAwait(true);
+            main.PreviewReactorAngleForSmoke(22.5f); await Task.Delay(100).ConfigureAwait(true);
+            byte[] thinkingNext = await VisualPixelsAsync(main.ReactorVisualForSmoke()).ConfigureAwait(true);
+            await CaptureAsync(window, Path.Combine(directory, "thinking-frame-1.png")).ConfigureAwait(true);
+            if (thinkingStart.Length == 0 || thinkingStart.Length != thinkingNext.Length || thinkingStart.SequenceEqual(thinkingNext))
+            { throw new InvalidOperationException("Thinking animation did not render distinct non-empty frames."); }
+            main.PreviewReactorAngleForSmoke(Controls.AssistantCoreDrawable.CycleDegrees - .001f); await Task.Delay(100).ConfigureAwait(true);
+            byte[] thinkingEnd = await VisualPixelsAsync(main.ReactorVisualForSmoke()).ConfigureAwait(true);
+            double thinkingDifference = thinkingStart.Zip(thinkingEnd, (first, last) => Math.Abs(first - last)).Average();
+            if (thinkingDifference > .25) { throw new InvalidOperationException("Thinking animation jumps at its cycle boundary."); }
+            await File.WriteAllTextAsync(Path.Combine(directory, "thinking-animation.txt"), "Distinct native thinking frames and continuous cycle boundary verified.").ConfigureAwait(true);
             main.PreviewReactorForSmoke(null);
             main.PreviewReactorAngleForSmoke(0); await Task.Delay(100).ConfigureAwait(true);
             byte[] firstFrame = await VisualPixelsAsync(main.ReactorVisualForSmoke()).ConfigureAwait(true);
@@ -299,6 +349,25 @@ public static class MauiSmokeRunner
         }
         for (int index = 0; index < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(element); index++)
         { foreach (string row in Describe(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(element, index), root)) { yield return row; } }
+    }
+    /// <summary>Checks elapsed-time equivalence, rapid state changes and reduced-motion settling on the actual UI drawable.</summary>
+    private static void VerifyReactorTransitions()
+    {
+        var coarse = new Controls.AssistantCoreDrawable { Mode = Controls.ReactorMode.Thinking };
+        var fine = new Controls.AssistantCoreDrawable { Mode = Controls.ReactorMode.Thinking };
+        coarse.Advance(.1f, true);
+        for (int frame = 0; frame < 10; frame++) { fine.Advance(.01f, true); }
+        if (MathF.Abs(coarse.ThinkingAmount - fine.ThinkingAmount) > .00001f || coarse.ThinkingAmount is <= 0 or >= 1)
+        { throw new InvalidOperationException("Reactor transition depends on frame count instead of elapsed time."); }
+        foreach (Controls.ReactorMode mode in Enum.GetValues<Controls.ReactorMode>())
+        {
+            fine.Mode = mode; fine.Advance(.016f, true);
+            if (!float.IsFinite(fine.ActivityAmount) || fine.ActivityAmount is < 0 or > 1 || fine.ThinkingAmount is < 0 or > 1 || fine.SpeakingAmount is < 0 or > 1)
+            { throw new InvalidOperationException("A rapid reactor state transition exceeded its visual bounds."); }
+        }
+        fine.Mode = Controls.ReactorMode.Idle; fine.Advance(0, false);
+        if (fine.ActivityAmount != 0 || fine.ThinkingAmount != 0 || fine.SpeakingAmount != 0)
+        { throw new InvalidOperationException("Reduced-motion reactor did not settle immediately."); }
     }
     /// <summary>Captures the application's native WinUI content rather than the user's desktop.</summary>
     internal static async Task CaptureAsync(Window window, string path)

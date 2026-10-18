@@ -38,15 +38,17 @@ public static partial class BrainMarkdown
         return new()
         {
             Id = id, Path = path.Replace('\\', '/'), Title = Scalar(map, "title", Scalar(map, "name", System.IO.Path.GetFileNameWithoutExtension(path))),
-            Description = Scalar(map, "description", ""),
+            Description = Scalar(map, "description", ""), OriginAgent = Scalar(map, "origin_agent", ""), LastUpdatedBy = Scalar(map, "last_updated_by", ""),
             Procedure = Node(map, "laura_skill") is YamlMappingNode procedure ? BrainSkillCodec.Read(procedure) : null,
             Type = Scalar(map, "type", path.StartsWith("skills/", StringComparison.OrdinalIgnoreCase) ? "skill" : "document"),
             MemoryType = Scalar(map, "memory_type", "semantic"), Status = Scalar(map, "status", "active"),
             CreatedAt = Date(map, "created_at"), UpdatedAt = Date(map, "updated_at"), Confidence = Number(map, "confidence", .8), Importance = Number(map, "importance", .5),
-            Tags = Strings(map, "tags"), Aliases = Strings(map, "aliases"), Source = Scalar(map, "source", "manual"), Verification = Scalar(map, "verification", "unspecified"), Key = Scalar(map, "key", ""),
+            Tags = Tags(map), Aliases = Strings(map, "aliases"), Source = Scalar(map, "source", "manual"), Verification = Scalar(map, "verification", "unspecified"), Key = Scalar(map, "key", ""),
             Revision = Scalar(map, "revision", ""), PreviousRevision = Scalar(map, "previous_revision", ""), Relations = relations,
             Application = Node(map, "application") is YamlMappingNode application && Scalar(application, "target", "").Length <= 4096
-                && Scalar(application, "sha256", "").Length == 64 ? new(Scalar(map, "title", ""), Scalar(application, "target", ""), Scalar(application, "sha256", "")) : null,
+                && (Scalar(application, "sha256", "").Length == 64 || Scalar(application, "sha256", "").Length == 0
+                    && Scalar(map, "source", "") == "user_application_declaration" && Scalar(map, "verification", "") is "user_reported" or "unverified")
+                ? new(Scalar(map, "title", ""), Scalar(application, "target", ""), Scalar(application, "sha256", "")) : null,
             Body = body, Frontmatter = yaml, Hash = FileBrainStorage.Hash(content)
         };
     }
@@ -61,7 +63,9 @@ public static partial class BrainMarkdown
         { map.Children[new YamlScalarNode(key)] = new YamlScalarNode(value); }
         if (note.Type == "skill" && !map.Children.ContainsKey(new YamlScalarNode("name")))
         { map.Children[new YamlScalarNode("name")] = new YamlScalarNode(note.Title); }
-        map.Children[new YamlScalarNode("tags")] = new YamlSequenceNode(note.Tags.Select(tag => new YamlScalarNode(tag)));
+        if (note.OriginAgent.Length > 0) { map.Children[new YamlScalarNode("origin_agent")] = new YamlScalarNode(note.OriginAgent); }
+        if (note.LastUpdatedBy.Length > 0) { map.Children[new YamlScalarNode("last_updated_by")] = new YamlScalarNode(note.LastUpdatedBy); }
+        map.Children[new YamlScalarNode("tags")] = new YamlSequenceNode(Tags(map).Concat(BrainProvenance.Tags(note)).Distinct(StringComparer.Ordinal).Select(tag => new YamlScalarNode(tag)));
         map.Children[new YamlScalarNode("aliases")] = new YamlSequenceNode(note.Aliases.Select(alias => new YamlScalarNode(alias)));
         map.Children[new YamlScalarNode("relations")] = new YamlSequenceNode(note.Relations.Select(relation => new YamlMappingNode
         {
@@ -73,6 +77,16 @@ public static partial class BrainMarkdown
         using var writer = new StringWriter(CultureInfo.InvariantCulture); new YamlStream(new YamlDocument(map)).Save(writer, false);
         string yaml = writer.ToString().Trim().TrimEnd('.').TrimEnd();
         return "---\n" + yaml + "\n---\n\n" + note.Body.TrimEnd() + "\n";
+    }
+    /// <summary>Merges supplied metadata into existing YAML while keeping creator provenance immutable.</summary>
+    public static string MergeFrontmatter(string previous, string incoming)
+    {
+        YamlMappingNode map = Mapping(previous);
+        foreach (var pair in Mapping(incoming).Children)
+        { if (pair.Key is YamlScalarNode key && key.Value != "origin_agent") { map.Children[pair.Key] = pair.Value; } }
+        using var writer = new StringWriter(CultureInfo.InvariantCulture);
+        new YamlStream(new YamlDocument(map)).Save(writer, false);
+        return writer.ToString().Trim().TrimEnd('.').TrimEnd();
     }
     /// <summary>Extracts wikilink destinations separately from human-facing display aliases and headings.</summary>
     public static IReadOnlyList<string> Links(string body) => LinkPattern().Matches(body).Select(match => match.Groups[1].Value.Split('|')[0].Split('#')[0].Trim()).Where(link => link.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -97,8 +111,16 @@ public static partial class BrainMarkdown
     private static YamlNode? Node(YamlMappingNode map, string key) => map.Children.TryGetValue(new YamlScalarNode(key), out YamlNode? node) ? node : null;
     /// <summary>Reads a scalar with a conservative fallback.</summary>
     private static string Scalar(YamlMappingNode map, string key, string fallback) => Node(map, key) is YamlScalarNode node ? node.Value ?? fallback : fallback;
-    /// <summary>Reads a bounded sequence of labels.</summary>
+    /// <summary>Reads bounded aliases without changing existing indexing limits.</summary>
     private static string[] Strings(YamlMappingNode map, string key) => Node(map, key) is YamlSequenceNode sequence ? sequence.Children.OfType<YamlScalarNode>().Select(node => node.Value ?? "").Where(value => value.Length is > 0 and < 250).Take(100).ToArray() : [];
+    /// <summary>Preserves all authored tag strings within the document size limit and rejects shapes that cannot be merged losslessly.</summary>
+    private static string[] Tags(YamlMappingNode map) => Node(map, "tags") switch
+    {
+        null => [],
+        YamlScalarNode scalar => string.IsNullOrWhiteSpace(scalar.Value) ? [] : [scalar.Value],
+        YamlSequenceNode sequence when sequence.Children.All(child => child is YamlScalarNode) => sequence.Children.Cast<YamlScalarNode>().Select(child => child.Value ?? "").ToArray(),
+        _ => throw new FormatException("Brain tags must be text or a list of text.")
+    };
     /// <summary>Reads authored timestamps without assigning future certainty to missing dates.</summary>
     private static DateTimeOffset Date(YamlMappingNode map, string key) => DateTimeOffset.TryParse(Scalar(map, key, ""), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var date) ? date : DateTimeOffset.UtcNow;
     /// <summary>Bounds independent confidence and importance scores.</summary>

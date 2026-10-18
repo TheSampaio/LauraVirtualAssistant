@@ -53,6 +53,9 @@ public sealed class LaunchApplicationSkill : PhraseSkillBase
     protected override string PhrasesKey => LocalizationKeys.Skills.LaunchPrefixes;
 
     /// <inheritdoc />
+    public override bool CanHandle(SkillRequest request) => PhraseMatcher.TryMatchPrefix(request.NormalizedText, Localizer.GetPhrases(PhrasesKey), out _);
+
+    /// <inheritdoc />
     public override async Task<SkillResponse> ExecuteAsync(
         SkillRequest request,
         CancellationToken cancellationToken = default)

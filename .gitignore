@@ -2,6 +2,14 @@
 .vs/
 .vscode/
 .idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+Desktop.ini
+/.agents/
+/.codex/
+/.aws/
 
 # Build output
 _Output/
@@ -10,6 +18,12 @@ obj/
 [Bb]in/
 [Oo]bj/
 TestResults/
+/graphify-out/
+/coverage/
+*.binlog
+*.sarif
+*.etl
+*.trace
 *.exe
 *.dll
 *.pdb
@@ -18,6 +32,9 @@ TestResults/
 
 # Local assistant data and credentials (including interrupted writes/backups)
 google-key.dat*
+chatgpt-credentials.dat*
+chatgpt-credentials.lock
+openai-key.dat*
 api_keys.json*
 settings.ini*
 memory.db*
@@ -25,17 +42,32 @@ reminders.json*
 mcp-servers.json*
 /Workspace/
 /brain/
+/Brain/
+/Diagnostics/
+/Screenshots/
+/Captures/
 # Custom vaults receive exact Git exclusions from FileBrainStorage.
 brain-index*.db*
 brain-vectors*.db*
 /.brain-cache/
 brain-backup*.zip
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
 .env
 .env.*
 !.env.example
 *.pfx
 *.p12
 *.key
+*.pem
+*.ppk
+*.jks
+*.keystore
+*.snk
 
 # Downloaded local model weights are not source assets
 *.gguf
@@ -50,9 +82,14 @@ brain-backup*.zip
 *.suo
 *.cache
 *.log
+runtime-*.jsonl
+*.jsonl
 *.tmp
 *.bak
 *.dmp
+*.mdmp
+*.stackdump
+*.crash
 *.trx
 *.coverage
 *.coveragexml

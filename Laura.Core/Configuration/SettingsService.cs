@@ -39,35 +39,43 @@ public sealed class SettingsService : ISettingsService, IDisposable
     /// <inheritdoc />
     public async Task<LauraSettings> LoadAsync(CancellationToken cancellationToken = default)
     {
-        LauraSettings loaded = (await _store.LoadAsync(cancellationToken).ConfigureAwait(false)).Sanitized();
-        Publish(loaded);
-
-        _logger.LogInformation("Settings loaded (culture {Culture}).", loaded.Culture);
-        return loaded;
+        await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            LauraSettings loaded = (await _store.LoadAsync(cancellationToken).ConfigureAwait(false)).Sanitized();
+            Publish(loaded);
+            _logger.LogInformation("Settings loaded (culture {Culture}).", loaded.Culture);
+            return loaded;
+        }
+        finally { _writeLock.Release(); }
     }
 
     /// <inheritdoc />
-    public async Task<LauraSettings> UpdateAsync(LauraSettings settings, CancellationToken cancellationToken = default)
+    public Task<LauraSettings> UpdateAsync(LauraSettings settings, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        return UpdateAsync(_ => settings, cancellationToken);
+    }
 
-        LauraSettings sanitized = settings.Sanitized();
-
+    /// <inheritdoc />
+    public async Task<LauraSettings> UpdateAsync(Func<LauraSettings, LauraSettings> edit, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(edit);
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-
         try
         {
+            LauraSettings sanitized = edit(Current).Sanitized();
             await _store.SaveAsync(sanitized, cancellationToken).ConfigureAwait(false);
+            // Publication belongs to the same transaction as persistence, before the next writer.
+            Publish(sanitized);
+            _logger.LogInformation("Settings updated (culture {Culture}).", sanitized.Culture);
+            return sanitized;
         }
         finally
         {
             _writeLock.Release();
         }
 
-        Publish(sanitized);
-
-        _logger.LogInformation("Settings updated (culture {Culture}).", sanitized.Culture);
-        return sanitized;
     }
 
     /// <inheritdoc />

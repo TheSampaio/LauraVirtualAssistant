@@ -71,6 +71,6 @@ public sealed partial class BrainTests
         journal.RetainObservation(Guid.NewGuid(), identity, "{\"Observation\":null,\"UserGoal\":null}");
         BrainExecutionObservation valid = Observation(0, "healthy"); journal.RetainObservation(valid.Id, identity, JsonSerializer.Serialize(new BrainObservationReceipt(valid, "Keep a healthy synthetic observation.")));
         await experiences.RecoverAsync(); Assert.Single(brain.Snapshot.Notes, note => note.Type == "experience"); Assert.Equal(2, journal.ReadObservations(identity).Count);
-        journal.ClearHistory(); Assert.Empty(journal.ReadObservations(identity));
+        journal.ClearHistory(); Assert.Equal(2, journal.ReadObservations(identity).Count); Assert.Empty(journal.ReadAllHistory());
     }
 }

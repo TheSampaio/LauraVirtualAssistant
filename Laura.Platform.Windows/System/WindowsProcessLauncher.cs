@@ -80,16 +80,20 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
         if (expectedHash is not null && (expectedHash.Length != 64 || !expectedHash.All(Uri.IsHexDigit))) { return new(false, fileName, Reason: "Invalid expected identity.") { StopFallback = true }; }
         if (PermissionPolicy.IsNetworkPath(fileName)) { return new(false, fileName, Reason: "Network launch targets are unsupported.") { StopFallback = true }; }
+        if (Path.IsPathFullyQualified(fileName) && !IsLocalLaunchResource(fileName)) { return new(false, fileName, Reason: "Launch target is redirected or unavailable.") { StopFallback = true }; }
         if (!Path.IsPathFullyQualified(fileName) && _applications.Applications.Count == 0) { await _applications.RefreshAsync(cancellationToken).ConfigureAwait(false); }
-        IReadOnlyList<InstalledApplication> matches = File.Exists(fileName) ? [] : _applications.Find(fileName);
+        IReadOnlyList<InstalledApplication> matches = Path.IsPathFullyQualified(fileName) && File.Exists(fileName) ? [] : _applications.Find(fileName);
         if (matches.Count > 1 && Laura.Core.Skills.ApplicationNameMatcher.Score(matches[0].Name, fileName) == Laura.Core.Skills.ApplicationNameMatcher.Score(matches[1].Name, fileName))
         { return new(false, fileName, Reason: "Ambiguous application name.") { StopFallback = true }; }
         string target = matches.Count > 0 ? matches[0].Target : fileName;
+        if (PermissionPolicy.IsNetworkPath(target)) { return new(false, target, Reason: "Network launch targets are unsupported.") { StopFallback = true }; }
+        if (Path.IsPathFullyQualified(target) && !IsLocalLaunchResource(target)) { return new(false, target, Reason: "Launch target is redirected or unavailable.") { StopFallback = true }; }
         try { if (!File.Exists(target)) { target = ResolveExecutable(target); } target = Path.GetFullPath(target); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException) { return new(false, target, Reason: "Executable unavailable."); }
         if (!File.Exists(target)) { return new(false, target, Reason: "Executable unavailable."); }
         string applicationDirectory = Path.GetDirectoryName(target)!;
         workingDirectory = workingDirectory is null ? applicationDirectory : Path.GetFullPath(workingDirectory);
+        if (!IsLocalLaunchResource(workingDirectory)) { return new(false, target, Reason: "Launch directory is redirected or unavailable.") { StopFallback = true }; }
         if (!Directory.Exists(workingDirectory)) { return new(false, target, Reason: "Working directory unavailable."); }
         bool defaultDirectory = workingDirectory.Equals(applicationDirectory, StringComparison.OrdinalIgnoreCase);
         var startInfo = new ProcessStartInfo(target)
@@ -138,18 +142,28 @@ public sealed class WindowsProcessLauncher : IProcessLauncher
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return new(false, target, Reason: "Executable could not be read.") { StopFallback = true }; }
     }
 
+    /// <summary>Checks ancestors before file metadata IO; unsupported paths are normal launch refusals.</summary>
+    private static bool IsLocalLaunchResource(string path)
+    {
+        try { PermissionPolicy.ValidateResources(new(PermissionOperation.Process, "Native launcher", "Validate local launch resource", [path]), []); return true; }
+        catch (Exception error) when (error is PermissionDeniedException or IOException or UnauthorizedAccessException or ArgumentException) { return false; }
+    }
+
     /// <summary>Resolves executables before approval so PATH changes cannot redirect an approved launch.</summary>
     public static string ResolveExecutable(string executable)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(executable);
-        if (Path.IsPathFullyQualified(executable)) { return Path.GetFullPath(executable); }
+        if (Path.IsPathFullyQualified(executable))
+        { string path = Path.GetFullPath(executable); PermissionPolicy.ValidateResources(new(PermissionOperation.Process, "Native executable resolver", "Validate executable", [path]), []); return path; }
         if (executable.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar, ':']) >= 0)
         { throw new ArgumentException("Use a full executable path.", nameof(executable)); }
         string name = Path.HasExtension(executable) ? executable : executable + ".exe";
-        foreach (string directory in new[] { Environment.SystemDirectory }.Concat((Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)))
+        foreach (string directory in WindowsCommandEnvironment.SearchDirectories())
         {
-            if (!Path.IsPathFullyQualified(directory)) { continue; }
+            if (!Path.IsPathFullyQualified(directory) || PermissionPolicy.IsNetworkPath(directory)) { continue; }
             string candidate = Path.Combine(directory, name);
+            try { PermissionPolicy.ValidateResources(new(PermissionOperation.Process, "Native executable resolver", "Validate PATH candidate", [candidate]), []); }
+            catch (Exception error) when (error is PermissionDeniedException or IOException or UnauthorizedAccessException or ArgumentException) { continue; }
             if (File.Exists(candidate)) { return Path.GetFullPath(candidate); }
         }
         throw new FileNotFoundException("Executable could not be resolved.");

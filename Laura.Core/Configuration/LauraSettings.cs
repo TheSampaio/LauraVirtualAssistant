@@ -53,12 +53,22 @@ public sealed record LauraSettings
     /// so a fresh install still greets the user by name.
     /// </summary>
     public string UserNickname { get; init; } = string.Empty;
+    /// <summary>Gets an optional city for weather queries; empty uses provider IP detection.</summary>
+    public string WeatherLocation { get; init; } = string.Empty;
 
     /// <summary>Gets the voice timbre.</summary>
     public VoiceProfile Voice { get; init; } = VoiceProfile.Default;
 
     /// <summary>Gets the optional generative-mode configuration.</summary>
     public GenerativeAiOptions GenerativeAi { get; init; } = GenerativeAiOptions.Default;
+    /// <summary>Gets optional account-authorized ChatGPT settings, independent of Gemini voice enablement.</summary>
+    public ChatGptOptions ChatGpt { get; init; } = new();
+    /// <summary>Gets the native manual or explicitly authorized automatic routing mode.</summary>
+    public ConversationProviderSelection ProviderSelection { get; init; }
+    /// <summary>Gets cumulative autonomous task budgets, separate from individual model and tool deadlines.</summary>
+    public CognitiveTaskOptions CognitiveTasks { get; init; } = new();
+    /// <summary>Gets the local diagnostic detail threshold; no level includes private payloads.</summary>
+    public Microsoft.Extensions.Logging.LogLevel DiagnosticLevel { get; init; } = Microsoft.Extensions.Logging.LogLevel.Information;
 
     /// <summary>
     /// Gets a value indicating whether Laura greets the user on startup.
@@ -114,11 +124,23 @@ public sealed record LauraSettings
             OutputDevice = Math.Max(-1, OutputDevice),
             ClapWakeSensitivity = Math.Clamp(ClapWakeSensitivity, 0, 100),
             UserNickname = UserNickname.Trim(),
+            WeatherLocation = SanitizeWeatherLocation(WeatherLocation),
             Voice = Voice.Sanitized(),
             GenerativeAi = GenerativeAi.Sanitized(),
+            ChatGpt = ChatGpt.Sanitized(),
+            CognitiveTasks = CognitiveTasks.Sanitized(),
+            ProviderSelection = Enum.IsDefined(ProviderSelection) ? ProviderSelection : ConversationProviderSelection.Gemini,
+            DiagnosticLevel = Enum.IsDefined(DiagnosticLevel) ? DiagnosticLevel : Microsoft.Extensions.Logging.LogLevel.Information,
             Brain = Brain.Sanitized(),
             Permissions = Permissions.Sanitized(),
             Screenshots = Screenshots.Sanitized(),
         };
+    }
+
+    /// <summary>Bounds a user-entered weather place to a single short line.</summary>
+    private static string SanitizeWeatherLocation(string? value)
+    {
+        string cleaned = (value ?? string.Empty).ReplaceLineEndings(" ").Trim();
+        return cleaned.Length <= 100 ? cleaned : cleaned[..100];
     }
 }

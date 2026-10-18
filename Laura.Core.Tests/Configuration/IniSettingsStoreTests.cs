@@ -8,6 +8,35 @@ namespace Laura.Core.Tests.Configuration;
 /// </summary>
 public sealed class IniSettingsStoreTests : IDisposable
 {
+    /// <summary>Retired providers migrate without granting cloud consent or changing the selected Brain.</summary>
+    [Theory]
+    [InlineData("local")]
+    [InlineData("openai")]
+    [InlineData("auto")]
+    public async Task RetiredProvidersRequireExplicitGeminiEnableAfterMigration(string provider)
+    {
+        await File.WriteAllTextAsync(_filePath, "[GenerativeAI]\nProvider=" + provider + "\nEnabled=true\nLocalModel=retired\n[Brain]\nDirectory=C:/Synthetic/Brain\n");
+        var store = CreateStore();
+        LauraSettings migrated = await store.LoadAsync();
+        Assert.Equal("gemini", migrated.GenerativeAi.Provider);
+        Assert.False(migrated.GenerativeAi.Enabled);
+        Assert.Equal("C:/Synthetic/Brain", migrated.Brain.Directory);
+        await store.SaveAsync(migrated);
+        Assert.DoesNotContain("LocalModel", await File.ReadAllTextAsync(_filePath));
+        Assert.Equal(migrated.GenerativeAi, (await store.LoadAsync()).GenerativeAi);
+    }
+
+    /// <summary>The explicit full-access choice round-trips while diagnostics remain intact.</summary>
+    [Fact]
+    public async Task FullAccessChoiceAndDiagnosticLevelRoundTrip()
+    {
+        var value = LauraSettings.Default with { Permissions = new() { Mode = (Laura.Core.Permissions.ApprovalMode)2 }, DiagnosticLevel = Microsoft.Extensions.Logging.LogLevel.Debug };
+        var store = CreateStore(); await store.SaveAsync(value);
+        var loaded = await store.LoadAsync();
+        Assert.Equal(Laura.Core.Permissions.ApprovalMode.FullAccess, loaded.Permissions.Mode);
+        Assert.Equal(value.DiagnosticLevel, loaded.DiagnosticLevel);
+        Assert.Equal(Microsoft.Extensions.Logging.LogLevel.Information, (value with { DiagnosticLevel = (Microsoft.Extensions.Logging.LogLevel)999 }).Sanitized().DiagnosticLevel);
+    }
     private readonly string _filePath = Path.Combine(
         Path.GetTempPath(),
         $"laura-test-{Guid.NewGuid():N}.ini");
@@ -37,7 +66,6 @@ public sealed class IniSettingsStoreTests : IDisposable
                 Provider = "gemini",
                 LiveVoice = "Kore",
                 ContinuousListening = true,
-                Endpoint = "http://localhost:11434",
                 Model = "gemini-3.1-flash-live-preview",
                 Persona = "Be brief.",
             },

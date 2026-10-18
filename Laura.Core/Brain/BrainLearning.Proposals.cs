@@ -13,6 +13,8 @@ public sealed partial class BrainLearning
             || !userText.Contains(proposal.Evidence, StringComparison.Ordinal) || !proposal.Evidence.Contains(proposal.Value, StringComparison.Ordinal)
             || Sensitive(proposal.Value + " " + proposal.Aspect)) { return new("rejected", Reason: "Proposal lacks bounded, verbatim user evidence."); }
         if (proposal.Change == "temporary") { return new("temporary", Reason: "Working context is retained separately; no durable note created."); }
+        if (proposal.Category == "application")
+        { return await LearnApplicationAsync(proposal.Aspect, proposal.Value, proposal.Evidence, proposal.Change, proposal.TargetId, brain.Location, cancellationToken).ConfigureAwait(false); }
         (string Type, string Folder, string Memory)? template = proposal.Category switch
         {
             "preference" => ("preference", "Owner/Preferences", "semantic"),

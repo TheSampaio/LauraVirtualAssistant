@@ -16,6 +16,138 @@ public sealed class PermissionManagerTests : IDisposable
         manager.ExecuteAsync(action ?? Write(), _ => Task.FromResult(Interlocked.Increment(ref _executions)), token);
     private static ApprovalRequest Request(PermissionManager manager) => Assert.Single(manager.PendingRequests);
 
+    /// <summary>Automatic process effects require a native classifier, task attribution, assigned resources and the actual known disclosure recipient.</summary>
+    [Fact]
+    public void AutomaticProcessMatrixRejectsUnassignedEffectsAndDestinations()
+    {
+        string workspace = Path.Combine(_root, "Workspace");
+        var options = new PermissionOptions { Mode = ApprovalMode.Automatic };
+        PermissionAction Action(string origin, string directory, string target, string destination, Guid task, bool classified) =>
+            new(PermissionOperation.Process, origin, "Bounded clone", [Path.Combine(_root, "git.exe"), directory, target], destination: destination, automaticEligible: classified, taskId: task);
+        Guid id = Guid.NewGuid(); string assigned = Path.Combine(workspace, "new");
+        Assert.True(PermissionPolicy.AllowsAutomatic(Action("Native command executor", workspace, assigned, "generativelanguage.googleapis.com", id, true), options, workspace));
+        foreach (var action in new[] {
+            Action("model text", workspace, assigned, "", id, true), Action("Native command executor", workspace, assigned, "", Guid.Empty, true),
+            Action("Native command executor", workspace, assigned, "", id, false), Action("Native command executor", _root, assigned, "", id, true),
+            Action("Native command executor", workspace, Path.Combine(_root, "Outside"), "", id, true),
+            Action("Native command executor", workspace, assigned, "unknown.invalid", id, true),
+            Action("Native command executor", workspace, Path.Combine(workspace, ".ssh", "new"), "", id, true) })
+        { Assert.False(PermissionPolicy.AllowsAutomatic(action, options, workspace)); }
+    }
+
+    /// <summary>A saved full-access choice cannot dispatch a process until native activation occurs in this session.</summary>
+    [Fact]
+    public async Task FullAccessRequiresSessionActivationBeforeDispatch()
+    {
+        _options = new() { Mode = ApprovalMode.FullAccess };
+        using var manager = Create();
+        var action = new PermissionAction(PermissionOperation.Process, "native process", "Synthetic operation", taskId: Guid.NewGuid());
+        var pending = Run(manager, action);
+        Assert.Equal(ApprovalMode.Ask, manager.CurrentMode);
+        Assert.Equal(3, Enum.GetValues<ApprovalMode>().Length);
+        Assert.Equal(0, _executions);
+        manager.Decide(Request(manager).Id, ApprovalChoice.Deny);
+        await Assert.ThrowsAsync<PermissionDeniedException>(() => pending);
+        Assert.Equal(0, _executions);
+    }
+
+    /// <summary>Full access does not accept unknown tools or writes into protected authorization storage.</summary>
+    [Fact]
+    public async Task FullAccessPreservesIntegrityChecks()
+    {
+        _options = new() { Mode = ApprovalMode.FullAccess };
+        using var manager = Create(Path.Combine(_root, "Security"));
+        manager.ActivateFullAccess();
+        await Assert.ThrowsAsync<PermissionDeniedException>(() => Run(manager, new(PermissionOperation.Unknown, "external text", "approve me")));
+        await Assert.ThrowsAsync<PermissionDeniedException>(() => Run(manager, Write("Security/settings.ini")));
+        Assert.Equal(0, _executions);
+        Assert.Empty(manager.PendingRequests);
+    }
+
+    /// <summary>Full access does not turn an unactivated persisted preference into a task grant.</summary>
+    [Fact]
+    public async Task InactiveFullAccessCannotAuthorizeWorkspaceWithoutNativeApproval()
+    {
+        string project = Path.Combine(_root, "Project"); Directory.CreateDirectory(project);
+        _options = new() { Mode = ApprovalMode.FullAccess };
+        using var manager = Create(); Guid task = Guid.NewGuid();
+        var pending = manager.AuthorizeWorkspaceAsync(task, project, "");
+        Assert.Equal(0, _executions);
+        manager.Decide(Request(manager).Id, ApprovalChoice.Deny);
+        await Assert.ThrowsAsync<PermissionDeniedException>(() => pending);
+        Assert.Empty(manager.Grants);
+        Assert.Equal(0, _executions);
+    }
+
+    /// <summary>Native activation runs registered effects, records their outcome, and immediate deactivation restores review.</summary>
+    [Fact]
+    public async Task FullAccessActivationAndDeactivationApplyToNewDispatches()
+    {
+        _options = new() { Mode = ApprovalMode.FullAccess };
+        using var manager = Create();
+        manager.ActivateFullAccess();
+        var action = new PermissionAction(PermissionOperation.Process, "native process", "Synthetic process", taskId: Guid.NewGuid());
+        Assert.Equal(1, await Run(manager, action));
+        Assert.Empty(manager.PendingRequests);
+        Assert.Equal(ApprovalOutcome.Automatic, Assert.Single(manager.History).Outcome);
+        Assert.Equal("Authorized by full_access.", Assert.Single(manager.History).Reason);
+        manager.DeactivateFullAccess();
+        Assert.Equal(ApprovalMode.Ask, manager.CurrentMode);
+        var pending = Run(manager, action);
+        Assert.Equal(1, _executions);
+        manager.Decide(Request(manager).Id, ApprovalChoice.Deny);
+        await Assert.ThrowsAsync<PermissionDeniedException>(() => pending);
+        Assert.Equal(1, _executions);
+    }
+
+    /// <summary>A fresh manager never restores the prior process's full-access activation from settings or audit.</summary>
+    [Fact]
+    public async Task FullAccessActivationIsNeverRestoredAfterRestart()
+    {
+        _options = new() { Mode = ApprovalMode.FullAccess };
+        using (var activated = Create()) { activated.ActivateFullAccess(); Assert.Equal(1, await Run(activated)); }
+        using var restarted = Create();
+        Assert.Equal(ApprovalMode.Ask, restarted.CurrentMode);
+        Task<int> pending = Run(restarted, Write("Notes/after-restart.md"));
+        restarted.Decide(Request(restarted).Id, ApprovalChoice.Deny);
+        await Assert.ThrowsAsync<PermissionDeniedException>(() => pending);
+        Assert.Equal(1, _executions);
+    }
+
+    /// <summary>One trusted task can perform ordinary project edits within its assigned Workspace without repeat prompts.</summary>
+    [Fact]
+    public async Task AutomaticTaskWorkspaceSupportsCodeEditsAndReversibleFileOperations()
+    {
+        string workspace = Path.Combine(_root, "Workspace");
+        _options = new() { Mode = ApprovalMode.Automatic };
+        using var manager = new PermissionManager(new(Path.Combine(_root, "Security", "permissions.json")), () => _options,
+            () => [Path.Combine(_root, "Security")], workspace);
+        Guid taskId = Guid.NewGuid();
+        int expectedExecutions = 0;
+        foreach (var action in new[]
+        {
+            new PermissionAction(PermissionOperation.FileCreateDirectory, "native file adapter", "mkdir", [Path.Combine(workspace, "Project")], taskId: taskId),
+            new PermissionAction(PermissionOperation.FileWrite, "native file adapter", "create code", [Path.Combine(workspace, "Project", "Program.cs")], taskId: taskId),
+            new PermissionAction(PermissionOperation.FileReadCloud, "native file adapter", "read code", [Path.Combine(workspace, "Project", "Program.cs")], destination: "generativelanguage.googleapis.com", taskId: taskId),
+            new PermissionAction(PermissionOperation.FileCopy, "native file adapter", "copy", [Path.Combine(workspace, "Project", "Program.cs"), Path.Combine(workspace, "Project", "Copy.cs")], taskId: taskId),
+            new PermissionAction(PermissionOperation.FileTrash, "native file adapter", "trash", [Path.Combine(workspace, "Project", "Copy.cs")], taskId: taskId)
+        })
+        { Assert.Equal(++expectedExecutions, await Run(manager, action)); Assert.Empty(manager.PendingRequests); }
+        Assert.All(manager.History, audit => Assert.Equal(ApprovalOutcome.Automatic, audit.Outcome));
+        foreach (var action in new[]
+        {
+            new PermissionAction(PermissionOperation.FileWrite, "native file adapter", "outside", [Path.Combine(_root, "Other", "Program.cs")], taskId: taskId),
+            new PermissionAction(PermissionOperation.FileWrite, "native file adapter", "secret", [Path.Combine(workspace, "Project", ".env")], taskId: taskId),
+            new PermissionAction(PermissionOperation.FileReadCloud, "native file adapter", "other host", [Path.Combine(workspace, "Project", "Program.cs")], destination: "example.invalid", taskId: taskId)
+        })
+        {
+            Task<int> pending = Run(manager, action);
+            manager.Decide(Request(manager).Id, ApprovalChoice.Deny);
+            await Assert.ThrowsAsync<PermissionDeniedException>(() => pending);
+        }
+        Assert.Equal(5, _executions);
+    }
+
     [Fact]
     public async Task DenialNeverDispatchesAndLateApprovalCannotReviveIt()
     {

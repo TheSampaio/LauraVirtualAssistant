@@ -21,6 +21,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Maintained Microsoft JWT verifier for official OIDC signatures and claim validation. MIT. -->
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.16.0" />
     <!-- Official minimal MCP client; framing/version negotiation remain outside the cognitive Core. Apache-2.0. -->
     <PackageReference Include="ModelContextProtocol.Core" Version="2.2.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.13" />
@@ -29,6 +31,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Laura.Smoke" />
+    <InternalsVisibleTo Include="Laura.CredentialBroker" />
     <ProjectReference Include="..\Laura.Core\Laura.Core.csproj" />
   </ItemGroup>
 

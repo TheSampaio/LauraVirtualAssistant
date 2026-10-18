@@ -25,6 +25,8 @@ public interface IAssistantEngine : IAsyncDisposable
     /// Gets the current state.
     /// </summary>
     AssistantState State { get; }
+    /// <summary>Gets payload-free bounded pending-message depth for local diagnostics.</summary>
+    int PendingMessageCount => 0;
 
     /// <summary>
     /// Gets recent conversation messages for UI surfaces that are created after
@@ -66,8 +68,12 @@ public interface IAssistantEngine : IAsyncDisposable
     ///     A task completed when the command has finished processing.
     /// </summary>
     Task SubmitCommandAsync(string text, CancellationToken cancellationToken = default);
+    /// <summary>Queues a completed explicitly captured local transcript while preserving its voice origin.</summary>
+    Task SubmitVoiceCommandAsync(string text, CancellationToken cancellationToken = default) => SubmitCommandAsync(text, cancellationToken);
     /// <summary>Queues briefing data exclusively for generation, bypassing local commands and using a concise history title.</summary>
     Task SubmitContextCommandAsync(string text, string displayText, CancellationToken cancellationToken = default);
+    /// <summary>Resumes a private checkpoint after an explicit native user gesture, without replay or inherited grants.</summary>
+    Task ResumeTaskAsync(Guid taskId, CancellationToken cancellationToken = default) => Task.FromException(new NotSupportedException("Task recovery is unavailable."));
     /// <summary>Queues an explicitly selected PNG alongside its question through the normal conversation and speech flow.</summary>
     Task SubmitVisualCommandAsync(string text, byte[] png, CancellationToken cancellationToken = default) =>
         Task.FromException(new NotSupportedException("This engine does not support visual turns."));
@@ -85,7 +91,9 @@ public interface IAssistantEngine : IAsyncDisposable
     Task SpeakAsync(string text, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Immediately stops speech.
+    /// Interrupts active speech/conversation and fences previously queued user turns without clearing retained history.
     /// </summary>
     void StopSpeaking();
+    /// <summary>Cancels the old generation, drains its work and clears only conversation history at the consumer barrier.</summary>
+    Task ClearConversationAsync(CancellationToken cancellationToken = default) => Task.FromException(new NotSupportedException());
 }

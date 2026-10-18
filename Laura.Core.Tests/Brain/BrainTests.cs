@@ -335,17 +335,15 @@ public sealed partial class BrainTests : IAsyncLifetime
         Assert.Throws<IOException>(() => storage.Write("redirect/leak.md", "Synthetic", null)); Assert.False(File.Exists(Path.Combine(outside, "leak.md")));
     }
     [Fact]
-    public async Task OptionalRealOnnxModelRetrievesParaphrasesWithoutNeedingLiteralWordOverlap()
+    public async Task LexicalRetrievalPreservesMarkdownKnowledgeWithoutLocalInference()
     {
-        string? model = Environment.GetEnvironmentVariable("LAURA_TEST_EMBEDDING_MODEL"), vocabulary = Environment.GetEnvironmentVariable("LAURA_TEST_EMBEDDING_VOCABULARY");
-        if (model is null || vocabulary is null) { using var missing = new OnnxBrainEmbedding(_settings); Assert.Empty(missing.ModelId); Assert.Empty(missing.Embed("Synthetic sentence")); return; }
-        await _settings.UpdateAsync(_settings.Current with { Brain = _settings.Current.Brain with { EmbeddingModel = model, EmbeddingVocabulary = vocabulary } });
-        using var embedding = new OnnxBrainEmbedding(_settings); float[] first = embedding.Embed("A car transports people."), similar = embedding.Embed("An automobile carries passengers."), unrelated = embedding.Embed("Orchids grow in a garden.");
-        Assert.Equal(384, first.Length); Assert.All(first, value => Assert.True(float.IsFinite(value)));
-        double relatedScore = first.Zip(similar, (left, right) => (double)left * right).Sum(), unrelatedScore = first.Zip(unrelated, (left, right) => (double)left * right).Sum();
-        Assert.True(relatedScore > unrelatedScore + .15);
-        BrainService brain = Create(embedding); BrainNote note = await brain.SaveAsync(Note("vehicle.md", "Transport", "An automobile carries passengers."));
-        Assert.Contains(await brain.SearchAsync("car"), hit => hit.Note.Id == note.Id && hit.Semantic > .35 && hit.Lexical == 0);
+        var embedding = new LexicalOnlyEmbedding();
+        Assert.Empty(embedding.ModelId);
+        BrainService brain = Create(embedding);
+        BrainNote note = await brain.SaveAsync(Note("vehicle.md", "Transport", "An automobile carries passengers."));
+        Assert.Contains(await brain.SearchAsync("automobile"), hit => hit.Note.Id == note.Id && hit.Lexical > 0);
+        Assert.False(brain.SemanticAvailable);
+        Assert.Equal(note.Hash, brain.Snapshot.Notes.Single(item => item.Id == note.Id).Hash);
     }
     [Fact]
     public async Task FolderCopyRemapsInternalRelationsAndPreservesAttachmentsAndEmptyFolders()

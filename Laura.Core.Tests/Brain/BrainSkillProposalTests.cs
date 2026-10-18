@@ -44,7 +44,8 @@ public sealed partial class BrainTests
     {
         BrainService brain = Create(); BrainNote source = await ProcedureSourceAsync(brain); var skills = new BrainSkills(brain, _settings);
         BrainSkillProposal proposal = Procedure(source);
-        await Assert.ThrowsAsync<IOException>(() => skills.ProposeAsync(proposal with { Definition = proposal.Definition with { Sources = [new(source.Id, source.Hash, "Invented evidence not present in source.")] } }));
+        var rejected = await Assert.ThrowsAsync<IOException>(() => skills.ProposeAsync(proposal with { Definition = proposal.Definition with { Sources = [new(source.Id, source.Hash, "Invented evidence not present in source.")] } }));
+        Assert.Equal(BrainSkillContract.CurrentLiteralSource, rejected.Data[nameof(BrainSkillContract)]);
         await brain.SaveAsync(source with { Body = source.Body + "\nChanged." }); await Assert.ThrowsAsync<IOException>(() => skills.ProposeAsync(proposal));
         await Assert.ThrowsAsync<ArgumentException>(() => skills.ProposeAsync(proposal with { Definition = proposal.Definition with { Steps = [new string('x', 1001)] } }));
         await Assert.ThrowsAsync<ArgumentException>(() => skills.ProposeAsync(proposal with { Definition = proposal.Definition with { Sources = [new(null!, source.Hash, "Literal evidence")] } }));

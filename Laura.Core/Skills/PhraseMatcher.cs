@@ -10,6 +10,13 @@ namespace Laura.Core.Skills;
 /// </summary>
 public static class PhraseMatcher
 {
+    /// <summary>Matches an entire normalized command, preventing quoted, negated or explanatory text from activating a native action.</summary>
+    public static bool MatchesWhole(string normalizedText, IReadOnlyList<string> phrases)
+    {
+        ArgumentNullException.ThrowIfNull(phrases);
+        return normalizedText.Length > 0 && phrases.Any(phrase => normalizedText == TextNormalizer.Normalize(phrase));
+    }
+
     /// <summary>
     /// Reports whether the text contains any of the given phrases.
     ///
@@ -75,12 +82,12 @@ public static class PhraseMatcher
 
         foreach (string prefix in ordered)
         {
-            if (!TextNormalizer.ContainsPhrase(normalizedText, prefix))
+            if (normalizedText != prefix && !normalizedText.StartsWith(prefix + " ", StringComparison.Ordinal))
             {
                 continue;
             }
 
-            argument = TextNormalizer.RemovePhrase(normalizedText, prefix);
+            argument = normalizedText[prefix.Length..].TrimStart();
             return true;
         }
 

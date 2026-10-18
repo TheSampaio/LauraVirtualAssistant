@@ -13,6 +13,15 @@ public sealed class UserFileWorkspace
 
     /// <summary>Targets an app-owned user folder without creating it until needed.</summary>
     public UserFileWorkspace(string directory) => _directory = Path.GetFullPath(directory);
+    /// <summary>Gets the fixed generated-artifact root used by native permission review; callers cannot supply an artifact filename.</summary>
+    public string RootDirectory => _directory;
+
+    /// <summary>Creates the application-owned working directory after rejecting redirected ancestry. Raises: IOException when the workspace is redirected.</summary>
+    public void EnsureCreated()
+    {
+        ValidateDirectory();
+        Directory.CreateDirectory(_directory);
+    }
 
     /// <summary>Lists at most 100 direct workspace files, excluding links.</summary>
     public IReadOnlyList<string> ListFiles()

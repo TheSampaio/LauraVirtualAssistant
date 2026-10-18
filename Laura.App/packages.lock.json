@@ -152,6 +152,36 @@
           "Microsoft.WindowsAppSDK": "1.6.241114003"
         }
       },
+      "Microsoft.IdentityModel.Abstractions": {
+        "type": "Transitive",
+        "resolved": "8.16.0",
+        "contentHash": "gSxKLWRZzBpIsEoeUPkxfywNCCvRvl7hkq146XHPk5vOQc9izSf1I+uL1vh4y2U19QPxd9Z8K/8AdWyxYz2lSg=="
+      },
+      "Microsoft.IdentityModel.JsonWebTokens": {
+        "type": "Transitive",
+        "resolved": "8.16.0",
+        "contentHash": "prBU72cIP4V8E9fhN+o/YdskTsLeIcnKPbhZf0X6mD7fdxoZqnS/NdEkSr+9Zp+2q7OZBOMfNBKGbTbhXODO4w==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Tokens": "8.16.0"
+        }
+      },
+      "Microsoft.IdentityModel.Logging": {
+        "type": "Transitive",
+        "resolved": "8.16.0",
+        "contentHash": "MTzXmETkNQPACR7/XCXM1OGM6oU9RkyibqeJRtO9Ndew2LnGjMf9Atqj2VSf4XC27X0FQycUAlzxxEgQMWn2xQ==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Abstractions": "8.16.0"
+        }
+      },
+      "Microsoft.IdentityModel.Tokens": {
+        "type": "Transitive",
+        "resolved": "8.16.0",
+        "contentHash": "rtViGJcGsN7WcfUNErwNeQgjuU5cJNl6FDQsfi9TncwO+Epzn0FTfBsg3YuFW1Q0Ch/KPxaVdjLw3/+5Z5ceFQ==",
+        "dependencies": {
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.0",
+          "Microsoft.IdentityModel.Logging": "8.16.0"
+        }
+      },
       "Microsoft.IO.RecyclableMemoryStream": {
         "type": "Transitive",
         "resolved": "3.0.1",
@@ -240,22 +270,6 @@
         "resolved": "10.0.20",
         "contentHash": "lqGi/HjtGPvmzqSR+Ii3ZHdvZj811+sBAxyN+T3jrvKBKd13wdVh9vZEfjmTUE5KA6+6W+6iRk5h62CY8pVogg=="
       },
-      "Microsoft.ML.OnnxRuntime": {
-        "type": "Transitive",
-        "resolved": "1.31.0",
-        "contentHash": "7v58S0xqY1ZmLui5BnK3FQEWagRhmhkR/9yLrxF5rQGppGfcMaw7W0a2wgT1SWnT6ug0dmr1B2I4VWhlY/yvng==",
-        "dependencies": {
-          "Microsoft.ML.OnnxRuntime.Managed": "1.31.0"
-        }
-      },
-      "Microsoft.ML.OnnxRuntime.Managed": {
-        "type": "Transitive",
-        "resolved": "1.31.0",
-        "contentHash": "o9nvEiddLLlAMOHN0XZ/06Oal0W6S7iWiSb8lzQAwfQKNOZtX4C8he5/I7Mc/DlSprNfovAW6kCkwX2BAE0JHw==",
-        "dependencies": {
-          "System.Numerics.Tensors": "9.0.0"
-        }
-      },
       "Microsoft.Web.WebView2": {
         "type": "Transitive",
         "resolved": "1.0.3179.45",
@@ -324,11 +338,6 @@
           "SQLitePCLRaw.core": "2.1.12"
         }
       },
-      "System.Numerics.Tensors": {
-        "type": "Transitive",
-        "resolved": "9.0.0",
-        "contentHash": "hyJB4UlpAi19Xr9AXzu2NuagKC4lPfHObNMEAA0HmqFz2rX7wKgzeYzO/jM/eBHDhnUGFFEjk5cOoJaxqg5J4A=="
-      },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
         "resolved": "9.0.13",
@@ -345,7 +354,6 @@
           "Markdig": "[1.4.0, )",
           "Microsoft.Data.Sqlite": "[9.0.10, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.10, )",
-          "Microsoft.ML.OnnxRuntime": "[1.31.0, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[2.1.12, )",
           "YamlDotNet": "[18.1.0, )"
         }
@@ -354,6 +362,7 @@
         "type": "Project",
         "dependencies": {
           "Laura.Core": "[1.0.0, )",
+          "Microsoft.IdentityModel.JsonWebTokens": "[8.16.0, )",
           "ModelContextProtocol.Core": "[2.2.0, )",
           "NAudio.Core": "[2.2.1, )",
           "NAudio.WinMM": "[2.2.1, )",
@@ -368,14 +377,6 @@
         "contentHash": "xAv4+Xj8wePW1innIUSXebX6UHMGDzOxwKPwYNUNY7mBrsRL/hPFEtuPLpBSxc3iBnuaCogPDCDeN7T4b1xV0Q==",
         "dependencies": {
           "Microsoft.WindowsAppSDK": "1.6.241114003"
-        }
-      },
-      "Microsoft.ML.OnnxRuntime": {
-        "type": "Transitive",
-        "resolved": "1.31.0",
-        "contentHash": "7v58S0xqY1ZmLui5BnK3FQEWagRhmhkR/9yLrxF5rQGppGfcMaw7W0a2wgT1SWnT6ug0dmr1B2I4VWhlY/yvng==",
-        "dependencies": {
-          "Microsoft.ML.OnnxRuntime.Managed": "1.31.0"
         }
       },
       "Microsoft.Web.WebView2": {

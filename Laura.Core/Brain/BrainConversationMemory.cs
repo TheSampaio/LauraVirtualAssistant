@@ -8,6 +8,7 @@ namespace Laura.Core.Brain;
 public sealed class BrainConversationMemory(BrainService brain, BrainLearning learning, SqliteConversationMemory transcripts) : IConversationMemory
 {
     private readonly object _gate = new();
+    private readonly object _initializationGate = new();
     private bool _initialized;
     private string _lastUserText = "";
     private Guid _turnId;
@@ -18,12 +19,23 @@ public sealed class BrainConversationMemory(BrainService brain, BrainLearning le
     /// <inheritdoc />
     public ConversationWorkingContext WorkingContext { get { lock (_gate) { return new(_turnId, _lastUserText); } } }
     /// <inheritdoc />
+    public Guid WorkingTurnId { get { lock (_gate) { return _turnId; } } }
+    /// <inheritdoc />
     public void SetWorkingContext(string text)
-    { ArgumentNullException.ThrowIfNull(text); lock (_gate) { _lastUserText = text.Length <= 4000 ? text : ""; _turnId = Guid.NewGuid(); } }
+        => SetWorkingContext(new ConversationWorkingContext(Guid.NewGuid(), text));
+    /// <inheritdoc />
+    public void SetWorkingContext(ConversationWorkingContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context); ArgumentNullException.ThrowIfNull(context.UserText);
+        lock (_gate) { _lastUserText = context.UserText.Length <= 4000 ? context.UserText : ""; _turnId = context.TurnId == Guid.Empty ? Guid.NewGuid() : context.TurnId; }
+    }
+    /// <inheritdoc />
+    public void UpdateWorkingContext(string text)
+    { ArgumentNullException.ThrowIfNull(text); lock (_gate) { _lastUserText = text.Length <= 4000 ? text : ""; if (_turnId == Guid.Empty) { _turnId = Guid.NewGuid(); } } }
     /// <inheritdoc />
     public void Initialize()
     {
-        lock (_gate)
+        lock (_initializationGate)
         {
             if (_initialized) { return; }
             transcripts.Initialize(); brain.InitializeAsync().GetAwaiter().GetResult();
@@ -47,16 +59,22 @@ public sealed class BrainConversationMemory(BrainService brain, BrainLearning le
     }
     /// <inheritdoc />
     public void Append(ConversationMessage message)
+        => AppendCore(message, true);
+    /// <inheritdoc />
+    public void AppendHistory(ConversationMessage message) => AppendCore(message, false);
+    private void AppendCore(ConversationMessage message, bool updateContext)
     {
         Initialize();
         if (message.Source != ConversationMessageSource.Assistant && learning.CanObserve(message.Text))
         { transcripts.AppendForLearning(message, FileBrainStorage.Hash(brain.Location)); learning.RecoverPending(transcripts); }
         else { transcripts.Append(message); }
-        if (message.Source != ConversationMessageSource.Assistant)
-        { SetWorkingContext(message.Text); }
+        if (updateContext && message.Source != ConversationMessageSource.Assistant)
+        { SetWorkingContext(new ConversationWorkingContext(message.TurnId, message.Text)); }
     }
     /// <inheritdoc />
     public IReadOnlyList<ConversationMessage> ReadRecent(int limit) => transcripts.ReadRecent(limit);
+    /// <inheritdoc />
+    public IReadOnlyList<ConversationMessage> ReadAllHistory() => transcripts.ReadAllHistory();
     /// <inheritdoc />
     public IReadOnlyList<MemoryFact> Search(string query)
     {

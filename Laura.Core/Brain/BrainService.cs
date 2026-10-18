@@ -5,6 +5,8 @@ using System.Text.RegularExpressions;
 using Laura.Core.Abstractions;
 using Laura.Core.Localization;
 using Laura.Core.Text;
+using Laura.Core.Diagnostics;
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 
 namespace Laura.Core.Brain;
@@ -21,6 +23,8 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     private FileSystemWatcher? _watcher;
     private Task? _worker;
     private int _dirty = 1;
+    private readonly ConcurrentDictionary<string, byte> _changedPaths = new(StringComparer.Ordinal);
+    private string _graphFingerprint = "";
     /// <summary>Reports coherent changes without exposing note text in diagnostics.</summary>
     public event EventHandler? Changed;
     /// <summary>Gets the current portable vault root.</summary>
@@ -48,7 +52,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
             {
                 if (!_storage.EnumerateFiles().Contains("README.md", StringComparer.OrdinalIgnoreCase))
                 {
-                    var readme = new BrainNote { Path = "README.md", Title = "LAURA Brain", Type = "document", Body = "# LAURA Brain\n\nMarkdown is the source of truth. Each note has a stable id and schema_version: 1.\nEdit notes in any Markdown editor. Typed relations target ids; wikilinks resolve titles, aliases and relative paths.\nIndices and embeddings are disposable and stay outside this directory.\nSkills are inert until explicitly enabled; ordinary knowledge never grants tool permissions.\nConflicting drafts and previous revisions are preserved in Archive/.\nCloud sync is supplied by your chosen file/document provider, not by this vault. Plain Markdown is readable to anyone with access.\n" };
+                    var readme = new BrainNote { Path = "README.md", Title = "LAURA Brain", Type = "document", OriginAgent = "laura", Body = "# LAURA Brain\n\nMarkdown is the source of truth. Each note has a stable id and schema_version: 1.\nEdit notes in any Markdown editor. Typed relations target ids; wikilinks resolve titles, aliases and relative paths.\nIndices and embeddings are disposable and stay outside this directory.\nSkills are inert until explicitly enabled; ordinary knowledge never grants tool permissions.\nConflicting drafts and previous revisions are preserved in Archive/.\nCloud sync is supplied by your chosen file/document provider, not by this vault. Plain Markdown is readable to anyone with access.\n" };
                     _storage.Write(readme.Path, BrainMarkdown.Render(readme), null);
                 }
                 Scan(false);
@@ -68,9 +72,31 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         finally { _gate.Release(); }
         Changed?.Invoke(this, EventArgs.Empty);
     }
+    /// <summary>Reconciles watcher-detected changes on demand, reusing a coherent clean snapshot for repeated interactions.</summary>
+    public async Task RefreshIfDirtyAsync(CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (Volatile.Read(ref _dirty) == 0 && _changedPaths.IsEmpty) { return; }
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        bool changed = false;
+        try
+        {
+            BrainSnapshot before = Snapshot;
+            bool full = Interlocked.Exchange(ref _dirty, 0) != 0;
+            await Task.Run(() => { if (full) { Scan(false); } else { ReconcilePaths(); } }, cancellationToken).ConfigureAwait(false);
+            changed = full || !ReferenceEquals(before, Snapshot);
+        }
+        catch { Interlocked.Exchange(ref _dirty, 1); throw; }
+        finally { _gate.Release(); }
+        if (changed) { Changed?.Invoke(this, EventArgs.Empty); }
+    }
     /// <summary>Indexes valid files and isolates malformed or conflicting nodes without guessing which version is correct.</summary>
     private void Scan(bool rebuild)
     {
+        using var measurement = LauraDiagnostics.Measure("brain.scan");
+        string[] pending = _changedPaths.Keys.ToArray(); foreach (string path in pending) { _changedPaths.TryRemove(path, out _); }
+        Interlocked.Exchange(ref _dirty, 0);
+        var cached = Snapshot.Notes.ToDictionary(note => note.Path, StringComparer.Ordinal);
         var notes = new List<BrainNote>(); var issues = new List<BrainIssue>();
         foreach (string path in _storage!.EnumerateFiles().Where(path => path.EndsWith(".md", StringComparison.OrdinalIgnoreCase)))
         {
@@ -78,7 +104,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
             {
                 string content = _storage.Read(path);
                 string hash = FileBrainStorage.Hash(content);
-                BrainNote note = Snapshot.Notes.FirstOrDefault(note => note.Path == path && note.Hash == hash) ?? BrainMarkdown.Parse(content, path);
+                BrainNote note = cached.TryGetValue(path, out BrainNote? prior) && prior.Hash == hash ? prior : BrainMarkdown.Parse(content, path);
                 if (note.Id.Length == 0)
                 {
                     note = note with { Id = Guid.NewGuid().ToString("D"), Revision = Guid.NewGuid().ToString("N") };
@@ -90,6 +116,39 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or FormatException or YamlDotNet.Core.YamlException)
             { issues.Add(new(path, "invalid_or_unreadable")); }
         }
+        PublishDocuments(notes, issues, rebuild);
+    }
+    /// <summary>Reconciles exact changed documents; own watcher echoes do not republish a snapshot or rebuild topology.</summary>
+    private void ReconcilePaths()
+    {
+        var notes = Snapshot.Notes.ToDictionary(note => note.Path, StringComparer.Ordinal);
+        var issues = Snapshot.Issues.Where(issue => issue.Code == "invalid_or_unreadable").ToList();
+        bool changed = false;
+        foreach (string path in _changedPaths.Keys.ToArray())
+        {
+            if (!_changedPaths.TryRemove(path, out _)) { continue; }
+            try
+            {
+                string content = _storage!.Read(path);
+                if (notes.TryGetValue(path, out BrainNote? prior) && prior.Hash == FileBrainStorage.Hash(content)) { continue; }
+                BrainNote parsed = BrainMarkdown.Parse(content, path);
+                if (parsed.Id.Length == 0) { Interlocked.Exchange(ref _dirty, 1); continue; }
+                notes[path] = parsed; issues.RemoveAll(issue => issue.Path == path); changed = true;
+            }
+            catch (FileNotFoundException) { changed |= notes.Remove(path); issues.RemoveAll(issue => issue.Path == path); }
+            catch (DirectoryNotFoundException) { changed |= notes.Remove(path); issues.RemoveAll(issue => issue.Path == path); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or FormatException or YamlDotNet.Core.YamlException)
+            { notes.Remove(path); issues.RemoveAll(issue => issue.Path == path); issues.Add(new(path, "invalid_or_unreadable")); changed = true; }
+        }
+        if (changed) { PublishDocuments(notes.Values.ToList(), issues, false); }
+    }
+    /// <summary>Publishes coherent graph/index state from actual documents without rescanning unrelated files.</summary>
+    private void PublishDocuments(List<BrainNote> notes, List<BrainIssue> issues, bool rebuild)
+    {
+        if (!rebuild && notes.Count == Snapshot.Notes.Count && notes.Zip(Snapshot.Notes).All(pair => pair.First.Path == pair.Second.Path && pair.First.Hash == pair.Second.Hash)
+            && issues.SequenceEqual(Snapshot.Issues.Where(issue => issue.Code == "invalid_or_unreadable")))
+        { index.Update(Location, Snapshot.Notes.Where(note => !Snapshot.Issues.Any(issue => issue.Path == note.Path && issue.Code == "conflicting_id")).ToArray(), false); return; }
+        foreach (BrainNote note in notes.Where(BrainProvenance.HasConflict)) { issues.Add(new(note.Path, "origin_tag_conflict")); }
         var duplicates = notes.GroupBy(note => note.Id, StringComparer.Ordinal).Where(group => group.Count() > 1).ToArray();
         var duplicateIds = duplicates.Select(group => group.Key).ToHashSet(StringComparer.Ordinal);
         foreach (var group in duplicates) { foreach (BrainNote note in group) { issues.Add(new(note.Path, "conflicting_id")); } }
@@ -112,8 +171,13 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
             }
         }
         index.Update(Location, valid, rebuild);
-        var snapshot = new BrainSnapshot(notes, edges, issues); _graph = new(snapshot);
-        Volatile.Write(ref _snapshot, snapshot); Interlocked.Exchange(ref _dirty, 0);
+        var snapshot = new BrainSnapshot(notes, edges, issues);
+        var eligible = valid.Where(note => note.IsKnowledge && note.Confidence >= .35).Select(note => note.Id).ToHashSet(StringComparer.Ordinal);
+        string graphFingerprint = FileBrainStorage.Hash(string.Join('|', eligible.Order(StringComparer.Ordinal))
+            + string.Join('|', edges.Where(edge => eligible.Contains(edge.Source) && eligible.Contains(edge.Target)).OrderBy(edge => edge.Source).ThenBy(edge => edge.Target).ThenBy(edge => edge.Type)));
+        if (graphFingerprint != _graphFingerprint)
+        { using var graphMeasurement = LauraDiagnostics.Measure("brain.graph.rebuild"); _graph = new(snapshot); _graphFingerprint = graphFingerprint; }
+        Volatile.Write(ref _snapshot, snapshot);
     }
     /// <summary>Resolves ids first, then exact portable paths, then unique titles or aliases; ambiguous names remain unresolved.</summary>
     public static string? ResolveLink(string link, string fromPath, IReadOnlyList<BrainNote> notes)
@@ -210,6 +274,8 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     }
     /// <summary>Saves a note only against its last observed hash, preserving previous revisions and conflicting drafts.</summary>
     public Task<BrainNote> SaveAsync(BrainNote note, CancellationToken cancellationToken = default) => SaveAsync(note, false, cancellationToken);
+    /// <summary>Saves a trusted native editor gesture with manual attribution, preserving an existing creator.</summary>
+    public Task<BrainNote> SaveManualAsync(BrainNote note, CancellationToken cancellationToken = default) => SaveAsync(note, false, null, [], cancellationToken, "manual");
     /// <summary>Pins background learning to its original vault under the actual write gate.</summary>
     internal Task<BrainNote> SaveAtLocationAsync(BrainNote note, string expectedLocation, CancellationToken cancellationToken) => SaveAsync(note, false, expectedLocation, cancellationToken);
     /// <summary>Rechecks all reviewed source versions under the actual write gate before a reversible maintenance edit.</summary>
@@ -219,38 +285,52 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     public Task<BrainNote> SaveAsync(BrainNote note, bool preserveTimestamp, CancellationToken cancellationToken = default) => SaveAsync(note, preserveTimestamp, null, cancellationToken);
     private Task<BrainNote> SaveAsync(BrainNote note, bool preserveTimestamp, string? expectedLocation, CancellationToken cancellationToken)
         => SaveAsync(note, preserveTimestamp, expectedLocation, [], cancellationToken);
-    private async Task<BrainNote> SaveAsync(BrainNote note, bool preserveTimestamp, string? expectedLocation, IReadOnlyList<(string Path, string Hash)> sources, CancellationToken cancellationToken)
+    private async Task<BrainNote> SaveAsync(BrainNote note, bool preserveTimestamp, string? expectedLocation, IReadOnlyList<(string Path, string Hash)> sources, CancellationToken cancellationToken, string actor = "laura")
     {
+        using var measurement = LauraDiagnostics.Measure("brain.write");
         await InitializeAsync(cancellationToken).ConfigureAwait(false); await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             return await Task.Run(() =>
             {
+                var writtenPaths = new List<string>();
                 if (expectedLocation is not null) { EnsureLocation(expectedLocation); }
                 foreach (var source in sources)
                 { if (FileBrainStorage.Hash(_storage!.Read(source.Path)) != source.Hash) { throw new IOException("A reviewed maintenance source changed before writing."); } }
                 _storage!.ValidatePath(note.Path);
                 if (note.Hash.Length == 0) { note = note with { Path = DestinationPath(note.Path) }; }
                 if (!note.Path.EndsWith(".md", StringComparison.OrdinalIgnoreCase)) { throw new IOException("Notes require a Markdown extension."); }
+                if (note.Hash.Length == 0 && note.Frontmatter.Length == 0 && !preserveTimestamp && !note.Source.StartsWith("external_", StringComparison.Ordinal))
+                { note = note with { OriginAgent = note.OriginAgent.Length == 0 ? actor : note.OriginAgent }; }
                 BrainNote saved = note with { Id = note.Id.Length == 0 ? Guid.NewGuid().ToString("D") : note.Id, UpdatedAt = preserveTimestamp ? note.UpdatedAt : DateTimeOffset.UtcNow,
-                    PreviousRevision = note.Revision, Revision = Guid.NewGuid().ToString("N") };
+                    PreviousRevision = note.Revision, Revision = Guid.NewGuid().ToString("N"), LastUpdatedBy = preserveTimestamp ? note.LastUpdatedBy : actor };
                 if (note.Hash.Length > 0)
                 {
                     string previousContent = _storage!.Read(note.Path);
                     if (FileBrainStorage.Hash(previousContent) != note.Hash) { PreserveDraft(saved); throw new BrainConflictException(); }
-                    try { PreserveRevision(BrainMarkdown.Parse(previousContent, note.Path)); }
+                    try
+                    {
+                        BrainNote previous = BrainMarkdown.Parse(previousContent, note.Path);
+                        saved = saved with { OriginAgent = previous.OriginAgent, Frontmatter = BrainMarkdown.MergeFrontmatter(previous.Frontmatter, saved.Frontmatter), Tags = previous.Tags.Concat(saved.Tags).Distinct(StringComparer.Ordinal).ToArray() };
+                        writtenPaths.Add(PreserveRevision(previous));
+                    }
                     catch (FormatException)
                     {
                         var original = new BrainNote { Path = "Archive/Revisions/" + Guid.NewGuid().ToString("N") + ".md", Title = "Original document before repair", Status = "archived", Source = "manual_repair",
                             Body = previousContent, Relations = [new(saved.Id, "derived_from", 1, .5, "Original malformed source preserved before user repair", "manual_repair")] };
-                        _storage.Write(DestinationPath(original.Path), BrainMarkdown.Render(original), null);
+                        string preserved = DestinationPath(original.Path); _storage.Write(preserved, BrainMarkdown.Render(original), null); writtenPaths.Add(preserved);
                     }
                 }
                 try { _storage!.Write(note.Path, BrainMarkdown.Render(saved), note.Hash.Length > 0 ? note.Hash : null); }
                 catch (BrainConflictException) { PreserveDraft(saved); throw; }
-                Scan(false); return BrainMarkdown.Parse(_storage!.Read(note.Path), note.Path);
+                writtenPaths.Add(note.Path);
+                var documents = Snapshot.Notes.ToDictionary(item => item.Path, StringComparer.Ordinal);
+                foreach (string path in writtenPaths) { documents[path] = BrainMarkdown.Parse(_storage!.Read(path), path); }
+                PublishDocuments(documents.Values.ToList(), Snapshot.Issues.Where(issue => issue.Code == "invalid_or_unreadable" && !writtenPaths.Contains(issue.Path)).ToList(), false);
+                return documents[note.Path];
             }, cancellationToken).ConfigureAwait(false);
         }
+        catch { Interlocked.Exchange(ref _dirty, 1); throw; }
         finally { _gate.Release(); Changed?.Invoke(this, EventArgs.Empty); }
     }
     private void EnsureLocation(string expected)
@@ -267,12 +347,12 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         _storage!.Write(DestinationPath(draft.Path), BrainMarkdown.Render(draft), null); Interlocked.Exchange(ref _dirty, 1);
     }
     /// <summary>Preserves authored content before edits; history remains Markdown and survives index deletion.</summary>
-    private void PreserveRevision(BrainNote note)
+    private string PreserveRevision(BrainNote note)
     {
         var revision = note with { Id = Guid.NewGuid().ToString("D"), Path = "Archive/Revisions/" + Guid.NewGuid().ToString("N") + ".md", Status = "archived", Hash = "",
             Relations = [new(note.Id, "derived_from", 1, note.Confidence, "Previous authored revision", note.Source)] };
         revision = revision with { Body = RebaseImages(note.Body, note.Path, revision.Path) };
-        _storage!.Write(DestinationPath(revision.Path), BrainMarkdown.Render(revision), null);
+        string path = DestinationPath(revision.Path); _storage!.Write(path, BrainMarkdown.Render(revision), null); return path;
     }
     /// <summary>Validates a new destination before applying the directory naming policy.</summary>
     private string DestinationPath(string path, bool directory = false)
@@ -398,6 +478,7 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     /// <summary>Combines bounded lexical, neural, explicit graph, confidence, importance and temporal evidence.</summary>
     public async Task<IReadOnlyList<BrainHit>> SearchAsync(string query, int limit = 20, DateTimeOffset? since = null, CancellationToken cancellationToken = default)
     {
+        using var measurement = LauraDiagnostics.Measure("brain.search");
         ArgumentNullException.ThrowIfNull(query);
         if (query.Length > 4000) { throw new ArgumentException("Knowledge query exceeds its supported size.", nameof(query)); }
         await InitializeAsync(cancellationToken).ConfigureAwait(false);
@@ -430,12 +511,18 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         finally { _gate.Release(); }
     }
     /// <summary>Produces selective untrusted context under a configured character budget, with dated attribution and unresolved contradictions visible.</summary>
-    public async Task<string> RecallAsync(string query, CancellationToken cancellationToken = default)
+    public Task<string> RecallAsync(string query, CancellationToken cancellationToken = default)
+        => RecallAsync(query, settings.Current.Brain.ContextCharacters, cancellationToken);
+
+    /// <summary>Returns complete attributed evidence units within the caller's remaining context budget.</summary>
+    public async Task<string> RecallAsync(string query, int characterBudget, CancellationToken cancellationToken = default)
     {
         if (!settings.Current.RememberConversations) { return ""; }
         if (localizer is not null && Regex.IsMatch(TextNormalizer.Normalize(query), localizer.Get(LocalizationKeys.Brain.OverviewPattern), RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))) { query = ""; }
         IReadOnlyList<BrainHit> hits = await SearchAsync(query, 8, cancellationToken: cancellationToken).ConfigureAwait(false);
-        var builder = new StringBuilder(); int budget = settings.Current.Brain.ContextCharacters;
+        LauraDiagnostics.Record("brain.retrieved", amount: hits.Count, outcome: index.SemanticAvailable ? "hybrid" : "lexical",
+            ids: hits.Select(hit => hit.Note.Id).ToArray(), scores: hits.Select(hit => hit.Score).ToArray());
+        var builder = new StringBuilder(); int budget = Math.Clamp(characterBudget, 0, settings.Current.Brain.ContextCharacters);
         foreach (BrainHit hit in hits)
         {
             string[] conflicts = Snapshot.Edges.Where(edge => edge.Type == "contradicts" && (edge.Source == hit.Note.Id || edge.Target == hit.Note.Id)).Select(edge => edge.Source == hit.Note.Id ? edge.Target : edge.Source).Distinct(StringComparer.Ordinal).Take(4).ToArray();
@@ -444,7 +531,13 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
             string association = hit.Activation is null ? "" : "Associated via authored relations: " + string.Join(" -> ", hit.Activation.Path.Select(step =>
                 step.Edge.Source + " " + step.Edge.Type + (step.Reversed ? " (reverse retrieval)" : "") + " " + step.Edge.Target + " [" + step.Edge.Provenance + "]")) + ". This retrieval path does not establish a new fact.\n";
             string piece = $"[{hit.Note.Id}] {hit.Note.Title} ({hit.Note.UpdatedAt:yyyy-MM-dd}, {hit.Note.MemoryType}, confidence {hit.Note.Confidence.ToString("F2", CultureInfo.InvariantCulture)}, evidence {hit.Note.Verification}, source {hit.Note.Source})\n{warning}{location}{association}{hit.Excerpt}\n";
-            if (builder.Length + piece.Length > budget) { builder.Append(piece.AsSpan(0, budget - builder.Length)); break; }
+            // Preserve the citation, conflict warning and source passage as one evidence unit.
+            if (builder.Length + piece.Length > budget)
+            {
+                string notice = $"[{hit.Note.Id}] Evidence omitted due to context budget.\n{warning}";
+                if (conflicts.Length > 0 && builder.Length + notice.Length <= budget) { builder.Append(notice); }
+                continue;
+            }
             builder.Append(piece);
         }
         return builder.ToString();
@@ -454,12 +547,15 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
     {
         if (!settings.Current.RememberConversations) { return ""; }
         if (start < 0 || length is < 1 or > 4000 || expectedHash.Length != 64) { throw new ArgumentException("Invalid passage bounds or expected hash."); }
-        string vault = Location; await RefreshAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        string vault = Location; await RefreshIfDirtyAsync(cancellationToken).ConfigureAwait(false);
         if (!string.Equals(vault, Location, StringComparison.Ordinal)) { throw new IOException("Knowledge vault changed."); }
         BrainSnapshot snapshot = Snapshot;
         BrainNote? note = snapshot.Notes.SingleOrDefault(item => item.Id == noteId && item.IsKnowledge && item.Hash == expectedHash
             && !snapshot.Issues.Any(issue => issue.Path == item.Path && issue.Code == "conflicting_id"));
         if (note is null) { throw new IOException("Knowledge version changed or is unavailable. Retrieve candidates again."); }
+        // The watcher can lag an external writer; verify this exact source rather than scanning the whole vault.
+        if (FileBrainStorage.Hash(await ReadAsync(note.Path, cancellationToken).ConfigureAwait(false)) != expectedHash)
+        { throw new IOException("Knowledge source changed before passage expansion. Retrieve candidates again."); }
         if (start > note.Body.Length) { throw new ArgumentException("Passage offset exceeds source length."); }
         return note.Body.Substring(start, Math.Min(length, note.Body.Length - start));
     }
@@ -509,6 +605,29 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         finally { _gate.Release(); }
         await InitializeAsync(cancellationToken).ConfigureAwait(false);
     }
+    /// <summary>Installs portable creator groups only on explicit request, preserving other graph settings with optimistic concurrency.</summary>
+    public async Task ConfigureObsidianGroupsAsync(CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await Task.Run(() =>
+            {
+                const string path = ".obsidian/graph.json";
+                string? content = null;
+                try { content = _storage!.Read(path); }
+                catch (FileNotFoundException) { }
+                catch (DirectoryNotFoundException) { }
+                string merged = BrainObsidianGroups.Merge(content ?? "", updateExisting: true);
+                if (merged == content) { return; }
+                if (content is not null)
+                { _storage!.Write(".obsidian/LauraBackups/graph-" + DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfff", System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N") + ".json", content, null); }
+                _storage!.Write(path, merged, content is null ? null : FileBrainStorage.Hash(content));
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+    }
     /// <summary>Exports a private backup only to the user-selected destination; no overwrite or repository packaging occurs.</summary>
     public async Task BackupAsync(string destination, CancellationToken cancellationToken = default)
     {
@@ -553,7 +672,18 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
         _worker ??= Task.Run(WatchAsync);
     }
     /// <summary>Debounces provider notifications without doing file I/O on callback threads.</summary>
-    private void MarkDirty(object sender, FileSystemEventArgs args) => Interlocked.Exchange(ref _dirty, 1);
+    private void MarkDirty(object sender, FileSystemEventArgs args)
+    {
+        if (!ReferenceEquals(sender, _watcher)) { return; }
+        string relative = Path.GetRelativePath(Location, args.FullPath).Replace('\\', '/');
+        if (relative.StartsWith(".obsidian/", StringComparison.OrdinalIgnoreCase) || relative.StartsWith(".git/", StringComparison.OrdinalIgnoreCase)
+            || relative is ".git" or ".gitignore" or ".obsidian") { return; }
+        if (args.FullPath.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(args.FullPath) == ".laura-write.lock") { return; }
+        if (!args.FullPath.EndsWith(".md", StringComparison.OrdinalIgnoreCase)) { Interlocked.Exchange(ref _dirty, 1); return; }
+        _changedPaths[Path.GetRelativePath(Location, args.FullPath).Replace('\\', '/')] = 0;
+        if (args is RenamedEventArgs renamed && renamed.OldFullPath.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+        { _changedPaths[Path.GetRelativePath(Location, renamed.OldFullPath).Replace('\\', '/')] = 0; }
+    }
     /// <summary>Recovers lost events and transient sync failures, reporting only failure types.</summary>
     private async Task WatchAsync()
     {
@@ -563,8 +693,10 @@ public sealed class BrainService(ISettingsService settings, AssistantStorage app
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
             while (await timer.WaitForNextTickAsync(_lifetime.Token).ConfigureAwait(false))
             {
-                if (++ticks % 30 != 0 && Volatile.Read(ref _dirty) == 0) { continue; }
-                try { await RefreshAsync(cancellationToken: _lifetime.Token).ConfigureAwait(false); }
+                bool periodic = ++ticks >= settings.Current.Brain.ReconciliationSeconds;
+                if (periodic) { ticks = 0; }
+                if (!periodic && Volatile.Read(ref _dirty) == 0 && _changedPaths.IsEmpty) { continue; }
+                try { if (periodic) { await RefreshAsync(cancellationToken: _lifetime.Token).ConfigureAwait(false); } else { await RefreshIfDirtyAsync(_lifetime.Token).ConfigureAwait(false); } }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
                 { logger.LogWarning("Brain reconciliation unavailable ({ErrorType}).", error.GetType().Name); }
             }

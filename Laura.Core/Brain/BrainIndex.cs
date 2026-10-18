@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Laura.Core.Abstractions;
+using Laura.Core.Diagnostics;
 using Microsoft.Data.Sqlite;
 
 namespace Laura.Core.Brain;
@@ -13,6 +14,9 @@ public sealed class BrainIndex(string directory, IBrainEmbedding embedding)
     private Dictionary<string, float[]> _vectors = new(StringComparer.Ordinal);
     private Dictionary<string, BrainPassage> _passages = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string Hash, IReadOnlyList<BrainPassage> Items)> _layouts = new(StringComparer.Ordinal);
+    private Dictionary<string, string> _indexedHashes = new(StringComparer.Ordinal);
+    private string _indexedModel = "";
+    private (long Length, DateTime Modified) _indexStamp;
     /// <summary>Gets a privacy-safe indication of optional neural availability.</summary>
     public bool SemanticAvailable { get; private set; }
     /// <summary>Gets observed corrupt-cache recoveries; normal rebuilds and missing optional embeddings are not corruption.</summary>
@@ -22,18 +26,25 @@ public sealed class BrainIndex(string directory, IBrainEmbedding embedding)
     /// <summary>Refreshes derived rows and embeds only changed content or model fingerprints.</summary>
     public void Update(string vault, IReadOnlyList<BrainNote> notes, bool rebuild)
     {
+        using var measurement = LauraDiagnostics.Measure("brain.index");
         lock (_gate)
         {
-            Directory.CreateDirectory(directory); _path = Path.Combine(directory, "brain-index-" + FileBrainStorage.Hash(vault)[..16] + ".db");
+            Directory.CreateDirectory(directory);
+            string path = Path.Combine(directory, "brain-index-" + FileBrainStorage.Hash(vault)[..16] + ".db");
+            var file = new FileInfo(path);
+            if (path != _path || rebuild || !file.Exists || _indexStamp != (file.Length, file.LastWriteTimeUtc)) { _indexedHashes.Clear(); }
+            _path = path;
             if (rebuild && File.Exists(_path)) { File.Delete(_path); }
             try { UpdateInternal(notes); }
             catch (SqliteException)
             {
                 RecoveryCount++;
+                _indexedHashes.Clear();
                 LastRecoveryVaultIdentity = FileBrainStorage.Hash(vault);
                 if (File.Exists(_path)) { File.Move(_path, _path + ".corrupt-" + Guid.NewGuid().ToString("N"), false); }
                 UpdateInternal(notes);
             }
+            file.Refresh(); _indexStamp = (file.Length, file.LastWriteTimeUtc);
         }
     }
     /// <summary>Builds a transactionally coherent text index and independently fingerprinted vector cache.</summary>
@@ -44,12 +55,12 @@ public sealed class BrainIndex(string directory, IBrainEmbedding embedding)
         {
             schema.CommandText = "PRAGMA user_version";
             if ((long)schema.ExecuteScalar()! != 2)
-            { schema.CommandText = "DROP TABLE IF EXISTS note_fts; DROP TABLE IF EXISTS vectors; PRAGMA user_version=2;"; schema.ExecuteNonQuery(); }
+            { _indexedHashes.Clear(); schema.CommandText = "DROP TABLE IF EXISTS note_fts; DROP TABLE IF EXISTS vectors; PRAGMA user_version=2;"; schema.ExecuteNonQuery(); }
             schema.CommandText = "CREATE VIRTUAL TABLE IF NOT EXISTS note_fts USING fts5(id UNINDEXED,title,body,tags,hash UNINDEXED,note_id UNINDEXED,start UNINDEXED,length UNINDEXED,heading,tokenize='unicode61 remove_diacritics 2'); CREATE TABLE IF NOT EXISTS vectors(id TEXT PRIMARY KEY,hash TEXT NOT NULL,model TEXT NOT NULL,vector TEXT NOT NULL);";
             schema.ExecuteNonQuery();
         }
         string model = "";
-        try { model = embedding.ModelId; } catch (Exception error) when (error is InvalidOperationException or IOException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException) { }
+        try { model = embedding.ModelId; } catch (Exception error) when (error is InvalidOperationException or IOException) { }
         SemanticAvailable = model.Length > 0;
         var vectors = new Dictionary<string, float[]>(StringComparer.Ordinal);
         var passages = new Dictionary<string, BrainPassage>(StringComparer.Ordinal);
@@ -61,6 +72,13 @@ public sealed class BrainIndex(string directory, IBrainEmbedding embedding)
         {
             IReadOnlyList<BrainPassage> spans = _layouts.TryGetValue(note.Id, out var layout) && layout.Hash == note.Hash ? layout.Items : BrainPassages.Split(note);
             _layouts[note.Id] = (note.Hash, spans);
+            if (model == _indexedModel && _indexedHashes.TryGetValue(note.Id, out string? indexedHash) && indexedHash == note.Hash
+                && (model.Length == 0 || spans.All(passage => _vectors.ContainsKey(passage.Id))))
+            {
+                foreach (BrainPassage passage in spans)
+                { passages[passage.Id] = passage; if (_vectors.TryGetValue(passage.Id, out float[]? vector)) { vectors[passage.Id] = vector; } }
+                continue;
+            }
             using var row = connection.CreateCommand(); row.Transaction = transaction;
             row.CommandText = "SELECT hash FROM note_fts WHERE note_id=$note LIMIT 1"; row.Parameters.AddWithValue("$note", note.Id);
             bool unchanged = row.ExecuteScalar() as string == note.Hash;
@@ -85,7 +103,7 @@ public sealed class BrainIndex(string directory, IBrainEmbedding embedding)
                 string? cached = existing.ExecuteScalar() as string;
                 float[] vector;
                 try { vector = cached is not null ? JsonSerializer.Deserialize<float[]>(cached) ?? [] : embedding.Embed(content); }
-                catch (Exception error) when (error is JsonException or InvalidOperationException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException) { SemanticAvailable = false; continue; }
+                catch (Exception error) when (error is JsonException or InvalidOperationException) { SemanticAvailable = false; continue; }
                 vectors[passage.Id] = vector;
                 if (cached is not null) { continue; }
                 using var save = connection.CreateCommand(); save.Transaction = transaction;
@@ -101,6 +119,7 @@ public sealed class BrainIndex(string directory, IBrainEmbedding embedding)
             foreach (string id in stale) { using var delete = connection.CreateCommand(); delete.Transaction = transaction; delete.CommandText = "DELETE FROM vectors WHERE id=$id; DELETE FROM note_fts WHERE id=$id"; delete.Parameters.AddWithValue("$id", id); delete.ExecuteNonQuery(); }
         }
         transaction.Commit(); _vectors = vectors; _passages = passages;
+        _indexedHashes = valid.ToDictionary(note => note.Id, note => note.Hash, StringComparer.Ordinal); _indexedModel = model;
         var noteIds = valid.Select(note => note.Id).ToHashSet(StringComparer.Ordinal);
         foreach (string id in _layouts.Keys.Where(id => !noteIds.Contains(id)).ToArray()) { _layouts.Remove(id); }
     }
@@ -152,7 +171,7 @@ public sealed class BrainIndex(string directory, IBrainEmbedding embedding)
     {
         if (!SemanticAvailable || string.IsNullOrWhiteSpace(query)) { return []; }
         float[] vector;
-        try { vector = embedding.Embed(query); } catch (Exception error) when (error is InvalidOperationException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException or IOException) { return []; }
+        try { vector = embedding.Embed(query); } catch (Exception error) when (error is InvalidOperationException or IOException) { return []; }
         return _vectors.Where(pair => pair.Value.Length == vector.Length && vector.Length > 0 && _passages.ContainsKey(pair.Key))
             .Select(pair => (Passage: _passages[pair.Key], Score: pair.Value.Zip(vector, (left, right) => (double)left * right).Sum()))
             .Where(pair => pair.Score >= .35).OrderByDescending(pair => pair.Score).GroupBy(pair => pair.Passage.NoteId, StringComparer.Ordinal)

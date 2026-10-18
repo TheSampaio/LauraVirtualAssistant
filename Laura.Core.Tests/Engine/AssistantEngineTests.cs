@@ -1,5 +1,6 @@
 using Laura.Core.Abstractions;
 using Laura.Core.Configuration;
+using Laura.Core.Conversation;
 using Laura.Core.Engine;
 using Laura.Core.Skills;
 using Laura.Core.Tests.TestDoubles;
@@ -10,6 +11,100 @@ namespace Laura.Core.Tests.Engine;
 /// <summary>Verifies actual queued cancellation, worker recovery and concise internal briefing history.</summary>
 public sealed class AssistantEngineTests
 {
+    /// <summary>An output failure must preserve text, allow normal post-response actions and leave the next request usable.</summary>
+    [Fact]
+    public async Task FailedPlaybackPreservesTheCompletedResponseAndPostResponseActions()
+    {
+        var localizer = new StubLocalizer(); var clock = new SystemClock(); var shell = new StubShellController();
+        var dispatcher = new CallbackSkillDispatcher((request, _) => Task.FromResult(request.RawText == "first" ? SkillResponse.Farewell("Completed text") : SkillResponse.Silent()));
+        await using var engine = new AssistantEngine(new RecordingSpeechSynthesizer { PlaybackFails = true }, dispatcher,
+            new StubSettingsService(LauraSettings.Default with { GreetOnStartup = false }), localizer, shell,
+            new GreetingComposer(localizer, new StubUserContext(), clock), clock, NullLogger<AssistantEngine>.Instance);
+        await engine.StartAsync(); await engine.SubmitCommandAsync("first");
+        Assert.Contains(engine.ConversationHistory, message => message.Source == ConversationMessageSource.Assistant && message.Text == "Completed text");
+        Assert.True(shell.ShutdownRequested);
+        await engine.SubmitCommandAsync("second"); Assert.Equal(AssistantState.Ready, engine.State);
+    }
+
+    /// <summary>Unavailable voice preserves the response and the next command remains usable.</summary>
+    [Fact]
+    public async Task UnavailableVoice_PreservesTextAndDoesNotFailTheCommand()
+    {
+        var speech = new RecordingSpeechSynthesizer { Available = false };
+        var dispatcher = new CallbackSkillDispatcher((_, _) => Task.FromResult(SkillResponse.Speak("Verified text")));
+        await using var engine = CreateEngine(dispatcher, speech);
+        await engine.StartAsync();
+        await engine.SubmitCommandAsync("first").WaitAsync(TimeSpan.FromSeconds(3));
+        await engine.SubmitCommandAsync("second").WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Equal(2, engine.ConversationHistory.Count(message => message.Source == ConversationMessageSource.Assistant && message.Text == "Verified text"));
+        Assert.Equal(AssistantState.Ready, engine.State);
+        Assert.Empty(speech.SpokenTexts);
+    }
+
+    /// <summary>Exercises real bounded admission, cancellation before dispatch and priority interruption of active/queued stale work.</summary>
+    [Fact]
+    public async Task BoundedQueueBackpressureDoesNotBlockCallerAndStopInterruptsActiveWork()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var executed = new List<string>();
+        var dispatcher = new CallbackSkillDispatcher(async (request, token) =>
+        {
+            executed.Add(request.RawText);
+            if (request.RawText == "long operation")
+            { entered.SetResult(); try { await Task.Delay(Timeout.Infinite, token); } finally { if (token.IsCancellationRequested) { cancelled.SetResult(); } } }
+            return SkillResponse.Silent();
+        });
+        await using var engine = CreateEngine(dispatcher, new RecordingSpeechSynthesizer()); await engine.StartAsync();
+        Task active = engine.SubmitCommandAsync("long operation"); await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        var queued = Enumerable.Range(0, 40).Select(index => engine.SubmitCommandAsync("queued " + index)).ToArray();
+        Assert.Equal(32, engine.PendingMessageCount); Assert.All(queued, pending => Assert.False(pending.IsCompleted));
+        using var admission = new CancellationTokenSource(); Task withdrawn = engine.SubmitCommandAsync("withdrawn before admission", admission.Token);
+        admission.Cancel(); await Assert.ThrowsAnyAsync<OperationCanceledException>(() => withdrawn);
+        engine.StopSpeaking(); await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await Task.WhenAll(queued.Append(active)).WaitAsync(TimeSpan.FromSeconds(5)); await engine.SubmitCommandAsync("new barrier");
+        Assert.Equal(["long operation", "new barrier"], executed); Assert.Equal(0, engine.PendingMessageCount);
+        Assert.Equal(["long operation", "new barrier"], engine.ConversationHistory.Select(message => message.Text));
+    }
+
+    [Theory]
+    [InlineData("gemini")]
+    public async Task GenerativeProcessingKeepsThinkingVisualAndSpeaksOnlyTheAnswer(string provider)
+    {
+        var speech = new RecordingSpeechSynthesizer(); var localizer = new StubLocalizer(); var clock = new SystemClock();
+        var settings = new StubSettingsService(LauraSettings.Default with { GreetOnStartup = false, GenerativeAi = new() { Provider = provider, Enabled = true } });
+        var states = new List<AssistantState>(); Guid turnId = Guid.Empty;
+        var dispatcher = new CallbackSkillDispatcher((request, _) => { turnId = request.TurnId; return Task.FromResult(SkillResponse.Speak("Verified answer")); });
+        await using var engine = new AssistantEngine(speech, dispatcher, settings, localizer, new StubShellController(),
+            new GreetingComposer(localizer, new StubUserContext(), clock), clock, NullLogger<AssistantEngine>.Instance);
+        engine.StateChanged += (_, state) => states.Add(state);
+        await engine.StartAsync(); await engine.SubmitCommandAsync("What are you doing?");
+        Assert.Equal(["Verified answer"], speech.SpokenTexts);
+        Assert.Contains(AssistantState.Thinking, states); Assert.Equal(AssistantState.Ready, engine.State);
+        Assert.NotEqual(Guid.Empty, turnId); Assert.Equal(turnId, engine.ConversationHistory[0].TurnId);
+        Assert.Equal(turnId, engine.ConversationHistory[1].TurnId);
+        Assert.Equal(["What are you doing?", "Verified answer"], engine.ConversationHistory.Select(message => message.Text));
+    }
+
+    [Fact]
+    public async Task ClearDuringAnUncooperativeTurnWaitsAndFencesOldResponsesAndQueuedCommands()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var executed = new List<string>(); var speech = new RecordingSpeechSynthesizer();
+        var dispatcher = new CallbackSkillDispatcher(async (request, _) =>
+        {
+            executed.Add(request.RawText);
+            if (request.RawText == "old") { entered.SetResult(); await release.Task; return SkillResponse.Speak("late old answer"); }
+            return SkillResponse.Silent();
+        });
+        await using var engine = CreateEngine(dispatcher, speech); await engine.StartAsync();
+        Task old = engine.SubmitCommandAsync("old"); await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Task queued = engine.SubmitCommandAsync("must never run"); Task clear = engine.ClearConversationAsync();
+        Assert.False(clear.IsCompleted); release.SetResult();
+        await Task.WhenAll(old, queued, clear).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Empty(engine.ConversationHistory); Assert.Empty(speech.SpokenTexts); Assert.Equal(["old"], executed);
+        await engine.SubmitCommandAsync("new"); Assert.Equal("new", Assert.Single(engine.ConversationHistory).Text);
+    }
     [Fact]
     public async Task VisualTurnUsesTheExistingQueueWithFrozenPixelsAndTextOnlyHistory()
     {
@@ -94,7 +189,7 @@ public sealed class AssistantEngineTests
         var speech = new RecordingSpeechSynthesizer();
         var dispatcher = new CallbackSkillDispatcher((request, _) =>
         { Assert.Equal(SkillRequestSource.Context, request.Source); dispatched = request.RawText; return Task.FromResult(SkillResponse.Speak("brief answer")); });
-        await using var engine = CreateEngine(dispatcher, speech);
+        await using var engine = CreateEngine(dispatcher, speech, generativeEnabled: true);
         engine.StateChanged += (_, state) => states.Add(state);
         await engine.StartAsync();
         await engine.SubmitContextCommandAsync(context, "Double clap · daily briefing");
@@ -155,10 +250,10 @@ public sealed class AssistantEngineTests
         { if (request.Source == SkillRequestSource.Context) { Opened.TrySetResult(); return Task.FromResult(SkillResponse.Speak("Synthetic first greeting")); } return Task.FromResult(SkillResponse.Silent()); }
     }
     /// <summary>Creates a domain engine with no platform, network, persistent memory or startup speech.</summary>
-    private static AssistantEngine CreateEngine(ISkillDispatcher dispatcher, ISpeechSynthesizer speech)
+    private static AssistantEngine CreateEngine(ISkillDispatcher dispatcher, ISpeechSynthesizer speech, bool generativeEnabled = false)
     {
         var localizer = new StubLocalizer(); var clock = new SystemClock();
-        return new(speech, dispatcher, new StubSettingsService(LauraSettings.Default with { GreetOnStartup = false }),
+        return new(speech, dispatcher, new StubSettingsService(LauraSettings.Default with { GreetOnStartup = false, GenerativeAi = new() { Enabled = generativeEnabled } }),
             localizer, new StubShellController(), new GreetingComposer(localizer, new StubUserContext(), clock), clock,
             NullLogger<AssistantEngine>.Instance);
     }

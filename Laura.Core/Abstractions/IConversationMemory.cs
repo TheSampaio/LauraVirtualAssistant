@@ -10,14 +10,24 @@ public interface IConversationMemory
     string WorkingUserText => "";
     /// <summary>Atomically snapshots the current user turn. Adapters without turn tracking cannot attribute skill usage.</summary>
     ConversationWorkingContext WorkingContext => new(Guid.Empty, WorkingUserText);
+    /// <summary>Gets the current transient identity without requiring a text snapshot on real-time diagnostic paths.</summary>
+    Guid WorkingTurnId => WorkingContext.TurnId;
     /// <summary>Updates current user input before tool dispatch without creating a persistent fact.</summary>
     void SetWorkingContext(string text) { }
+    /// <summary>Retains a trusted caller's turn identity together with bounded grounding text.</summary>
+    void SetWorkingContext(ConversationWorkingContext context) => SetWorkingContext(context.UserText);
+    /// <summary>Updates a partial transcription within the same user turn, without changing its identity or persisting it.</summary>
+    void UpdateWorkingContext(string text) => SetWorkingContext(text);
     /// <summary>Creates or migrates supported schema versions; unsupported/corrupt data is preserved.</summary>
     void Initialize();
     /// <summary>Appends one message, bounding retained conversation history.</summary>
     void Append(ConversationMessage message);
+    /// <summary>Retains a completed historical turn without replacing a newer user's active working context.</summary>
+    void AppendHistory(ConversationMessage message) => Append(message);
     /// <summary>Returns recent messages in chronological order.</summary>
     IReadOnlyList<ConversationMessage> ReadRecent(int limit);
+    /// <summary>Snapshots the complete retained transcript, independent of UI virtualization.</summary>
+    IReadOnlyList<ConversationMessage> ReadAllHistory() => ReadRecent(200);
     /// <summary>Searches explicit user memories using literal text.</summary>
     IReadOnlyList<MemoryFact> Search(string query);
     /// <summary>Stores an explicit user preference with a stable key.</summary>

@@ -16,15 +16,22 @@ public sealed record ScreenshotOptions
     /// <summary>Gets whether global shortcuts are enabled.</summary>
     public bool ShortcutsEnabled { get; init; } = true;
     /// <summary>Gets the requested region shortcut.</summary>
-    public string RegionShortcut { get; init; } = "PrtSc";
+    public string RegionShortcut { get; init; } = "Ctrl+Shift+F8";
     /// <summary>Gets the requested window shortcut.</summary>
-    public string WindowShortcut { get; init; } = "Ctrl+PrtSc";
+    public string WindowShortcut { get; init; } = "Ctrl+Shift+F9";
     /// <summary>Gets the requested full-desktop shortcut.</summary>
-    public string FullScreenShortcut { get; init; } = "Shift+PrtSc";
+    public string FullScreenShortcut { get; init; } = "Ctrl+Shift+F10";
     /// <summary>Gets whether full-screen means the entire virtual desktop.</summary>
     public bool AllDisplays { get; init; } = true;
     /// <summary>Bounds and validates stored chords without silently assigning a replacement.</summary>
-    public ScreenshotOptions Sanitized() => this with { RegionShortcut = Valid(RegionShortcut), WindowShortcut = Valid(WindowShortcut), FullScreenShortcut = Valid(FullScreenShortcut) };
+    public ScreenshotOptions Sanitized()
+    {
+        // Migrate only the original default set. Individually customized choices stay explicit.
+        if (string.Equals(RegionShortcut, "PrtSc", StringComparison.OrdinalIgnoreCase) && string.Equals(WindowShortcut, "Ctrl+PrtSc", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(FullScreenShortcut, "Shift+PrtSc", StringComparison.OrdinalIgnoreCase))
+        { var defaults = new ScreenshotOptions(); return this with { RegionShortcut = defaults.RegionShortcut, WindowShortcut = defaults.WindowShortcut, FullScreenShortcut = defaults.FullScreenShortcut }; }
+        return this with { RegionShortcut = Valid(RegionShortcut), WindowShortcut = Valid(WindowShortcut), FullScreenShortcut = Valid(FullScreenShortcut) };
+    }
     /// <summary>Parses a finite keyboard vocabulary, rejecting bare letters and Windows-reserved modifiers.</summary>
     public static bool TryParse(string chord, out uint modifiers, out uint key)
     {
@@ -37,7 +44,7 @@ public sealed record ScreenshotOptions
         }
         string last = parts[^1].ToUpperInvariant();
         if (last == "PRTSC") { key = 0x2c; return true; }
-        if (last.StartsWith('F') && int.TryParse(last.AsSpan(1), out int function) && function is >= 1 and <= 12) { key = (uint)(0x6f + function); return true; }
+        if (last.StartsWith('F') && int.TryParse(last.AsSpan(1), out int function) && function is >= 1 and <= 11) { key = (uint)(0x6f + function); return true; }
         if ((modifiers & 7) != 0 && last.Length == 1 && char.IsAsciiLetter(last[0])) { key = last[0]; return true; }
         return false;
     }

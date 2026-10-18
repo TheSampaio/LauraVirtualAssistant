@@ -7,8 +7,7 @@ namespace Laura.Core.Abstractions;
 ///
 /// It is deliberately optional: the dispatcher only queries it after all
 /// skills reject the command, and the default implementation does nothing. This way
-/// Laura remains fully functional and offline, and connecting a local provider such
-/// as Ollama only means registering another implementation of this interface.
+/// deterministic commands remain available without cloud conversation.
 /// </summary>
 public interface IConversationEngine
 {
@@ -16,6 +15,12 @@ public interface IConversationEngine
     /// Gets a value indicating whether the engine is configured and ready to answer.
     /// </summary>
     bool IsAvailable { get; }
+    /// <summary>Gets whether the selected reviewed model can receive explicitly authorized images.</summary>
+    bool SupportsImages => false;
+    /// <summary>Gets safe metadata for the last serialized request failure, cleared by the next admitted request.</summary>
+    ConversationFailure? LastFailure => null;
+    /// <summary>Returns native continuation metadata for an admitted unfinished protocol exchange, never a new owner objective or grant.</summary>
+    string? PendingRound(Guid taskId) => null;
 
     /// <summary>
     /// Requests an answer from the model.
@@ -30,4 +35,8 @@ public interface IConversationEngine
     ///     propagate exceptions: Laura must fall back to the default answer.
     /// </summary>
     Task<string?> AskAsync(ConversationTurn turn, CancellationToken cancellationToken = default);
+    /// <summary>Drains generation/tools and discards remote session state before a confirmed conversation reset.</summary>
+    Task ResetSessionAsync() => Task.FromException(new NotSupportedException("This provider does not implement safe session reset."));
+    /// <summary>Prevents new provider work while the confirmed local transcript barrier is committed.</summary>
+    async Task ResetSessionAsync(Func<Task> clearHistory) { await ResetSessionAsync().ConfigureAwait(false); await clearHistory().ConfigureAwait(false); }
 }

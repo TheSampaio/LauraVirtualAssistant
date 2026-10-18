@@ -5,7 +5,7 @@ namespace Laura.Core.Abstractions;
 /// <summary>
 /// Speech synthesis engine (text-to-speech).
 ///
-/// Abstracts the concrete engine - SAPI on Windows today - so the domain does not depend
+/// Abstracts the configured native voice pipeline so the domain does not depend
 /// on any platform API and can be exercised with test doubles.
 /// </summary>
 public interface ISpeechSynthesizer : IAsyncDisposable
@@ -14,6 +14,9 @@ public interface ISpeechSynthesizer : IAsyncDisposable
     /// Gets a value indicating whether speech is currently in progress.
     /// </summary>
     bool IsSpeaking { get; }
+
+    /// <summary>Gets optional content-free evidence for the latest utterance; unavailable metrics remain absent.</summary>
+    SpeechPlayback? LastPlayback => null;
 
     /// <summary>
     /// Lists the voices installed on the system.

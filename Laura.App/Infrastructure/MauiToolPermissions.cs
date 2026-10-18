@@ -1,21 +1,23 @@
 using System.Text.Json;
 using Laura.Core.Permissions;
+using Laura.Core.Conversation;
 
 namespace Laura.App.Infrastructure;
 
 /// <summary>Closed tool/effect registry. Model supplied risk, origin, policy and permission fields are never consumed.</summary>
 internal static class MauiToolPermissions
 {
-    internal const string CloudDestination = "generativelanguage.googleapis.com";
-    internal static PermissionAction Describe(string name, JsonElement args)
+    internal static string CloudDestination => ProviderExecutionScope.Destination;
+    internal static PermissionAction Describe(string name, JsonElement args, Guid taskId = default)
     {
         string action = Text(args, "action");
         PermissionOperation operation = name switch
         {
-            "inspect_brain_maintenance" or "study_github_repository" or "list_capabilities" or "plan_task" or "task_status" or "assess_source_learning" => PermissionOperation.Internal, // specialized adapters own effect approvals
+            "record_repository_analysis" or "repository_learning_status" => PermissionOperation.Internal,
+            "clone_repository" or "authorize_workspace" or "inspect_brain_maintenance" or "study_github_repository" or "start_repository_study" or "continue_repository_study" or "repository_study_status" or "list_capabilities" or "plan_task" or "task_status" or "recent_task_context" or "assess_source_learning" => PermissionOperation.Internal, // specialized adapters own effect approvals
             "list_mcp_servers" or "connect_mcp_server" or "list_mcp_tools" or "call_mcp_tool" or "disconnect_mcp_server" => PermissionOperation.Internal, // the native MCP runtime gates the exact external effect
             // These dispatch through separately guarded adapters or are internal metadata operations.
-            "open_app" or "run_local_command" or "list_apps" or "system_status" or "stop_listening" or "recall_memory" or "read_brain_passage" or "learn_memory" or "reflect_experience" or "study_source" or "list_brain_skills" or "read_brain_skill" or "read_brain_skill_usage" or "propose_brain_skill" => PermissionOperation.Internal,
+            "start_program" or "program_status" or "stop_program" or "run_program" or "open_app" or "run_local_command" or "list_apps" or "system_status" or "stop_listening" or "recall_memory" or "read_brain_passage" or "learn_memory" or "reflect_experience" or "study_source" or "list_brain_skills" or "read_brain_skill" or "read_brain_skill_usage" or "propose_brain_skill" => PermissionOperation.Internal,
             "save_memory" or "forget_memory" or "shutdown_assistant" => PermissionOperation.SystemSettings,
             "reminder" when action == "list" => PermissionOperation.Internal,
             "reminder" when action is "add" or "cancel" => PermissionOperation.SystemSettings,
@@ -24,6 +26,8 @@ internal static class MauiToolPermissions
             "screenshot_control" when action is "region" or "window" or "fullscreen" or "copy" or "save" or "analyze" or "brain" or "cancel" => PermissionOperation.Internal,
             "read_brain_image" => PermissionOperation.Internal, // local read; Gemini gates the exact image at actual transmission
             "computer_control" when action == "list_windows" => PermissionOperation.Internal,
+            "computer_control" when action == "focus" => PermissionOperation.WindowManagement,
+            "close_app" => PermissionOperation.ApplicationClose,
             "computer_control" when action is "focus" or "type" or "key" or "click" or "double_click" or "right_click" or "scroll" or "move" or "drag" => PermissionOperation.DesktopInput,
             "browser_control" when action is "open" or "search" => PermissionOperation.Internal,
             "browser_control" when action is "new_tab" or "close_tab" or "next_tab" or "previous_tab" or "back" or "forward" or "reload" or "find" or "zoom_reset" or "zoom_in" or "zoom_out" => PermissionOperation.DesktopInput,
@@ -32,13 +36,13 @@ internal static class MauiToolPermissions
             "computer_settings" when action is "lock" or "show_desktop" or "minimize" or "maximize" or "wallpaper" or "dark_mode" or "light_mode" or "shutdown" or "restart" => PermissionOperation.SystemSettings,
             "file_control" => action switch
             {
-                "list" or "search" or "info" or "open" => PermissionOperation.Internal,
-                "read" => PermissionOperation.FileReadCloud, "write" => PermissionOperation.FileWrite,
+                "open" => PermissionOperation.Internal,
+                "list" or "search" or "info" => ProviderExecutionScope.Destination.Length == 0 ? PermissionOperation.FileReadLocal : PermissionOperation.FileReadCloud,
+                "read" => ProviderExecutionScope.Destination.Length == 0 ? PermissionOperation.FileReadLocal : PermissionOperation.FileReadCloud, "write" or "patch" => PermissionOperation.FileWrite,
                 "mkdir" => PermissionOperation.FileCreateDirectory, "copy" => PermissionOperation.FileCopy,
                 "move" => PermissionOperation.FileMove, "delete" => PermissionOperation.FileTrash,
-                "undo" => PermissionOperation.Undo, _ => PermissionOperation.Unknown
+                "undo" or "rollback" => PermissionOperation.Undo, _ => PermissionOperation.Unknown
             },
-            "run_program" => PermissionOperation.Process,
             "clipboard" when action == "read" => PermissionOperation.Internal, // guarded by IDesktopTools
             "clipboard" when action == "write" => PermissionOperation.ClipboardWrite,
             _ => PermissionOperation.Unknown
@@ -51,15 +55,17 @@ internal static class MauiToolPermissions
         // Literal argument data is shown for processes/input only; it is never persisted or read aloud.
         string detail = operation switch
         {
-            PermissionOperation.Process => Text(args, "executable") + "\n" + Text(args, "arguments") + "\n" + Text(args, "directory"),
+            PermissionOperation.Process => Text(args, "executable") + "\n" + JsonSerializer.Serialize(Laura.Core.Execution.StructuredProcessParameters.Arguments(args)) + "\n" + Text(args, "directory"),
             PermissionOperation.DesktopInput => Text(args, "window") + "\n" + args.GetRawText(),
+            PermissionOperation.FileWrite when action == "patch" => "Scoped patch\nExpected hash: " + Text(args, "expected_hash") + "\nRemove:\n" + Text(args, "old_text") + "\nInsert:\n" + Text(args, "new_text"),
             PermissionOperation.FileWrite => Text(args, "content"),
             _ when name is "save_memory" or "forget_memory" => Text(args, "key") + "\n" + Text(args, "value"),
             _ when name == "reminder" => action + "\n" + Text(args, "text") + "\n" + Text(args, "due") + "\n" + Text(args, "id"),
             _ when name == "read_brain_image" => Text(args, "path"),
             _ => action
         };
-        return new(operation, "Gemini tool: " + name, detail, resources, CanonicalParameters(args), destination);
+        return new(operation, "Native tool: " + name, detail, resources, CanonicalParameters(args), destination,
+            automaticEligible: operation == PermissionOperation.WindowManagement && args.TryGetProperty("lauraVerifiedTarget", out _), taskId: taskId);
     }
     private static string CanonicalParameters(JsonElement arguments)
     {

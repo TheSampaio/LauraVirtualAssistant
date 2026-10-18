@@ -26,20 +26,29 @@ public sealed partial class SqliteConversationMemory : IConversationMemory
             using SqliteCommand version = connection.CreateCommand();
             version.CommandText = "PRAGMA user_version";
             long schemaVersion = (long)version.ExecuteScalar()!;
-            if (schemaVersion > 4) { throw new InvalidOperationException("Memory schema is newer than this Laura version."); }
+            if (schemaVersion > 5) { throw new InvalidOperationException("Memory schema is newer than this Laura version."); }
             using SqliteTransaction transaction = connection.BeginTransaction();
             using SqliteCommand migration = connection.CreateCommand();
             migration.Transaction = transaction;
             migration.CommandText = """
-                CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, source INTEGER NOT NULL, text TEXT NOT NULL, stamp TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, source INTEGER NOT NULL, text TEXT NOT NULL, stamp TEXT NOT NULL, turn_id TEXT NOT NULL DEFAULT '');
                 CREATE TABLE IF NOT EXISTS facts (key TEXT PRIMARY KEY, text TEXT NOT NULL, stamp TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS learning_events (message_id INTEGER PRIMARY KEY,vault TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS execution_events (id TEXT PRIMARY KEY,vault TEXT NOT NULL,payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS skill_outcomes (id TEXT PRIMARY KEY,vault TEXT NOT NULL,skill TEXT NOT NULL,hash TEXT NOT NULL,tool TEXT NOT NULL,exit_code INTEGER NOT NULL,operation TEXT NOT NULL,stamp TEXT NOT NULL);
                 CREATE INDEX IF NOT EXISTS skill_outcomes_version ON skill_outcomes(vault,skill,hash);
-                PRAGMA user_version=4;
+                PRAGMA user_version=5;
                 """;
             migration.ExecuteNonQuery();
+            using (SqliteCommand columns = connection.CreateCommand())
+            {
+                columns.Transaction = transaction; columns.CommandText = "PRAGMA table_info(messages)";
+                bool hasTurnId = false;
+                using (SqliteDataReader reader = columns.ExecuteReader())
+                { while (reader.Read()) { hasTurnId |= reader.GetString(1) == "turn_id"; } }
+                if (!hasTurnId)
+                { columns.CommandText = "ALTER TABLE messages ADD COLUMN turn_id TEXT NOT NULL DEFAULT ''"; columns.ExecuteNonQuery(); }
+            }
             transaction.Commit();
             _initialized = true;
         }
@@ -73,33 +82,38 @@ public sealed partial class SqliteConversationMemory : IConversationMemory
         using SqliteCommand command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            INSERT INTO messages(source,text,stamp) VALUES($source,$text,$stamp);
+            INSERT INTO messages(source,text,stamp,turn_id) VALUES($source,$text,$stamp,$turn);
             INSERT INTO learning_events(message_id,vault) SELECT last_insert_rowid(),$vault WHERE length($vault)>0;
             DELETE FROM messages WHERE id NOT IN (SELECT id FROM messages ORDER BY id DESC LIMIT 2000);
             DELETE FROM learning_events WHERE message_id NOT IN (SELECT id FROM messages);
             """;
         command.Parameters.AddWithValue("$source", (int)message.Source);
-        command.Parameters.AddWithValue("$text", message.Text.Length > 16000 ? message.Text[..16000] : message.Text);
+        command.Parameters.AddWithValue("$text", message.Text);
         command.Parameters.AddWithValue("$stamp", message.Timestamp.ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$vault", vaultIdentity);
+        command.Parameters.AddWithValue("$turn", message.TurnId == Guid.Empty ? "" : message.TurnId.ToString("D"));
         command.ExecuteNonQuery();
         transaction.Commit();
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<ConversationMessage> ReadRecent(int limit)
+    public IReadOnlyList<ConversationMessage> ReadRecent(int limit) => ReadMessages(Math.Clamp(limit, 0, 200));
+    /// <inheritdoc />
+    public IReadOnlyList<ConversationMessage> ReadAllHistory() => ReadMessages(2000);
+    private List<ConversationMessage> ReadMessages(int limit)
     {
         Initialize();
         using SqliteConnection connection = Open();
         using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = "SELECT source,text,stamp FROM (SELECT * FROM messages ORDER BY id DESC LIMIT $limit) ORDER BY id";
-        command.Parameters.AddWithValue("$limit", Math.Clamp(limit, 0, 200));
+        command.CommandText = "SELECT source,text,stamp,turn_id FROM (SELECT * FROM messages ORDER BY id DESC LIMIT $limit) ORDER BY id";
+        command.Parameters.AddWithValue("$limit", limit);
         using SqliteDataReader reader = command.ExecuteReader();
         var messages = new List<ConversationMessage>();
         while (reader.Read())
         {
             messages.Add(new((ConversationMessageSource)reader.GetInt32(0), reader.GetString(1),
-                DateTimeOffset.Parse(reader.GetString(2), CultureInfo.InvariantCulture)));
+                DateTimeOffset.Parse(reader.GetString(2), CultureInfo.InvariantCulture))
+                { TurnId = Guid.TryParse(reader.GetString(3), out Guid turnId) ? turnId : Guid.Empty });
         }
         return messages;
     }
@@ -165,7 +179,7 @@ public sealed partial class SqliteConversationMemory : IConversationMemory
         Initialize();
         using SqliteConnection connection = Open();
         using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = "BEGIN; DELETE FROM skill_outcomes; DELETE FROM execution_events; DELETE FROM learning_events; DELETE FROM messages; COMMIT; VACUUM;";
+        command.CommandText = "PRAGMA secure_delete=ON; BEGIN; DELETE FROM learning_events; DELETE FROM messages; COMMIT;";
         command.ExecuteNonQuery();
     }
 }

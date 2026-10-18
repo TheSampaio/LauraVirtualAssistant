@@ -13,7 +13,7 @@ public static class WindowsApplicationLaunchPolicy
     /// <summary>Reads PE headers locally; GUI entrypoints must be launched interactively rather than awaited/killed as CLI jobs.</summary>
     public static bool IsGraphical(string target)
     {
-        if (!Path.IsPathFullyQualified(target) || !target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || !File.Exists(target) || PermissionPolicy.IsNetworkPath(target)) { return false; }
+        if (!Path.IsPathFullyQualified(target) || !target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || PermissionPolicy.IsNetworkPath(target)) { return false; }
         try { PermissionPolicy.ValidateResources(new(PermissionOperation.Process, "GUI inspection", "Inspect executable", [target]), []); using var input = File.OpenRead(target); return ExecutableMetadata.Read(input).IsGraphicalApplication; }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or BadImageFormatException or XmlException or OverflowException or PermissionDeniedException or ArgumentException) { return false; }
     }

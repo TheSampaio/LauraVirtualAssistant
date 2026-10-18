@@ -11,6 +11,8 @@ namespace Laura.Core.Conversation;
 public sealed class NullConversationEngine : IConversationEngine
 {
     /// <inheritdoc />
+    public Task ResetSessionAsync() => Task.CompletedTask;
+    /// <inheritdoc />
     public bool IsAvailable => false;
 
     /// <inheritdoc />

@@ -31,7 +31,7 @@ public sealed class WindowsShortcutHost : IDisposable
         bool editing = focus is Microsoft.UI.Xaml.Controls.TextBox or Microsoft.UI.Xaml.Controls.RichEditBox or Microsoft.UI.Xaml.Controls.PasswordBox;
         bool control = Down(0x11), alt = Down(0x12), shift = Down(0x10);
         ShortcutChanges changes = _state.Update(Environment.TickCount64, control && Down(0x20) && !alt && !shift,
-            foreground, editing, Down(0x1B), Down(0x4D) && !control && !alt, Down(0x7A));
+            foreground, editing, Down(0x1B), Down(0x4D) && !control && !alt, Down(0x7A) && !control && !alt && !shift);
         if (changes.PushToTalk is { } held) { _ = RunAsync(() => _page.SetPushToTalkAsync(held)); }
         if (changes.Interrupt) { _ = RunAsync(_page.InterruptAsync); }
         if (changes.ToggleMute) { _ = RunAsync(_page.ToggleMicrophoneAsync); }

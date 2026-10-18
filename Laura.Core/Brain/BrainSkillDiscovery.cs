@@ -12,7 +12,7 @@ public sealed partial class BrainSkills
         if (query.Length > 4000) { throw new ArgumentException("Skill query exceeds its bound.", nameof(query)); }
         budget = Math.Clamp(budget, 0, 16000);
         if (budget < 150) { return ""; }
-        await brain.RefreshAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        await brain.RefreshIfDirtyAsync(cancellationToken).ConfigureAwait(false);
         string vault = brain.Location; BrainSnapshot snapshot = brain.Snapshot;
         return await Task.Run(() =>
         {

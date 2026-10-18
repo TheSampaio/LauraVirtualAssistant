@@ -4,7 +4,7 @@ using Laura.Core.Weather;
 namespace Laura.Core.Abstractions;
 
 /// <summary>
-/// Provides the current weather for the user's location.
+/// Provides observed and forecast weather for the user's location.
 ///
 /// Weather needs the internet but not the generative model, so it stays a native
 /// skill: it works with the AI mode turned off.
@@ -12,14 +12,14 @@ namespace Laura.Core.Abstractions;
 public interface IWeatherProvider
 {
     /// <summary>
-    /// Fetches the current weather.
+    /// Fetches observed and forecast weather.
     ///
     /// Args:
     ///     culture: Culture used to choose measurement units (metric vs. imperial).
     ///     cancellationToken: Token that aborts the request.
     ///
     /// Returns:
-    ///     The current weather, or <see langword="null"/> when the service could
+    ///     The weather report, or <see langword="null"/> when the service could
     ///     not be reached. Failures never throw so the skill can fall back to a
     ///     spoken apology.
     /// </summary>

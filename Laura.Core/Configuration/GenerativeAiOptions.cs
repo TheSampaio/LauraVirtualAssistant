@@ -1,7 +1,7 @@
 namespace Laura.Core.Configuration;
 
 /// <summary>
-/// Configuration for Google AI Studio conversation, native voice and explicit desktop tools.
+/// Configuration for Gemini Live, shared explicit desktop tools.
 /// </summary>
 public sealed record GenerativeAiOptions
 {
@@ -13,17 +13,12 @@ public sealed record GenerativeAiOptions
     /// <summary>
     /// Gets whether cloud conversation and native voice are enabled.
     /// </summary>
-    public bool Enabled { get; init; } = true;
+    public bool Enabled { get; init; }
 
     /// <summary>
-    /// Gets the sole supported provider identifier, <c>gemini</c>.
+    /// Gets the sole conversation provider; legacy values are migrated without granting cloud consent.
     /// </summary>
     public string Provider { get; init; } = "gemini";
-
-    /// <summary>
-    /// Gets a legacy configuration field retained for INI compatibility; Live uses its fixed Google endpoint.
-    /// </summary>
-    public string Endpoint { get; init; } = "http://localhost:11434";
 
     /// <summary>
     /// Gets an optional Gemini model override; empty selects the reviewed Live default.
@@ -66,10 +61,10 @@ public sealed record GenerativeAiOptions
     /// </summary>
     public GenerativeAiOptions Sanitized() => this with
     {
+        Enabled = Enabled && string.Equals(Provider?.Trim(), "gemini", StringComparison.OrdinalIgnoreCase),
         Provider = "gemini",
         ContinuousListening = true,
         SilenceDurationMs = Math.Clamp(SilenceDurationMs, 300, 2000),
-        Endpoint = string.IsNullOrWhiteSpace(Endpoint) ? Default.Endpoint : Endpoint.Trim(),
         Model = Model?.Trim() is { Length: <= 100 } model && !model.Contains("..", StringComparison.Ordinal)
             && model.All(static c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.')
             && (model.Length == 0 || model.StartsWith("gemini-", StringComparison.Ordinal))

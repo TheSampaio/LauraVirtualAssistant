@@ -67,7 +67,18 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         try
         {
             ISettingsService settings = services.GetRequiredService<ISettingsService>();
+            services.GetRequiredService<RuntimeDiagnosticContext>();
             using (PerformanceTrace.Measure("startup.settings")) { await settings.LoadAsync().ConfigureAwait(true); }
+            if (Environment.GetCommandLineArgs().Any(argument => argument is "--ui-smoke" or "--permissions-smoke" or "--screenshot-smoke" or "--brain-smoke")
+                && settings.Current.Brain.Directory.Length > 0
+                && !Laura.Core.Permissions.PermissionPolicy.Within(settings.Current.Brain.Directory, services.GetRequiredService<AssistantStorage>().Directory))
+            { throw new InvalidOperationException("Diagnostic settings cannot point at a Brain outside isolated storage."); }
+            try { await services.GetRequiredService<IChatGptConnection>().ReadAsync().ConfigureAwait(true); }
+            catch (Laura.Core.ChatGpt.ChatGptConnectionException) { }
+            await Task.Run(services.GetRequiredService<Laura.Core.Files.UserFileWorkspace>().EnsureCreated).ConfigureAwait(true);
+            try { await Task.Run(services.GetRequiredService<LegacyProviderCleanup>().RetireCredential).ConfigureAwait(true); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or Laura.Core.Permissions.PermissionDeniedException)
+            { services.GetRequiredService<ILogger<LauraApplication>>().LogWarning("Retired credential cleanup failed ({ErrorType}).", error.GetType().Name); }
             _permissionOptions = settings.Current.Permissions;
             settings.Changed += OnPermissionSettingsChanged;
             await PersistPermissionOptionsAsync().ConfigureAwait(true);
@@ -82,7 +93,9 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
             services.GetRequiredService<ILocalizer>().SetCulture(settings.Current.ResolveCulture());
             services.GetRequiredService<IUiLocalizer>().SetCulture(settings.Current.ResolveUiCulture());
             _brainStartup = WarmBrainAsync();
+            services.GetRequiredService<IAssistantEngine>().StateChanged += OnEngineStateChanged;
             using (PerformanceTrace.Measure("startup.engine-and-history")) { await services.GetRequiredService<IAssistantEngine>().StartAsync().ConfigureAwait(true); }
+            await services.GetRequiredService<ConversationActions>().InitializeAsync().ConfigureAwait(true);
             if (_stopping) { interactive.Dispose(); return; }
             await services.GetRequiredService<ReminderScheduler>().StartAsync().ConfigureAwait(true);
             services.GetRequiredService<HourlyAnnouncer>().Start();
@@ -132,6 +145,14 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
             { await Laura.App.Platforms.Windows.WindowsDialogs.AlertAsync("Laura", "Startup failed. Check settings and the local data directory.", "OK").ConfigureAwait(true); }
         }
     }
+    /// <summary>Includes startup source collection in the same delayed voice feedback as model processing.</summary>
+    private void OnEngineStateChanged(object? sender, AssistantState state)
+    {
+        var live = services.GetRequiredService<GeminiLiveClient>();
+        if (state == AssistantState.Thinking) { live.SetThinking(); }
+        else if ((state is AssistantState.Ready or AssistantState.Speaking or AssistantState.Stopped) && live.IsThinking)
+        { live.ReturnToReady(); }
+    }
     /// <summary>Prepares Markdown and legacy facts away from the critical interactive startup path.</summary>
     private async Task WarmBrainAsync()
     {
@@ -155,6 +176,7 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Stop();
         services.GetRequiredService<WindowsApprovalCenter>().Dispose();
         WindowsDialogs.CloseAll();
+        services.GetRequiredService<IAssistantEngine>().StateChanged -= OnEngineStateChanged;
         _shortcuts?.Dispose(); _shortcuts = null;
         _screenshotShortcuts?.Dispose(); _screenshotShortcuts = null;
         await services.GetRequiredService<ScreenshotCoordinator>().StopAsync().ConfigureAwait(true);
@@ -164,10 +186,13 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         await services.GetRequiredService<GeminiLiveClient>().ReconfigureAsync().ConfigureAwait(true);
         await services.GetRequiredService<HourlyAnnouncer>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<IAssistantEngine>().StopAsync().ConfigureAwait(true);
+        await services.GetRequiredService<Laura.Core.Execution.CommandJobs>().DisposeAsync().ConfigureAwait(true);
         if (_brainStartup is not null) { await _brainStartup.ConfigureAwait(true); }
         await services.GetRequiredService<Laura.Core.Brain.BrainLearning>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<Laura.Core.Brain.BrainMaintenance>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<Laura.Core.Brain.BrainService>().DisposeAsync().ConfigureAwait(true);
+        services.GetRequiredService<RuntimeDiagnosticContext>().Dispose();
+        await services.GetRequiredService<Laura.Core.Diagnostics.RuntimeJournal>().DisposeAsync().ConfigureAwait(true);
         _tray?.Dispose(); _tray = null;
     }
     /// <summary>Exits only on an explicit domain or tray exit request.</summary>
@@ -177,6 +202,7 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
     private void OnPermissionSettingsChanged(object? sender, Laura.Core.Configuration.LauraSettings settings)
     {
         if (_permissionOptions == settings.Permissions) { return; }
+        Laura.Core.Diagnostics.LauraDiagnostics.Record("permission.mode_changed", outcome: settings.Permissions.Mode.ToString());
         _permissionOptions = settings.Permissions; _ = PersistPermissionOptionsAsync();
     }
     private async Task PersistPermissionOptionsAsync()

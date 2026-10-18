@@ -1,5 +1,7 @@
 # Aquisição remota e orquestração cognitiva
 
+> Historical architecture and validation record. The 2026-10-17 [agent rework](laura-agent-execution.md) supersedes provider, model and approval descriptions below. Gemini is now the sole conversation/voice provider; local inference and ONNX adapters are retired.
+
 ## Auditoria de 2026-10-14
 
 Base limpa no commit `7e77b1b`; 330 testes Core passaram em Release (`_Output/AutonomyBaseline/baseline.trx`). Os quatro relatórios anteriores foram consultados. Não havia processo Laura acessível por `Get-Process Laura*`; a consulta CIM foi indisponível no sandbox. Isso não comprova a versão de uma instância iniciada posteriormente.

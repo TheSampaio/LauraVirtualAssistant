@@ -17,7 +17,7 @@ public sealed class BriefingContributorTests
     public async Task CurrencyPreservesThePublishedDateAndDoesNotClaimRealtimePricing()
     {
         using var http = Client("[{\"data\":\"09/10/2026\",\"valor\":\"4.9892\"}]");
-        var section = await new CurrencyBriefingContributor(http, new Clock()).CollectAsync(CancellationToken.None);
+        var section = await new CurrencyBriefingContributor(http, new Clock(), Localizer()).CollectAsync(CancellationToken.None);
         Assert.NotNull(section);
         string facts = JsonSerializer.Serialize(section.Facts);
         Assert.Contains("4.9892", facts); Assert.Contains("2026-10-09", facts); Assert.Contains("not a real-time", facts);
@@ -26,7 +26,41 @@ public sealed class BriefingContributorTests
     public async Task InvalidCurrencyDataIsNotSubstitutedWithZero()
     {
         using var http = Client("[{\"data\":\"not-a-date\",\"valor\":\"0\"}]");
-        Assert.Null(await new CurrencyBriefingContributor(http, new Clock()).CollectAsync(CancellationToken.None));
+        Assert.Null(await new CurrencyBriefingContributor(http, new Clock(), Localizer()).CollectAsync(CancellationToken.None));
+    }
+    /// <summary>Currency display rounds to two Brazilian decimal places while preserving the source decimal.</summary>
+    [Theory]
+    [InlineData("5.8764", "R$ 5,88")]
+    [InlineData("5.2031", "R$ 5,20")]
+    [InlineData("5.50", "R$ 5,50")]
+    [InlineData("5.875", "R$ 5,88")]
+    public async Task CurrencyUsesBrazilianDisplayWithoutChangingTheSourceValue(string raw, string expected)
+    {
+        using var http = Client($"[{{\"data\":\"09/10/2026\",\"valor\":\"{raw}\"}}]");
+        using var contributor = new CurrencyBriefingContributor(http, new Clock(), Localizer());
+        BriefingSection? section = await contributor.CollectAsync(CancellationToken.None);
+        Assert.NotNull(section);
+        using var facts = JsonDocument.Parse(JsonSerializer.Serialize(section.Facts));
+        Assert.Equal(expected, facts.RootElement.GetProperty("FormattedSaleReference").GetString());
+        Assert.Equal(decimal.Parse(raw, CultureInfo.InvariantCulture), facts.RootElement.GetProperty("SaleReference").GetDecimal());
+        Assert.Contains(expected, facts.RootElement.GetProperty("SpokenSummary").GetString());
+    }
+
+    /// <summary>An old reference is omitted instead of being introduced as current.</summary>
+    [Fact]
+    public async Task StaleCurrencyReferenceIsUnavailable()
+    {
+        using var http = Client("[{\"data\":\"01/10/2026\",\"valor\":\"5.8764\"}]");
+        using var contributor = new CurrencyBriefingContributor(http, new Clock(), Localizer());
+        Assert.Null(await contributor.CollectAsync(CancellationToken.None));
+    }
+    /// <summary>An unexpected decimal separator cannot be interpreted as a thousands separator.</summary>
+    [Fact]
+    public async Task CurrencyRejectsAmbiguousNumericText()
+    {
+        using var http = Client("[{\"data\":\"09/10/2026\",\"valor\":\"5,8764\"}]");
+        using var contributor = new CurrencyBriefingContributor(http, new Clock(), Localizer());
+        Assert.Null(await contributor.CollectAsync(CancellationToken.None));
     }
     [Fact]
     public async Task NewsKeepsOriginalDatesAndRejectsStaleOrInvalidLinks()
@@ -62,6 +96,13 @@ public sealed class BriefingContributorTests
     }
     /// <summary>Supplies a deterministic response without making network requests.</summary>
     private static HttpClient Client(string body) => new(new Handler(body));
+    /// <summary>Creates a Portuguese catalog for formatted currency assertions.</summary>
+    private static JsonLocalizer Localizer()
+    {
+        var localizer = new JsonLocalizer(Path.Combine(AppContext.BaseDirectory, "Localization", "Locales"), NullLogger<JsonLocalizer>.Instance);
+        localizer.SetCulture(CultureInfo.GetCultureInfo("pt-BR"));
+        return localizer;
+    }
     private sealed class Handler(string body) : HttpMessageHandler
     {
         /// <inheritdoc />

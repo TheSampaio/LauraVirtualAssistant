@@ -20,7 +20,7 @@ foreach ($directory in $BrainDirectories) {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect Git history.' }
     if ($historical.Count -gt 0) { $failures.Add('Vault paths appear in Git history. Ignoring them cannot remove historical disclosures; history rewriting requires separate authorization.') }
 }
-if (@($tracked | Where-Object { $_ -match '(^|/)(brain-index[^/]*\.db[^/]*|brain-vectors[^/]*\.db[^/]*|memory\.db[^/]*|google-key\.dat[^/]*|api_keys\.json[^/]*|settings\.ini[^/]*)$' }).Count -gt 0) {
+if (@($tracked | Where-Object { $_ -match '(^|/)(brain-index[^/]*\.db[^/]*|brain-vectors[^/]*\.db[^/]*|memory\.db[^/]*|google-key\.dat[^/]*|openai-key\.dat[^/]*|api_keys\.json[^/]*|settings\.ini[^/]*)$' }).Count -gt 0) {
     $failures.Add('Private local settings, credentials or memory caches are tracked.')
 }
 if ($failures.Count -gt 0) { throw ($failures -join [Environment]::NewLine) }

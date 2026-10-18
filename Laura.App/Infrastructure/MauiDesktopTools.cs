@@ -7,19 +7,21 @@ using Laura.Core.Permissions;
 namespace Laura.App.Infrastructure;
 
 /// <summary>Retains trusted confirmations and scoped file operations in the MAUI presentation.</summary>
-public sealed class MauiDesktopTools(IUiLocalizer ui, ILocalizer conversation, UserFileWorkspace files, PermissionManager permissions, ScreenshotCoordinator screenshots) : IDesktopTools
+public sealed class MauiDesktopTools(IUiLocalizer ui, ILocalizer conversation, UserFileWorkspace files, PermissionManager permissions, ScreenshotCoordinator screenshots, ISettingsService settings) : IDesktopTools
 {
     /// <inheritdoc />
     public async Task<string> ExecuteAsync(DesktopAction action, string? note, CancellationToken cancellationToken)
     {
+        using var provider = new Laura.Core.Conversation.ProviderExecutionScope(Laura.Core.Conversation.ProviderExecutionScope.Provider ?? settings.Current.GenerativeAi.Provider);
         if (!Enum.IsDefined(action)) { throw new ArgumentOutOfRangeException(nameof(action)); }
         PermissionOperation operation = action switch
         {
             DesktopAction.ReadClipboard => PermissionOperation.ClipboardCloud, DesktopAction.CaptureScreen => PermissionOperation.Internal,
-            DesktopAction.SaveNote => PermissionOperation.FileWrite, DesktopAction.Undo => PermissionOperation.Undo,
+            DesktopAction.SaveNote => PermissionOperation.WorkspaceNote, DesktopAction.Undo => PermissionOperation.Undo,
             DesktopAction.ListFiles => PermissionOperation.Internal, _ => PermissionOperation.Unknown
         };
         try { return await permissions.ExecuteAsync(new(operation, "Local desktop command", ui.Get("ui.tools.confirm." + action),
+            resources: action == DesktopAction.SaveNote ? [files.RootDirectory] : [],
             parameters: note ?? "", destination: action == DesktopAction.ReadClipboard ? MauiToolPermissions.CloudDestination : ""),
             token => ExecuteAuthorizedAsync(action, note, token), cancellationToken).ConfigureAwait(false); }
         catch (PermissionDeniedException) { return conversation.Get("tools.denied"); }

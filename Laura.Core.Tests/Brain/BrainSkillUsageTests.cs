@@ -32,7 +32,7 @@ public sealed partial class BrainTests
         Assert.Equal(note.Hash, brain.Snapshot.Notes.Single(item => item.Id == note.Id).Hash); Assert.Equal("unverified", note.Verification);
         BrainNote revised = await brain.SaveAsync(note with { Body = note.Body + "\nA proposed change." });
         Assert.False(skills.IsEnabled(revised)); Assert.Empty(reopened.Read(note.Id, revised.Hash)); Assert.Equal(2, reopened.Read(note.Id).Count);
-        journal.ClearHistory(); Assert.Empty(reopened.Read(note.Id)); Assert.False(await usage.ObserveAsync(use, Observation(0, "stale after changed version"), () => context.TurnId));
+        journal.ClearHistory(); Assert.Equal(2, reopened.Read(note.Id).Count); Assert.Empty(journal.ReadAllHistory()); Assert.False(await usage.ObserveAsync(use, Observation(0, "stale after changed version"), () => context.TurnId));
     }
     [Fact]
     public async Task OtherTurnsVaultsExpiredBindingsRevocationAndDisabledLearningDoNotInheritUsage()

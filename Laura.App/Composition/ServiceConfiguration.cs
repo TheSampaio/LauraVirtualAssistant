@@ -44,7 +44,7 @@ public static class ServiceConfiguration
 
         services.AddLogging(static builder =>
         {
-            builder.SetMinimumLevel(LogLevel.Information);
+            builder.SetMinimumLevel(LogLevel.Trace);
             builder.AddDebug();
         });
 
@@ -67,20 +67,43 @@ public static class ServiceConfiguration
         services.AddSingleton<IUserContext, UserContext>();
 
         string settingsPath = storageDirectory is null ? IniSettingsStore.GetDefaultFilePath() : Path.Combine(storageDirectory, "settings.ini");
+        // Diagnostics use only Laura's existing protected credentials, never fixture copies or model-provided paths.
+        string credentialDirectory = storageDirectory is not null && (Environment.GetCommandLineArgs().Contains("--permissions-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--screenshot-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--brain-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--agent-live-smoke", StringComparer.Ordinal))
+            ? Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())! : Path.GetDirectoryName(settingsPath)!;
+        string chatGptDirectory = storageDirectory is not null && Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal)
+            ? Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())! : Path.GetDirectoryName(settingsPath)!;
         services.AddSingleton(new AssistantStorage(Path.GetDirectoryName(Path.GetFullPath(settingsPath))!));
+        services.AddSingleton(_ => new LegacyProviderCleanup(Path.GetDirectoryName(Path.GetFullPath(settingsPath))!));
+        services.AddSingleton(provider => new Laura.Core.Diagnostics.RuntimeJournal(storageDirectory is null
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Laura", "Diagnostics")
+            : Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Diagnostics")));
+        services.AddSingleton<ILoggerProvider, Laura.Core.Diagnostics.RuntimeLogProvider>();
         services.AddSingleton<ISettingsStore>(provider => new IniSettingsStore(
             settingsPath,
             provider.GetRequiredService<ILogger<IniSettingsStore>>()));
         services.AddSingleton<ISettingsService, SettingsService>();
+        services.AddSingleton<IPrivateDataProtector, WindowsPrivateDataProtector>();
+        services.AddSingleton<ICognitiveTaskJournal>(provider => new FileCognitiveTaskJournal(
+            Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Tasks"), provider.GetRequiredService<IPrivateDataProtector>()));
+        services.AddSingleton<CognitiveTasks>();
+        services.AddSingleton<IProviderModelCatalog>(provider => Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)
+            ? new UiSmokeModelCatalog()
+            : new ProviderModelCatalog(new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan },
+                Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "ModelCatalog")));
         services.AddSingleton(provider => new PermissionStore(Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Security", "permissions.json")));
         services.AddSingleton(provider => new PermissionManager(provider.GetRequiredService<PermissionStore>(),
-            () => provider.GetRequiredService<ISettingsService>().Current.Permissions,
+            () =>
+            {
+                PermissionOptions options = provider.GetRequiredService<ISettingsService>().Current.Permissions;
+                return options.Sanitized();
+            },
             () => new[] { provider.GetRequiredService<AssistantStorage>().Directory,
-                provider.GetRequiredService<ISettingsService>().Current.Brain.Directory }.Where(path => !string.IsNullOrWhiteSpace(path)),
-            Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Workspace")));
+                provider.GetRequiredService<ISettingsService>().Current.Brain.Directory, Path.Combine(chatGptDirectory, "Credentials"),
+                Path.Combine(credentialDirectory, "google-key.dat"), Path.Combine(credentialDirectory, "google-key.previous.dat"), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "LauraCredentialBroker") }.Where(path => !string.IsNullOrWhiteSpace(path)),
+            Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Workspace"), provider.GetRequiredService<IUiLocalizer>()));
         services.AddSingleton<SqliteConversationMemory>(_ => new SqliteConversationMemory(
             Path.Combine(Path.GetDirectoryName(settingsPath)!, "memory.db")));
-        services.AddSingleton<IBrainEmbedding, OnnxBrainEmbedding>();
+        services.AddSingleton<IBrainEmbedding, LexicalOnlyEmbedding>();
         string brainCache = storageDirectory is null ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Laura", "BrainCache") : Path.Combine(storageDirectory, "BrainCache");
         services.AddSingleton(provider => new BrainIndex(brainCache, provider.GetRequiredService<IBrainEmbedding>()));
         services.AddSingleton<Func<string, IBrainStorage>>(_ => location => new FileBrainStorage(location));
@@ -90,6 +113,10 @@ public static class ServiceConfiguration
         services.AddSingleton<BrainApplications>();
         services.AddSingleton<IRemoteBrainSource>(_ => new GitHubBrainSource(new HttpClient(GitHubBrainSource.CreateHandler()) { Timeout = TimeSpan.FromSeconds(25) }));
         services.AddSingleton<BrainSources>();
+        services.AddSingleton<IRepositoryStudyStore>(provider => new FileRepositoryStudyStore(
+            Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "RepositoryStudies"), provider.GetRequiredService<IPrivateDataProtector>()));
+        services.AddSingleton<RepositoryStudy>();
+        services.AddSingleton<RepositoryAnalysis>();
         services.AddSingleton(provider => new Laura.Core.Mcp.McpServerStore(Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Security", "mcp-servers.json")));
         services.AddSingleton(provider => new Laura.Core.Mcp.McpRuntime(provider.GetRequiredService<Laura.Core.Mcp.McpServerStore>(), provider.GetRequiredService<PermissionManager>(), WindowsMcpSession.ConnectAsync));
         services.AddSingleton(provider => new BrainSkills(provider.GetRequiredService<BrainService>(), provider.GetRequiredService<ISettingsService>(),
@@ -98,13 +125,23 @@ public static class ServiceConfiguration
             new BrainIndex(Path.Combine(brainCache, "Skills"), provider.GetRequiredService<IBrainEmbedding>()), provider.GetRequiredService<Laura.Core.Mcp.McpRuntime>().DependencyAvailable));
         services.AddSingleton<BrainConversationMemory>();
         services.AddSingleton<BrainSkillUsage>();
+        services.AddSingleton<BrainContextBuilder>();
         services.AddSingleton<BrainMaintenance>();
         services.AddSingleton<IConversationMemory>(provider => provider.GetRequiredService<BrainConversationMemory>());
-        // Explicit live diagnostics read the already protected credential in-process; it is neither printed nor copied into fixtures.
-        string credentialDirectory = storageDirectory is not null && (Environment.GetCommandLineArgs().Contains("--permissions-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--screenshot-live-smoke", StringComparer.Ordinal) || Environment.GetCommandLineArgs().Contains("--brain-live-smoke", StringComparer.Ordinal))
-            ? Path.GetDirectoryName(IniSettingsStore.GetDefaultFilePath())! : Path.GetDirectoryName(settingsPath)!;
         services.AddSingleton<IApiKeyStore>(_ => new ProtectedApiKeyStore(credentialDirectory));
+        services.AddSingleton(provider => new ChatGptCredentialStore(Path.Combine(chatGptDirectory, "Credentials"),
+            provider.GetRequiredService<IPrivateDataProtector>()));
+        services.AddSingleton(provider => new ChatGptBrokerClient(provider.GetRequiredService<ChatGptCredentialStore>(), Path.Combine(chatGptDirectory, "Credentials")));
+        services.AddSingleton<UiSmokeChatGptConnection>();
+        bool offlineChatGptSmoke = Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)
+            && !Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal);
+        services.AddSingleton<IChatGptConnection>(provider => offlineChatGptSmoke ? provider.GetRequiredService<UiSmokeChatGptConnection>() : provider.GetRequiredService<ChatGptBrokerClient>());
+        services.AddSingleton<IChatGptInference>(provider => offlineChatGptSmoke ? provider.GetRequiredService<UiSmokeChatGptConnection>() : provider.GetRequiredService<ChatGptBrokerClient>());
+        services.AddSingleton<IChatGptBrokerSetup>(_ => new ChatGptBrokerSetup(AppContext.BaseDirectory));
+        services.AddSingleton<ChatGptConversationEngine>();
         services.AddSingleton(_ => new UserFileWorkspace(Path.Combine(Path.GetDirectoryName(settingsPath)!, "Workspace")));
+        services.AddSingleton<IKnownFolderResolver, WindowsKnownFolderResolver>();
+        services.AddSingleton<IVersionedFileEditor>(provider => new VersionedFileEditor(Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Undo", "Edits")));
 
         services.AddSingleton<ILocalizer>(provider => new JsonLocalizer(
             GetLocalesDirectory(),
@@ -116,6 +153,7 @@ public static class ServiceConfiguration
         // A short timeout keeps a slow network from making the weather skill hang.
         services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromSeconds(8) });
         services.AddSingleton<IWeatherProvider, WttrWeatherProvider>();
+        services.AddSingleton<WeatherGreetingFormatter>();
 
         services.AddSingleton<GeminiLiveClient>();
         services.AddSingleton<ListeningControl>();
@@ -123,10 +161,12 @@ public static class ServiceConfiguration
         services.AddSingleton<WakeBriefing>();
         services.AddSingleton<IBriefingContributor, NewsBriefingContributor>();
         services.AddSingleton<IBriefingContributor, CurrencyBriefingContributor>();
+        services.AddSingleton<IBriefingContributor, WeatherBriefingContributor>();
         services.AddSingleton<IBriefingContributor, ReminderBriefingContributor>();
         services.AddSingleton<ClapWakeCoordinator>();
         services.AddSingleton<MarkLvConfigurationImporter>();
-        services.AddSingleton<IConversationEngine>(provider => provider.GetRequiredService<GeminiLiveClient>());
+        services.AddSingleton(provider => new ConversationProviderRouter(provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<GeminiLiveClient>(), provider.GetRequiredService<ChatGptConversationEngine>(), provider.GetRequiredService<CognitiveTasks>()));
+        services.AddSingleton<IConversationEngine>(provider => provider.GetRequiredService<ConversationProviderRouter>());
         services.AddSingleton<WindowsApplicationCatalog>();
         services.AddSingleton<WindowsResourceMonitor>();
         services.AddSingleton<WindowsDiskMonitor>();
@@ -136,6 +176,7 @@ public static class ServiceConfiguration
         services.AddSingleton<GreetingComposer>();
 
         AddSkills(services);
+        services.AddSingleton<SkillDispatcher>();
         services.AddSingleton<ISkillDispatcher, GeminiSkillDispatcher>();
 
         services.AddSingleton<IAssistantEngine, AssistantEngine>();
@@ -175,6 +216,8 @@ public static class ServiceConfiguration
         services.AddSingleton<ISpeechSynthesizer, SpeechRouter>();
         services.AddSingleton<ISystemController, WindowsSystemController>();
         services.AddSingleton<IProcessLauncher, WindowsProcessLauncher>();
+        services.AddSingleton<ICommandExecutor, WindowsCommandExecutor>();
+        services.AddSingleton<Laura.Core.Execution.CommandJobs>();
         services.AddSingleton<IStartupRegistration, RegistryStartupRegistration>();
     }
 
@@ -188,6 +231,8 @@ public static class ServiceConfiguration
     {
         services.AddSingleton<IUiDispatcher, MauiUiDispatcher>();
         services.AddSingleton<LauraNotifications>();
+        services.AddSingleton<ConversationActions>();
+        services.AddSingleton<RuntimeDiagnosticContext>();
         services.AddSingleton<ScreenshotCoordinator>();
         services.AddSingleton<Laura.App.Platforms.Windows.WindowsApprovalCenter>();
         services.AddSingleton<IDesktopTools, MauiDesktopTools>();
@@ -196,6 +241,8 @@ public static class ServiceConfiguration
         services.AddSingleton<MainPage>();
         services.AddTransient<SetupPage>();
         services.AddTransient<MemoryPage>();
+        services.AddTransient<TasksPage>();
+        services.AddTransient<LogsPage>();
     }
 
     /// <summary>

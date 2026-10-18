@@ -9,6 +9,15 @@ namespace Laura.Core.Tests.Localization;
 
 public sealed class LocalizationTests
 {
+    [Theory]
+    [InlineData("en-US")]
+    [InlineData("pt-BR")]
+    public void CatalogKeysAreUniqueSoOldResourcesCannotOverrideNewControls(string culture)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(Locales, culture + ".json")));
+        var names = document.RootElement.EnumerateObject().Select(property => property.Name).ToArray();
+        Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
+    }
     private static string Locales => Path.Combine(AppContext.BaseDirectory, "Localization", "Locales");
 
     [Fact]

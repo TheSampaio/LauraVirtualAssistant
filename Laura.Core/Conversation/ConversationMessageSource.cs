@@ -10,4 +10,6 @@ public enum ConversationMessageSource
 
     /// <summary>An assistant response.</summary>
     Assistant,
+    /// <summary>A completed microphone transcript, sharing the same grounded learning policies as typed input.</summary>
+    UserVoice,
 }

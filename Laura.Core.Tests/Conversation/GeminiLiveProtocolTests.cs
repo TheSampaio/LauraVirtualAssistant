@@ -7,6 +7,19 @@ namespace Laura.Core.Tests.Conversation;
 
 public sealed class GeminiLiveProtocolTests
 {
+    [Fact]
+    public void RestoredHistoryExcludesOnlyTheCurrentIdentity()
+    {
+        Guid current = Guid.NewGuid();
+        var turn = new ConversationTurn("Repeated question", System.Globalization.CultureInfo.GetCultureInfo("en-US"), "Owner")
+        { TurnId = current, History = [new(ConversationMessageSource.UserTyped, "Repeated question", DateTimeOffset.UtcNow),
+            new(ConversationMessageSource.UserTyped, "Display title", DateTimeOffset.UtcNow) { TurnId = current }] };
+        using var document = JsonDocument.Parse(GeminiLiveProtocol.Text(turn, true));
+        var turns = document.RootElement.GetProperty("clientContent").GetProperty("turns");
+        Assert.Equal(2, turns.GetArrayLength());
+        Assert.All(turns.EnumerateArray(), item => Assert.Equal("Repeated question", item.GetProperty("parts")[0].GetProperty("text").GetString()));
+    }
+
     [Theory]
     [InlineData("blocked", true)]
     [InlineData("cancelled", true)]
@@ -97,6 +110,6 @@ public sealed class GeminiLiveProtocolTests
     public void Sanitization_MigratesLocalProvidersWithoutReusingLocalModelNames()
     {
         var options = new GenerativeAiOptions { Provider = "ollama", Model = "qwen2.5:0.5b", ContinuousListening = false }.Sanitized();
-        Assert.Equal("gemini", options.Provider); Assert.Empty(options.Model); Assert.True(options.ContinuousListening);
+        Assert.Equal("gemini", options.Provider); Assert.Empty(options.Model); Assert.True(options.ContinuousListening); Assert.False(options.Enabled);
     }
 }

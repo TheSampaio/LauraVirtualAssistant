@@ -27,12 +27,20 @@ public sealed class AssistantEngine : IAssistantEngine
     private readonly ILogger<AssistantEngine> _logger;
     private readonly IConversationMemory? _memory;
     private readonly WakeBriefing? _startupBriefing;
+    private readonly CognitiveTasks? _tasks;
+    private readonly IAssistantTools? _taskTools;
+    private readonly IConversationEngine? _conversation;
     private CancellationTokenSource? _startupCancellation;
     private int _startupScheduled;
     private bool _operational;
+    private readonly object _generationGate = new();
+    private CancellationTokenSource _conversationCancellation = new();
+    private CancellationTokenSource? _activeRequest;
+    private long _conversationGeneration;
+    private readonly AsyncLocal<long?> _activeGeneration = new();
 
-    private readonly Channel<EngineMessage> _messages = Channel.CreateUnbounded<EngineMessage>(
-        new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
+    private readonly Channel<EngineMessage> _messages = Channel.CreateBounded<EngineMessage>(
+        new BoundedChannelOptions(32) { SingleReader = true, SingleWriter = false, FullMode = BoundedChannelFullMode.Wait, AllowSynchronousContinuations = false });
 
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<ConversationMessage> _conversationHistory = [];
@@ -41,6 +49,7 @@ public sealed class AssistantEngine : IAssistantEngine
     private const int MaxConversationHistory = 200;
 
     private Task? _worker;
+    private Guid _activeTurnId;
 
     // Stored as an int because volatile reads of enums are not supported; the state
     // is read by the UI while the loop writes it.
@@ -58,7 +67,10 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <param name="clock">Source of date and time.</param>
     /// <param name="logger">Destination for diagnostic logs.</param>
     /// <param name="memory">Optional unified persistent history.</param>
-    /// <param name="startupBriefing">Optional verified news, currency and reminder sources for the first opening in this process.</param>
+    /// <param name="startupBriefing">Optional verified weather, news, currency and reminder sources for the first opening in this process.</param>
+    /// <param name="tasks">Optional private task checkpoint coordinator for explicit native resumption.</param>
+    /// <param name="taskTools">Optional shared native tools for evidence-based cycle continuation.</param>
+    /// <param name="conversation">Optional active provider used to classify a completed cycle.</param>
     public AssistantEngine(
         ISpeechSynthesizer synthesizer,
         ISkillDispatcher dispatcher,
@@ -68,7 +80,8 @@ public sealed class AssistantEngine : IAssistantEngine
         GreetingComposer greetingComposer,
         IClock clock,
         ILogger<AssistantEngine> logger,
-        IConversationMemory? memory = null, WakeBriefing? startupBriefing = null)
+        IConversationMemory? memory = null, WakeBriefing? startupBriefing = null, CognitiveTasks? tasks = null,
+        IAssistantTools? taskTools = null, IConversationEngine? conversation = null)
     {
         ArgumentNullException.ThrowIfNull(synthesizer);
         ArgumentNullException.ThrowIfNull(dispatcher);
@@ -80,6 +93,7 @@ public sealed class AssistantEngine : IAssistantEngine
         ArgumentNullException.ThrowIfNull(logger);
 
         _synthesizer = synthesizer;
+        _taskTools = taskTools; _conversation = conversation;
         _dispatcher = dispatcher;
         _settings = settings;
         _localizer = localizer;
@@ -89,6 +103,7 @@ public sealed class AssistantEngine : IAssistantEngine
         _logger = logger;
         _memory = memory;
         _startupBriefing = startupBriefing;
+        _tasks = tasks;
     }
 
     /// <inheritdoc />
@@ -99,6 +114,8 @@ public sealed class AssistantEngine : IAssistantEngine
 
     /// <inheritdoc />
     public AssistantState State => (AssistantState)Volatile.Read(ref _state);
+    /// <inheritdoc />
+    public int PendingMessageCount => _messages.Reader.Count;
 
     /// <inheritdoc />
     public IReadOnlyList<ConversationMessage> ConversationHistory
@@ -186,6 +203,25 @@ public sealed class AssistantEngine : IAssistantEngine
             completion => new CommandSubmitted(text) { Completion = completion, RequestCancellation = cancellationToken },
             cancellationToken);
     }
+    /// <inheritdoc />
+    public Task SubmitVoiceCommandAsync(string text, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        return EnqueueAndWaitAsync(completion => new CommandSubmitted(text) { Completion = completion,
+            RequestCancellation = cancellationToken, MessageSource = ConversationMessageSource.UserVoice }, cancellationToken);
+    }
+    /// <inheritdoc />
+    public Task ClearConversationAsync(CancellationToken cancellationToken = default)
+    {
+        if (_worker is null || State == AssistantState.Stopped) { throw new InvalidOperationException("Start the assistant before resetting its conversation."); }
+        lock (_generationGate)
+        {
+            Interlocked.Increment(ref _conversationGeneration);
+            _conversationCancellation.Cancel(); _conversationCancellation.Dispose(); _conversationCancellation = new();
+            _synthesizer.CancelSpeech();
+            return EnqueueAndWaitAsync(completion => new ConversationCleared { Completion = completion }, cancellationToken);
+        }
+    }
 
     /// <inheritdoc />
     public Task SpeakAsync(string text, CancellationToken cancellationToken = default)
@@ -204,6 +240,14 @@ public sealed class AssistantEngine : IAssistantEngine
             { Completion = completion, RequestCancellation = cancellationToken, DisplayText = displayText }, cancellationToken);
     }
     /// <inheritdoc />
+    public async Task ResumeTaskAsync(Guid taskId, CancellationToken cancellationToken = default)
+    {
+        if (_tasks is null) { throw new InvalidOperationException("Task recovery is unavailable."); }
+        var checkpoint = await _tasks.PrepareResumeAsync(taskId, cancellationToken).ConfigureAwait(false);
+        await EnqueueAndWaitAsync(completion => new CommandSubmitted(checkpoint.ResumePrompt())
+        { Completion = completion, RequestCancellation = cancellationToken, DisplayText = checkpoint.Objective, ContinuingTaskTurnId = taskId }, cancellationToken).ConfigureAwait(false);
+    }
+    /// <inheritdoc />
     public Task SubmitVisualCommandAsync(string text, byte[] png, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
@@ -215,9 +259,20 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <inheritdoc />
     public void StopSpeaking()
     {
-        try { _startupCancellation?.Cancel(); } catch (ObjectDisposedException) { }
+        if (_startupCancellation is { } startup) { _ = CancelRequestAsync(startup); }
+        CancellationTokenSource? active;
+        lock (_generationGate) { Interlocked.Increment(ref _conversationGeneration); active = _activeRequest; }
+        if (active is not null) { _ = CancelRequestAsync(active); }
         _synthesizer.CancelSpeech();
         Enqueue(new StopRequested());
+    }
+
+    /// <summary>Cancels callbacks asynchronously so an external cancellation registration cannot block the native UI.</summary>
+    private async Task CancelRequestAsync(CancellationTokenSource request)
+    {
+        try { await request.CancelAsync().ConfigureAwait(false); }
+        catch (ObjectDisposedException) { }
+        catch (AggregateException exception) { _logger.LogWarning("Request cancellation callback failed ({ErrorType}).", exception.GetType().Name); }
     }
 
     /// <inheritdoc />
@@ -225,6 +280,7 @@ public sealed class AssistantEngine : IAssistantEngine
     {
         await StopAsync(CancellationToken.None).ConfigureAwait(false);
         _lifetime.Dispose();
+        _conversationCancellation.Dispose();
     }
 
     /// <summary>
@@ -259,16 +315,35 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <returns>A task completed when the message has been handled.</returns>
     private async Task HandleAsync(EngineMessage message, CancellationToken cancellationToken)
     {
+        CancellationTokenSource? request = null;
         try
         {
-            using var request = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, message.RequestCancellation);
+            lock (_generationGate)
+            {
+                if (message is CommandSubmitted or SpeechRequested or StartupRequested && message.Generation != _conversationGeneration) { return; }
+                request = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, message.RequestCancellation, _conversationCancellation.Token);
+                _activeRequest = request;
+                _activeGeneration.Value = message.Generation;
+            }
             request.Token.ThrowIfCancellationRequested();
             switch (message)
             {
+                case ConversationCleared:
+                    if (_memory is not null) { _memory.ClearHistory(); }
+                    lock (_conversationHistoryGate) { _conversationHistory.Clear(); }
+                    Laura.Core.Diagnostics.LauraDiagnostics.Record("conversation.cleared");
+                    SetState(AssistantState.Ready);
+                    break;
                 case CommandSubmitted submitted:
-                    PublishConversation(ConversationMessageSource.UserTyped, submitted.DisplayText ?? submitted.Text);
+                    if (submitted.Automatic && _tasks?.Current(submitted.ContinuingTaskTurnId)?.Rounds is { CanContinue: false }) { break; }
+                    Guid turnId = Guid.NewGuid();
+                    _activeTurnId = turnId;
+                    if (!submitted.Automatic) { PublishConversation(submitted.MessageSource, submitted.DisplayText ?? submitted.Text, turnId); }
+                    if (submitted.ContinuingTaskTurnId != Guid.Empty && _tasks?.Current(submitted.ContinuingTaskTurnId) is { } resumed)
+                    { _memory?.SetWorkingContext(new ConversationWorkingContext(resumed.Id, resumed.Objective)); }
                     await ExecuteCommandAsync(submitted.Text,
-                        submitted.DisplayText is null ? SkillRequestSource.Text : SkillRequestSource.Context, request.Token, submitted.Image).ConfigureAwait(false);
+                        submitted.DisplayText is null ? SkillRequestSource.Text : SkillRequestSource.Context, request.Token, submitted.Image, turnId, submitted.ContinuingTaskTurnId).ConfigureAwait(false);
+                    await ScheduleContinuationAsync(submitted.ContinuingTaskTurnId != Guid.Empty ? submitted.ContinuingTaskTurnId : turnId, request.Token).ConfigureAwait(false);
                     break;
 
                 case SpeechRequested requested:
@@ -286,8 +361,10 @@ public sealed class AssistantEngine : IAssistantEngine
                             {
                                 SetState(AssistantState.Thinking);
                                 string prompt = await _startupBriefing.CreateRequestAsync(_greetingComposer.ComposeStartupBriefing(), startup.Token).ConfigureAwait(false);
-                                PublishConversation(ConversationMessageSource.UserTyped, _startupBriefing.DisplayTitle);
-                                await ExecuteCommandAsync(prompt, SkillRequestSource.Context, startup.Token).ConfigureAwait(false);
+                                Guid startupTurnId = Guid.NewGuid();
+                                _activeTurnId = startupTurnId;
+                                PublishConversation(ConversationMessageSource.UserTyped, _startupBriefing.DisplayTitle, startupTurnId);
+                                await ExecuteCommandAsync(prompt, SkillRequestSource.Context, startup.Token, turnId: startupTurnId).ConfigureAwait(false);
                             }
                         }
                         finally { _startupCancellation = null; SetState(AssistantState.Ready); }
@@ -315,13 +392,39 @@ public sealed class AssistantEngine : IAssistantEngine
         }
         catch (Exception exception)
         {
+            if (message is ConversationCleared) { message.Completion?.TrySetException(exception); }
             _logger.LogError(exception, "Failed to handle {Message}.", message.GetType().Name);
             SetState(AssistantState.Ready);
         }
         finally
         {
+            lock (_generationGate) { if (ReferenceEquals(_activeRequest, request)) { _activeRequest = null; } }
+            request?.Dispose();
+            _activeGeneration.Value = null;
+            _activeTurnId = Guid.Empty;
             message.Completion?.TrySetResult();
         }
+    }
+
+    /// <summary>Queues one verified remaining stage at the tail so new owner messages can run between bounded model rounds.</summary>
+    private async Task ScheduleContinuationAsync(Guid taskId, CancellationToken token)
+    {
+        if (_tasks is null || _taskTools is null || _conversation is null || _tasks.Current(taskId) is not { Rounds: { } rounds } checkpoint
+            || rounds.Paused || rounds.Canceled || checkpoint.HasUncertainEffect || checkpoint.State == "blocked"
+            || _conversation.LastFailure is { Kind: not (ConversationFailureKind.Timeout or ConversationFailureKind.ContextExceeded) }) { return; }
+        using var recipient = new ProviderExecutionScope(rounds.Provider);
+        if (!rounds.CanContinue)
+        {
+            string? remaining = _conversation.PendingRound(taskId) ?? await _tasks.InspectAsync(taskId, task => task.PendingContinuation(), token).ConfigureAwait(false);
+            await _tasks.SetContinuationAsync(taskId, remaining is not null, token).ConfigureAwait(false); return;
+        }
+        string? pending = _conversation.PendingRound(taskId) ?? await _taskTools.PendingTaskContinuationAsync(token).ConfigureAwait(false);
+        if (pending is null)
+        { await _tasks.SetContinuationAsync(taskId, false, token).ConfigureAwait(false); await _tasks.RetireDialogueAsync(taskId, token).ConfigureAwait(false); return; }
+        if (!await _tasks.SetContinuationAsync(taskId, true, token).ConfigureAwait(false)) { return; }
+        var next = new CommandSubmitted(pending) { ContinuingTaskTurnId = taskId, Automatic = true, Generation = Volatile.Read(ref _conversationGeneration) };
+        bool queued = _messages.Writer.TryWrite(next);
+        Diagnostics.LauraDiagnostics.Record("task.continuation", outcome: queued ? "queued" : "queue_full_paused", taskId: taskId);
     }
 
     /// <summary>
@@ -331,24 +434,20 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <param name="cancellationToken">Token that aborts execution.</param>
     /// <param name="source">Distinguishes an actionable command from non-actionable briefing data.</param>
     /// <param name="image">Explicit PNG attachment for this interaction, or null for text-only input.</param>
+    /// <param name="turnId">Stable identity shared with the published user message.</param>
+    /// <param name="continuingTaskTurnId">Original task identity selected by the native resume action.</param>
     /// <returns>A task completed when the response has finished being spoken.</returns>
-    private async Task ExecuteCommandAsync(string text, SkillRequestSource source, CancellationToken cancellationToken, byte[]? image = null)
+    private async Task ExecuteCommandAsync(string text, SkillRequestSource source, CancellationToken cancellationToken, byte[]? image = null, Guid turnId = default, Guid continuingTaskTurnId = default)
     {
         SetState(AssistantState.Working);
 
-        SkillRequest request = SkillRequest.Create(text, _localizer.Culture, _clock.Now, source) with { Image = image };
+        SkillRequest request = SkillRequest.Create(text, _localizer.Culture, _clock.Now, source) with { Image = image, TurnId = turnId, ContinuingTaskTurnId = continuingTaskTurnId };
 
-        bool willUseGenerativeAi = _settings.Current.GenerativeAi.Enabled
-            && _dispatcher.CanUseGenerativeFallback(request);
+        bool willUseGenerativeAi = _dispatcher.CanUseGenerativeFallback(request);
         if (willUseGenerativeAi) { SetState(AssistantState.Thinking); }
 
-        if (willUseGenerativeAi && _settings.Current.GenerativeAi.Provider != "gemini")
-        {
-            await SpeakInternalAsync(_localizer.Get(LocalizationKeys.Assistant.Thinking), cancellationToken)
-                .ConfigureAwait(false);
-        }
-
         SkillResponse response = await _dispatcher.DispatchAsync(request, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         string? spokenText = response.Handled
             ? response.SpokenText
             : _localizer.Get(LocalizationKeys.Assistant.NotUnderstood);
@@ -391,6 +490,16 @@ public sealed class AssistantEngine : IAssistantEngine
             PublishConversation(ConversationMessageSource.Assistant, text);
             await _synthesizer.SpeakAsync(request, cancellationToken).ConfigureAwait(false);
         }
+        catch (SpeechUnavailableException)
+        {
+            // Keep the verified text response; an unavailable voice is not a failed objective.
+            _logger.LogWarning("Voice unavailable; the text response remains available.");
+        }
+        catch (SpeechPlaybackException)
+        {
+            // A separate output failure must not skip continuation of an already checkpointed cognitive task.
+            _logger.LogWarning("Voice delivery failed; the text response and task progress remain available.");
+        }
         finally
         {
             SetState(previousState);
@@ -421,14 +530,17 @@ public sealed class AssistantEngine : IAssistantEngine
     /// </summary>
     /// <param name="source">Message source.</param>
     /// <param name="text">Message text.</param>
-    private void PublishConversation(ConversationMessageSource source, string text)
+    /// <param name="turnId">Originating turn identity, or empty for standalone notifications.</param>
+    private void PublishConversation(ConversationMessageSource source, string text, Guid turnId = default)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
             return;
         }
 
-        var message = new ConversationMessage(source, text.Trim(), _clock.Now);
+        if (_activeGeneration.Value is { } active && active != Volatile.Read(ref _conversationGeneration)) { return; }
+        var message = new ConversationMessage(source, text, _clock.Now) { TurnId = turnId == Guid.Empty && source == ConversationMessageSource.Assistant ? _activeTurnId : turnId };
+        Laura.Core.Diagnostics.LauraDiagnostics.Record("conversation.message", amount: text.Length, outcome: source.ToString(), interactionId: _memory?.WorkingTurnId);
         if (_memory is not null && _settings.Current.RememberConversations)
         {
             try { _memory.Append(message); }
@@ -460,6 +572,7 @@ public sealed class AssistantEngine : IAssistantEngine
         }
 
         StateChanged?.Invoke(this, state);
+        Laura.Core.Diagnostics.LauraDiagnostics.Record("engine.state", outcome: state.ToString());
     }
 
     /// <summary>
@@ -468,10 +581,25 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <param name="message">Message to enqueue.</param>
     private void Enqueue(EngineMessage message)
     {
-        if (!_messages.Writer.TryWrite(message))
+        lock (_generationGate)
         {
-            message.Completion?.TrySetResult();
+            message.Generation = _conversationGeneration;
+            if (_messages.Writer.TryWrite(message)) { return; }
         }
+        _ = WriteMessageAsync(message, _lifetime.Token);
+    }
+
+    /// <summary>Waits for bounded queue capacity asynchronously, preserving caller cancellation and observable admission latency.</summary>
+    private async Task WriteMessageAsync(EngineMessage message, CancellationToken cancellationToken)
+    {
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        try
+        {
+            await _messages.Writer.WriteAsync(message, cancellationToken).ConfigureAwait(false);
+            Laura.Core.Diagnostics.LauraDiagnostics.Record("engine.queue_wait", System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds, PendingMessageCount);
+        }
+        catch (OperationCanceledException) { message.Completion?.TrySetCanceled(cancellationToken); }
+        catch (ChannelClosedException) { message.Completion?.TrySetCanceled(new CancellationToken(true)); }
     }
 
     /// <summary>
@@ -480,14 +608,17 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <param name="factory">Creates the message already associated with the completion signal.</param>
     /// <param name="cancellationToken">Token that aborts waiting.</param>
     /// <returns>A task completed when the message has been handled.</returns>
-    private Task EnqueueAndWaitAsync(
+    private async Task EnqueueAndWaitAsync(
         Func<TaskCompletionSource, EngineMessage> factory,
         CancellationToken cancellationToken)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        Enqueue(factory(completion));
-        return completion.Task.WaitAsync(cancellationToken);
+        var message = factory(completion);
+        lock (_generationGate) { message.Generation = _conversationGeneration; }
+        using var operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
+        await WriteMessageAsync(message, operation.Token).ConfigureAwait(false);
+        await completion.Task.WaitAsync(operation.Token).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -510,6 +641,7 @@ public sealed class AssistantEngine : IAssistantEngine
     /// </summary>
     private abstract record EngineMessage
     {
+        public long Generation { get; set; }
         /// <summary>
         /// Gets the signal completed after handling, when someone is waiting for
         /// the message. Fire-and-forget messages leave it null.
@@ -522,6 +654,12 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <summary>Text command sent by the interface.</summary>
     private sealed record CommandSubmitted(string Text) : EngineMessage
     {
+        /// <summary>Gets whether native remaining work, rather than another owner message, scheduled this cycle.</summary>
+        public bool Automatic { get; init; }
+        /// <summary>Gets a checkpoint selected by the native resume action, never parsed from model text.</summary>
+        public Guid ContinuingTaskTurnId { get; init; }
+        /// <summary>Gets the trusted capture origin selected by the native caller.</summary>
+        public ConversationMessageSource MessageSource { get; init; } = ConversationMessageSource.UserTyped;
         /// <summary>Gets an explicitly queued image; saved history contains only its question and answer.</summary>
         public byte[]? Image { get; init; }
         /// <summary>Gets a concise user-visible label for a context-rich internal request.</summary>
@@ -539,4 +677,5 @@ public sealed class AssistantEngine : IAssistantEngine
 
     /// <summary>Request to stop speech immediately.</summary>
     private sealed record StopRequested : EngineMessage;
+    private sealed record ConversationCleared : EngineMessage;
 }

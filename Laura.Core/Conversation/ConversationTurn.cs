@@ -10,6 +10,19 @@ namespace Laura.Core.Conversation;
 /// <param name="UserDisplayName">Name the model may use to address the user.</param>
 public sealed record ConversationTurn(string Prompt, CultureInfo Culture, string UserDisplayName)
 {
+    /// <summary>Gets the stable current turn identity, independent of its text or display title.</summary>
+    public Guid TurnId { get; init; }
+
+    /// <summary>Returns prior messages without replaying this turn; identical text from other turns is preserved.</summary>
+    public IEnumerable<ConversationMessage> PriorHistory() => History.Where(message => TurnId == Guid.Empty || message.TurnId != TurnId);
+
+    /// <summary>Merges whole retrieved units without replacing supplied evidence or granting skill authority. Args: memories: Complete retrieved factual units; catalogue: Inert skill discovery metadata. Returns: A new turn with distinct complete context units.</summary>
+    public ConversationTurn WithRecalledContext(string memories, string catalogue) => this with
+    {
+        Memories = Memories.Concat(string.IsNullOrEmpty(memories) ? [] : new[] { memories }).Distinct(StringComparer.Ordinal).ToArray(),
+        SkillCatalogue = string.Join("\n", new[] { SkillCatalogue, catalogue }.Where(value => !string.IsNullOrEmpty(value)).Distinct(StringComparer.Ordinal)),
+    };
+
     /// <summary>Gets bounded prior conversation data; never grants execution permissions.</summary>
     public IReadOnlyList<ConversationMessage> History { get; init; } = [];
 
@@ -25,4 +38,8 @@ public sealed record ConversationTurn(string Prompt, CultureInfo Culture, string
     public string ImageMimeType { get; init; } = "image/png";
     /// <summary>Gets a native continuation's original turn identity; it never grants or restores an execution authorization.</summary>
     public Guid ContinuingTaskTurnId { get; init; }
+    /// <summary>Gets a native structured task requirement; ordinary input remains routine regardless of wording.</summary>
+    public CognitiveTaskDemand TaskDemand { get; init; }
+    /// <summary>Gets native progress/recovery evidence; this value never originates in a model-supplied tool argument.</summary>
+    public CognitiveTaskRouting? TaskRouting { get; init; }
 }
