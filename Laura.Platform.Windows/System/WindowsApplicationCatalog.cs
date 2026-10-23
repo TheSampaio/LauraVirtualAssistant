@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Security;
 using Microsoft.Win32;
 using Laura.Core.Skills;
 
@@ -37,24 +38,13 @@ public sealed class WindowsApplicationCatalog : IDisposable
         foreach (RegistryHive hive in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
         foreach (RegistryView view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
         {
-            using RegistryKey registry = RegistryKey.OpenBaseKey(hive, view);
-            using RegistryKey? paths = registry.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\App Paths");
-            foreach (string name in paths?.GetSubKeyNames() ?? [])
+            try
             {
-                using RegistryKey? entry = paths?.OpenSubKey(name);
-                string target = (entry?.GetValue("") as string ?? "").Trim('"');
-                if (File.Exists(target)) { apps.Add(new(Path.GetFileNameWithoutExtension(name), target)); }
+                using RegistryKey registry = RegistryKey.OpenBaseKey(hive, view);
+                AddAppPaths(registry, apps);
+                AddUninstallEntries(registry, apps);
             }
-            using RegistryKey? uninstall = registry.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall");
-            foreach (string name in uninstall?.GetSubKeyNames() ?? [])
-            {
-                using RegistryKey? entry = uninstall?.OpenSubKey(name);
-                string display = entry?.GetValue("DisplayName") as string ?? "";
-                string icon = (entry?.GetValue("DisplayIcon") as string ?? "").Split(',')[0].Trim('"');
-                if (display.Length > 0 && icon.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && File.Exists(icon)
-                    && !Path.GetFileName(icon).Contains("unins", StringComparison.OrdinalIgnoreCase)
-                    && !Path.GetFileName(icon).Contains("setup", StringComparison.OrdinalIgnoreCase)) { apps.Add(new(display, icon)); }
-            }
+            catch (Exception error) when (error is SecurityException or UnauthorizedAccessException) { }
         }
         foreach (DriveInfo drive in DriveInfo.GetDrives().Where(drive => drive.IsReady && drive.DriveType == DriveType.Fixed))
         {
@@ -71,17 +61,59 @@ public sealed class WindowsApplicationCatalog : IDisposable
         }
         return apps.DistinctBy(app => (app.Name.ToUpperInvariant(), app.Target.ToUpperInvariant())).OrderBy(app => app.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
+    /// <summary>Reads accessible App Paths while leaving denied registry entries out of the inventory.</summary>
+    private static void AddAppPaths(RegistryKey registry, List<InstalledApplication> apps)
+    {
+        try
+        {
+            using RegistryKey? paths = registry.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\App Paths");
+            foreach (string name in paths?.GetSubKeyNames() ?? [])
+            {
+                try
+                {
+                    using RegistryKey? entry = paths?.OpenSubKey(name);
+                    string target = (entry?.GetValue("") as string ?? "").Trim('"');
+                    if (File.Exists(target)) { apps.Add(new(Path.GetFileNameWithoutExtension(name), target)); }
+                }
+                catch (Exception error) when (error is SecurityException or UnauthorizedAccessException) { }
+            }
+        }
+        catch (Exception error) when (error is SecurityException or UnauthorizedAccessException) { }
+    }
+    /// <summary>Reads accessible uninstall metadata without failing the entire application search.</summary>
+    private static void AddUninstallEntries(RegistryKey registry, List<InstalledApplication> apps)
+    {
+        try
+        {
+            using RegistryKey? uninstall = registry.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall");
+            foreach (string name in uninstall?.GetSubKeyNames() ?? [])
+            {
+                try
+                {
+                    using RegistryKey? entry = uninstall?.OpenSubKey(name);
+                    string display = entry?.GetValue("DisplayName") as string ?? "";
+                    string icon = (entry?.GetValue("DisplayIcon") as string ?? "").Split(',')[0].Trim('"');
+                    if (display.Length > 0 && icon.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && File.Exists(icon)
+                        && !Path.GetFileName(icon).Contains("unins", StringComparison.OrdinalIgnoreCase)
+                        && !Path.GetFileName(icon).Contains("setup", StringComparison.OrdinalIgnoreCase)) { apps.Add(new(display, icon)); }
+                }
+                catch (Exception error) when (error is SecurityException or UnauthorizedAccessException) { }
+            }
+        }
+        catch (Exception error) when (error is SecurityException or UnauthorizedAccessException) { }
+    }
     /// <summary>Walks only bounded folders, skipping inaccessible locations and links.</summary>
     private static IEnumerable<string> Enumerate(string root, string pattern, int depth, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         string[] files, folders;
         try { files = Directory.GetFiles(root, pattern); folders = depth > 0 ? Directory.GetDirectories(root) : []; }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { yield break; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or SecurityException) { yield break; }
         foreach (string file in files) { yield return file; }
         foreach (string folder in folders)
         {
-            if ((File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0) { continue; }
+            try { if ((File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0) { continue; } }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or SecurityException) { continue; }
             foreach (string file in Enumerate(folder, pattern, depth - 1, token)) { yield return file; }
         }
     }

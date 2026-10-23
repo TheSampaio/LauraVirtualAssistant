@@ -11,6 +11,7 @@ public static class ChatGptSettingsDraft
         ArgumentNullException.ThrowIfNull(saved); ArgumentNullException.ThrowIfNull(state);
         Guid? registration = disconnectedByOwner ? null : state.Active ?? saved.Registration;
         return registration == saved.Registration && !disconnectedByOwner ? saved : saved with
-        { Registration = registration, Enabled = false, IncludedPlanOnly = false, ShareContext = false, AllowAutomatic = false };
+        { Registration = registration, Enabled = false, IncludedPlanOnly = false, ShareContext = false, AllowAutomatic = false,
+          AllowMax = false, Model = "", MaxModel = "" };
     }
 }

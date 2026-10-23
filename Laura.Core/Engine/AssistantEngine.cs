@@ -4,6 +4,7 @@ using Laura.Core.Configuration;
 using Laura.Core.Conversation;
 using Laura.Core.Localization;
 using Laura.Core.Skills;
+using Laura.Core.Skills.Builtin;
 using Laura.Core.Speech;
 using Microsoft.Extensions.Logging;
 
@@ -198,6 +199,7 @@ public sealed class AssistantEngine : IAssistantEngine
     public Task SubmitCommandAsync(string text, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(text);
+        if (CancelTaskSkill.Matches(text, _localizer)) { StopSpeaking(); }
 
         return EnqueueAndWaitAsync(
             completion => new CommandSubmitted(text) { Completion = completion, RequestCancellation = cancellationToken },
@@ -207,6 +209,7 @@ public sealed class AssistantEngine : IAssistantEngine
     public Task SubmitVoiceCommandAsync(string text, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(text);
+        if (CancelTaskSkill.Matches(text, _localizer)) { StopSpeaking(); }
         return EnqueueAndWaitAsync(completion => new CommandSubmitted(text) { Completion = completion,
             RequestCancellation = cancellationToken, MessageSource = ConversationMessageSource.UserVoice }, cancellationToken);
     }
@@ -364,7 +367,7 @@ public sealed class AssistantEngine : IAssistantEngine
                                 Guid startupTurnId = Guid.NewGuid();
                                 _activeTurnId = startupTurnId;
                                 PublishConversation(ConversationMessageSource.UserTyped, _startupBriefing.DisplayTitle, startupTurnId);
-                                await ExecuteCommandAsync(prompt, SkillRequestSource.Context, startup.Token, turnId: startupTurnId).ConfigureAwait(false);
+                                await ExecuteCommandAsync(prompt, SkillRequestSource.Context, startup.Token, turnId: startupTurnId, isStartupBriefing: true).ConfigureAwait(false);
                             }
                         }
                         finally { _startupCancellation = null; SetState(AssistantState.Ready); }
@@ -436,12 +439,13 @@ public sealed class AssistantEngine : IAssistantEngine
     /// <param name="image">Explicit PNG attachment for this interaction, or null for text-only input.</param>
     /// <param name="turnId">Stable identity shared with the published user message.</param>
     /// <param name="continuingTaskTurnId">Original task identity selected by the native resume action.</param>
+    /// <param name="isStartupBriefing">Whether this is the internally assembled factual startup request.</param>
     /// <returns>A task completed when the response has finished being spoken.</returns>
-    private async Task ExecuteCommandAsync(string text, SkillRequestSource source, CancellationToken cancellationToken, byte[]? image = null, Guid turnId = default, Guid continuingTaskTurnId = default)
+    private async Task ExecuteCommandAsync(string text, SkillRequestSource source, CancellationToken cancellationToken, byte[]? image = null, Guid turnId = default, Guid continuingTaskTurnId = default, bool isStartupBriefing = false)
     {
         SetState(AssistantState.Working);
 
-        SkillRequest request = SkillRequest.Create(text, _localizer.Culture, _clock.Now, source) with { Image = image, TurnId = turnId, ContinuingTaskTurnId = continuingTaskTurnId };
+        SkillRequest request = SkillRequest.Create(text, _localizer.Culture, _clock.Now, source) with { Image = image, TurnId = turnId, ContinuingTaskTurnId = continuingTaskTurnId, IsStartupBriefing = isStartupBriefing };
 
         bool willUseGenerativeAi = _dispatcher.CanUseGenerativeFallback(request);
         if (willUseGenerativeAi) { SetState(AssistantState.Thinking); }
@@ -485,10 +489,13 @@ public sealed class AssistantEngine : IAssistantEngine
         try
         {
             LauraSettings settings = _settings.Current;
-            var request = new SpeechRequest(text, settings.Voice, settings.Culture) { OutputDevice = settings.OutputDevice };
-
             PublishConversation(ConversationMessageSource.Assistant, text);
-            await _synthesizer.SpeakAsync(request, cancellationToken).ConfigureAwait(false);
+            string spokenText = Speech.SpokenTextFormatter.Format(text);
+            if (spokenText.Length > 0)
+            {
+                var request = new SpeechRequest(spokenText, settings.Voice, settings.Culture) { OutputDevice = settings.OutputDevice };
+                await _synthesizer.SpeakAsync(request, cancellationToken).ConfigureAwait(false);
+            }
         }
         catch (SpeechUnavailableException)
         {
@@ -629,7 +636,7 @@ public sealed class AssistantEngine : IAssistantEngine
     private void OnSettingsChanged(object? sender, LauraSettings settings) =>
         Enqueue(new SettingsApplied(settings));
 
-    /// <summary>Queues one startup opening after configuration, deferring until Gemini is available on a fresh installation.</summary>
+    /// <summary>Queues one startup opening after configuration, deferring until an authorized text provider is available.</summary>
     private void ScheduleStartup(LauraSettings settings)
     {
         if (!settings.GreetOnStartup || (_startupBriefing is not null && !_dispatcher.CanUseGenerativeFallback(SkillRequest.Create("", settings.ResolveCulture(), _clock.Now, SkillRequestSource.Context)))) { return; }

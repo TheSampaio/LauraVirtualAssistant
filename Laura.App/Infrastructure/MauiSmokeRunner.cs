@@ -20,10 +20,12 @@ public static class MauiSmokeRunner
         VerifyReactorTransitions();
         try
         {
+            if (Environment.GetCommandLineArgs().Contains("--spoken-providers-smoke", StringComparer.Ordinal))
+            { await SpokenProvidersSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--local-runtime-smoke", StringComparer.Ordinal))
+            { await LocalRuntimeUiSmokeRunner.RunAsync(services, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--reliability-ui-smoke", StringComparer.Ordinal))
             { await ReliabilityUiSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
-            if (Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal) && Environment.GetCommandLineArgs().Contains("--provider-handoff-smoke", StringComparer.Ordinal))
-            { await ProviderHandoffSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal) && Environment.GetCommandLineArgs().Contains("--rea-application-smoke", StringComparer.Ordinal))
             { await ChatGptApplicationSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal) && Environment.GetCommandLineArgs().Contains("--rea-continuation-smoke", StringComparer.Ordinal))
@@ -32,27 +34,12 @@ public static class MauiSmokeRunner
             { await ChatGptLiveSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--chatgpt-ui-smoke", StringComparer.Ordinal))
             { await ChatGptUiSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
-            if (Environment.GetCommandLineArgs().Contains("--agent-rework-smoke", StringComparer.Ordinal))
-            { await AgentReworkSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--command-jobs-smoke", StringComparer.Ordinal))
             { await CommandJobsSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--task-recovery-smoke", StringComparer.Ordinal))
             { await TaskRecoverySmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--chat-diagnostics-smoke", StringComparer.Ordinal))
             { await ChatDiagnosticsSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
-            if (Environment.GetCommandLineArgs().Contains("--voice-cancellation-smoke", StringComparer.Ordinal))
-            {
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                await services.GetRequiredService<Laura.Platform.Windows.Conversation.GeminiLiveClient>().VerifyVoiceCancellationForSmokeAsync(timeout.Token).ConfigureAwait(true);
-                await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "Eight reconfigurations and four client disposals drained/canceled completed-voice callbacks; no late history notification, retained availability or microphone capture occurred.").ConfigureAwait(true); return;
-            }
-            if (Environment.GetCommandLineArgs().Contains("--audio-fragment-smoke", StringComparer.Ordinal))
-            {
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                var metrics = await Laura.Platform.Windows.Conversation.GeminiLiveClient.VerifyFragmentedPlaybackForSmokeAsync(timeout.Token).ConfigureAwait(true);
-                await File.WriteAllTextAsync(Path.Combine(directory, "audio-fragment.json"), System.Text.Json.JsonSerializer.Serialize(metrics, DiagnosticJson)).ConfigureAwait(true);
-                await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "Native fragmented PCM byte preservation measured; alignment counters are in audio-fragment.json.").ConfigureAwait(true); return;
-            }
             if (Environment.GetCommandLineArgs().Contains("--brain-performance-smoke", StringComparer.Ordinal))
             { await BrainPerformanceSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             await Task.Delay(1000).ConfigureAwait(true);
@@ -77,16 +64,6 @@ public static class MauiSmokeRunner
                 if (!loaded.Text.Contains("use plain sentences", StringComparison.Ordinal)) { throw new InvalidOperationException("Native skill retrieval did not read approved Markdown."); }
             }
             await File.WriteAllTextAsync(Path.Combine(directory, "brain-skill-tools.txt"), "Native tools discovered a disabled synthetic skill by description and loaded its real instructions after isolated hash approval. No cloud request or private Brain was used.").ConfigureAwait(true);
-            var liveClient = services.GetRequiredService<Laura.Platform.Windows.Conversation.GeminiLiveClient>();
-            if (!liveClient.IsAvailable)
-            {
-                string? farewell = await liveClient.AskAsync(new Laura.Core.Conversation.ConversationTurn("stop listening", System.Globalization.CultureInfo.GetCultureInfo("en-US"), "Synthetic owner")).ConfigureAwait(true);
-                bool speechWasAttempted = false;
-                try { await liveClient.SpeakAsync(farewell!, CancellationToken.None).ConfigureAwait(true); }
-                catch (InvalidOperationException) { speechWasAttempted = true; }
-                if (!speechWasAttempted) { throw new InvalidOperationException("Standby text was incorrectly marked as already spoken."); }
-                await File.WriteAllTextAsync(Path.Combine(directory, "standby-speech.txt"), "Typed standby acknowledgment reaches speech instead of being falsely suppressed as already played. Missing test credentials were respected; no cloud or microphone was used.").ConfigureAwait(true);
-            }
             var navigation = (NavigationPage)window.Page!;
             var nativeWindow = (Microsoft.UI.Xaml.Window)window.Handler!.PlatformView!;
             if (nativeWindow.AppWindow.TitleBar.PreferredTheme != Microsoft.UI.Windowing.TitleBarTheme.Dark)
@@ -112,22 +89,9 @@ public static class MauiSmokeRunner
                 { using var launch = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(new { name })); var started = await tools.ExecuteAsync("open_app", launch.RootElement, CancellationToken.None).ConfigureAwait(true); discovery.Add("Launch " + name + ": " + started.Text); }
             }
             await File.WriteAllLinesAsync(Path.Combine(directory, "applications.txt"), discovery).ConfigureAwait(true);
-            if (Environment.GetCommandLineArgs().Contains("--live-tools-smoke", StringComparer.Ordinal))
-            {
-                var settings = services.GetRequiredService<ISettingsService>();
-                await settings.UpdateAsync(settings.Current with { Culture = "pt-BR", Voice = settings.Current.Voice with { Volume = 0 } }).ConfigureAwait(true);
-                await services.GetRequiredService<Laura.Platform.Windows.Conversation.GeminiLiveClient>().ReconfigureAsync().ConfigureAwait(true);
-                await services.GetRequiredService<IAssistantEngine>().SubmitCommandAsync("Abra a Steam e o meu emulador de PS2, PCSX2.").ConfigureAwait(true);
-                var nativeTools = (MauiAssistantTools)tools;
-                if (!nativeTools.StartedApplications.Contains("Steam", StringComparer.OrdinalIgnoreCase) || !nativeTools.StartedApplications.Contains("PCSX2", StringComparer.OrdinalIgnoreCase)) { throw new InvalidOperationException("Gemini did not execute both real application tools."); }
-                await File.WriteAllTextAsync(Path.Combine(directory, "live-tools.txt"), "Gemini selected and executed open_app for Steam and PCSX2; native launches confirmed.").ConfigureAwait(true);
-            }
             await CaptureAsync(window, Path.Combine(directory, "hud-en-US.png")).ConfigureAwait(true);
             var main = services.GetRequiredService<MainPage>();
             main.VerifyHudForSmoke();
-            using (var playbackTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
-            { await Laura.Platform.Windows.Conversation.GeminiLiveClient.VerifyPlaybackForSmokeAsync(playbackTimeout.Token).ConfigureAwait(true); }
-            await File.WriteAllTextAsync(Path.Combine(directory, "playback-buffer.txt"), "Eight silent native output restarts preserved every PCM byte, including the short leading fragment. No microphone was opened.").ConfigureAwait(true);
             var localWake = services.GetRequiredService<Laura.Platform.Windows.Conversation.WindowsClapListener>();
             await localWake.StartAsync(CancellationToken.None).ConfigureAwait(true);
             if (localWake.IsCapturing) { throw new InvalidOperationException("Wake detection must remain off unless the user explicitly enables it."); }
@@ -209,12 +173,6 @@ public static class MauiSmokeRunner
                     if (navigation.CurrentPage is SetupPage setup)
                     {
                         setup.VerifySettingsDraftForSmoke(); await Task.Delay(200).ConfigureAwait(true);
-                        if (culture == "en-US" && Environment.GetCommandLineArgs().Contains("--key-ui-smoke", StringComparer.Ordinal))
-                        {
-                            await setup.VerifyCredentialInputForSmokeAsync().ConfigureAwait(true);
-                            await CaptureAsync(window, Path.Combine(directory, "setup-key-masked.png")).ConfigureAwait(true);
-                            await File.WriteAllTextAsync(Path.Combine(directory, "key-ui.txt"), "Valid key verified and masked; saving again preserved it; an edit during validation kept the verified credential and new draft; invalid replacement was rejected without changing the saved credential.").ConfigureAwait(true);
-                        }
                         for (int tab = 0; tab < setup.TabCount; tab++)
                         {
                             setup.SelectTab(tab); await Task.Delay(250).ConfigureAwait(true);

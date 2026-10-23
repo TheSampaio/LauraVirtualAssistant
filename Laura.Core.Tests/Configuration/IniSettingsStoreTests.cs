@@ -8,12 +8,36 @@ namespace Laura.Core.Tests.Configuration;
 /// </summary>
 public sealed class IniSettingsStoreTests : IDisposable
 {
+    /// <summary>Local integrity/resource options and independent voice paths survive BOM UTF-8 INI without changing cloud consent.</summary>
+    [Fact]
+    public async Task LocalRuntimeAndVoiceRoundTripIndependently()
+    {
+        var model = new LocalModelOptions { Enabled = true, Executable = "D:/Synthetic/llama-server.exe", ModelPath = "D:/Synthetic/Qwen.gguf", ExecutableHash = new string('A', 64), ModelHash = new string('B', 64), ContextTokens = 12288, Threads = 3, IdleMinutes = 2, MaximumDifficulty = Laura.Core.Models.TaskDifficulty.Standard };
+        var voice = new LocalVoiceOptions { KokoroDirectory = "D:/Synthetic/Models", KokoroDataDirectory = "D:/Synthetic/Runtime/espeak-ng-data", WhisperDirectory = "D:/Synthetic/Models", EnglishVoice = "af_bella", DetectLanguage = true };
+        var store = CreateStore(); await store.SaveAsync(LauraSettings.Default with { LocalModel = model, LocalVoice = voice, VulkanInterface = true }); var loaded = await store.LoadAsync();
+        Assert.True(loaded.VulkanInterface); Assert.Equal(-1, loaded.LocalModel.GpuLayers);
+        Assert.Equal(model, loaded.LocalModel); Assert.Equal(voice, loaded.LocalVoice); Assert.False(loaded.GenerativeAi.Enabled); Assert.False(loaded.ChatGpt.Enabled);
+        Assert.Equal(new byte[] { 0xef, 0xbb, 0xbf }, (await File.ReadAllBytesAsync(_filePath)).Take(3));
+    }
+    /// <summary>The shipped legacy persona migrates while owner-edited wording stays intact.</summary>
+    [Fact]
+    public void PersonaMigrationPreservesOwnerEdits()
+    {
+        const string legacy = "You are Laura, a discreet personal assistant: calm, capable, precise, " +
+            "and quietly confident. Speak as if replying aloud, never as a chatbot. Keep answers " +
+            "to one short sentence by default, two only when truly needed. Do not use lists, " +
+            "markdown, emojis, long explanations, disclaimers, or filler. If the user asks for " +
+            "an action you cannot perform, say so briefly and offer the closest useful next step. " +
+            "Sound composed and practical, with subtle warmth, never overly enthusiastic.";
+        Assert.Equal(GenerativeAiOptions.Default.Persona, (new GenerativeAiOptions { Persona = legacy }).Sanitized().Persona);
+        Assert.Equal("Owner's wording", (new GenerativeAiOptions { Persona = "Owner's wording" }).Sanitized().Persona);
+    }
     /// <summary>Retired providers migrate without granting cloud consent or changing the selected Brain.</summary>
     [Theory]
     [InlineData("local")]
     [InlineData("openai")]
     [InlineData("auto")]
-    public async Task RetiredProvidersRequireExplicitGeminiEnableAfterMigration(string provider)
+    public async Task RetiredProvidersCannotBeEnabledAfterMigration(string provider)
     {
         await File.WriteAllTextAsync(_filePath, "[GenerativeAI]\nProvider=" + provider + "\nEnabled=true\nLocalModel=retired\n[Brain]\nDirectory=C:/Synthetic/Brain\n");
         var store = CreateStore();
@@ -22,7 +46,7 @@ public sealed class IniSettingsStoreTests : IDisposable
         Assert.False(migrated.GenerativeAi.Enabled);
         Assert.Equal("C:/Synthetic/Brain", migrated.Brain.Directory);
         await store.SaveAsync(migrated);
-        Assert.DoesNotContain("LocalModel", await File.ReadAllTextAsync(_filePath));
+        Assert.DoesNotContain("LocalModel=retired", await File.ReadAllTextAsync(_filePath));
         Assert.Equal(migrated.GenerativeAi, (await store.LoadAsync()).GenerativeAi);
     }
 
@@ -76,9 +100,9 @@ public sealed class IniSettingsStoreTests : IDisposable
         LauraSettings loaded = (await store.LoadAsync()).Sanitized();
 
         Assert.Equal(original.Culture, loaded.Culture);
-        Assert.Equal(original.GenerativeAi.LiveVoice, loaded.GenerativeAi.LiveVoice);
+        Assert.True(loaded.GenerativeAi.Enabled);
+        Assert.Equal(original.GenerativeAi.Model, loaded.GenerativeAi.Model);
         Assert.Equal(original.GenerativeAi.ContinuousListening, loaded.GenerativeAi.ContinuousListening);
-        Assert.Equal(original.GenerativeAi.Provider, loaded.GenerativeAi.Provider);
         Assert.Equal(original.UiCulture, loaded.UiCulture);
         Assert.Equal(original.RememberConversations, loaded.RememberConversations);
         Assert.Equal(original.MicrophoneMuted, loaded.MicrophoneMuted);
@@ -90,7 +114,10 @@ public sealed class IniSettingsStoreTests : IDisposable
         Assert.Equal(original.AnnounceHourly, loaded.AnnounceHourly);
         Assert.Equal(original.StartWithWindows, loaded.StartWithWindows);
         Assert.Equal(original.Voice, loaded.Voice);
-        Assert.Equal(original.GenerativeAi, loaded.GenerativeAi);
+        Assert.Equal(original.GenerativeAi.Persona, loaded.GenerativeAi.Persona);
+        string serialized = await File.ReadAllTextAsync(_filePath);
+        Assert.Contains("gemini-3.1", serialized, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LiveVoice", serialized, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

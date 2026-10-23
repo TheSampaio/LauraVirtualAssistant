@@ -3,12 +3,13 @@ using Laura.Core.Conversation;
 using Laura.Core.Engine;
 using Laura.Core.Models;
 using Laura.Platform.Windows.Conversation;
+using Laura.Platform.Windows.Speech;
 using Microsoft.Extensions.Logging;
 
 namespace Laura.App.Infrastructure;
 
 /// <summary>Hands off local clap capture to a short acknowledgment and then continuous conversation.</summary>
-public sealed class ClapWakeCoordinator(WindowsClapListener listener, GeminiLiveClient live, IAssistantEngine engine,
+public sealed class ClapWakeCoordinator(WindowsClapListener listener, LocalVoiceSession live, IAssistantEngine engine,
     ISettingsService settings, GreetingComposer greeting, ILogger<ClapWakeCoordinator> logger, ConversationProviderRouter router) : IAsyncDisposable
 {
     private readonly CancellationTokenSource _lifetime = new();
@@ -57,7 +58,7 @@ public sealed class ClapWakeCoordinator(WindowsClapListener listener, GeminiLive
     }
     /// <summary>Computes readiness without starting speech capture, model inference or cloud traffic.</summary>
     private bool CanArm(bool ignoreOwnWake = false) => ClapWakePolicy.CanArm(settings.Current, new(router.ActiveProvider, router.IsAvailable,
-        true,
+        live.IsAvailable,
         engine.State == AssistantState.Ready, !ignoreOwnWake && Volatile.Read(ref _busy) != 0
             || live.IsListening || live.IsCaptureStarting || live.IsSpeaking || live.IsThinking, Volatile.Read(ref _suspensions) != 0));
 

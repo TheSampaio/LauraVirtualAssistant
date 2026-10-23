@@ -6,7 +6,7 @@ public sealed record CognitiveRoundProgress(int Cycles = 0, int MaximumCycles = 
     string Provider = "", string Model = "", string Outcome = "", bool NeedsContinuation = false, bool Paused = false, bool Canceled = false,
     int ProviderCalls = 0, int MaximumProviderCalls = 64, int ConfirmedProgress = 0, int StalledCycles = 0,
     Conversation.ConversationFailureKind? LastFailure = null, Conversation.CognitiveRoutingReason RoutingReason = Conversation.CognitiveRoutingReason.Routine,
-    Conversation.CognitiveRecoveryAction Recovery = Conversation.CognitiveRecoveryAction.None)
+    Conversation.CognitiveRecoveryAction Recovery = Conversation.CognitiveRecoveryAction.None, Models.TaskDifficulty Difficulty = Models.TaskDifficulty.Light)
 {
     /// <summary>Gets whether a new cycle is within cumulative budgets and explicit native task controls.</summary>
     public bool CanContinue => !Paused && !Canceled && Cycles < MaximumCycles && ActiveMilliseconds < MaximumActiveMilliseconds
@@ -18,8 +18,8 @@ public sealed record CognitiveRoundProgress(int Cycles = 0, int MaximumCycles = 
             || Recoveries is < 0 or > 9 || MaximumRecoveries is < 0 or > 8 || ResultBytes < 0 || MaximumResultBytes is < 1 or > 67108864
             || ProviderCalls is < 0 or > 256 || MaximumProviderCalls is < 1 or > 256
             || ConfirmedProgress is < 0 or > 256 || StalledCycles is < 0 or > 128 || LastFailure is { } failure && !Enum.IsDefined(failure)
-            || !Enum.IsDefined(RoutingReason) || !Enum.IsDefined(Recovery)
-            || Provider is not ("" or "gemini" or "chatgpt") || Model is null || Model.Length > 256
+            || !Enum.IsDefined(RoutingReason) || !Enum.IsDefined(Recovery) || !Enum.IsDefined(Difficulty)
+            || Provider is not ("" or "chatgpt" or "local" or "gemini") || Model is null || Model.Length > 256
             || Outcome is not ("" or "running" or "completed_round" or "timeout" or "failed" or "canceled" or "budget"))
         { throw new InvalidDataException("Task cycle checkpoint is invalid."); }
         return this;

@@ -28,7 +28,8 @@ public sealed partial class BrainLearning
         { return new("rejected", Reason: "Unknown knowledge category or change. No policy or skill modification is supported."); }
         string aspect = TextNormalizer.Normalize(proposal.Aspect);
         bool knownPreference = proposal.Category == "preference" && aspect is "editor" or "language" or "style";
-        if (!knownPreference && !userText.Contains(proposal.Aspect, StringComparison.Ordinal)) { return new("rejected", Reason: "Topic is absent from actual user input."); }
+        if (!knownPreference && !HasGroundedTopic(proposal.Aspect, proposal.Evidence))
+        { return new("rejected", Reason: "Topic is absent from actual user input."); }
         string key = knownPreference ? "owner." + aspect : "context." + proposal.Category + "." + FileBrainStorage.Hash(aspect)[..16];
         string vault = brain.Location;
         await _consolidation.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -69,5 +70,13 @@ public sealed partial class BrainLearning
             return new(result.Status == "draft" ? "contradiction" : existing is null ? "new" : proposal.Change == "correction" ? "correction" : "repeated", result.Id);
         }
         finally { _consolidation.Release(); }
+    }
+
+    /// <summary>Accepts reordered or accent-normalized topic labels only when a distinctive word occurs in literal user evidence.</summary>
+    private static bool HasGroundedTopic(string aspect, string evidence)
+    {
+        string normalizedEvidence = TextNormalizer.Normalize(evidence);
+        return TextNormalizer.Normalize(aspect).Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Any(word => word.Length >= 3 && TextNormalizer.ContainsPhrase(normalizedEvidence, word));
     }
 }

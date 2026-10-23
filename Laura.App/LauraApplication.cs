@@ -83,8 +83,6 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
             settings.Changed += OnPermissionSettingsChanged;
             await PersistPermissionOptionsAsync().ConfigureAwait(true);
             if (_stopping) { interactive.Dispose(); return; }
-            int import = Array.IndexOf(args, "--import-mark-lv");
-            if (import >= 0 && import + 1 < args.Length) { await services.GetRequiredService<MarkLvConfigurationImporter>().ImportAsync(args[import + 1]).ConfigureAwait(true); }
             int smoke = Array.IndexOf(args, "--ui-smoke");
             int permissionSmoke = Array.IndexOf(args, "--permissions-smoke");
             int screenshotSmoke = Array.IndexOf(args, "--screenshot-smoke");
@@ -126,6 +124,17 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
                 _tray.Show();
             }
             if (args.Contains("--show", StringComparer.Ordinal)) { _tray?.Show(); }
+            if (args.Contains("--announce-ready", StringComparer.Ordinal) && smoke < 0 && permissionSmoke < 0)
+            {
+                var speech = services.GetRequiredService<ISpeechSynthesizer>();
+                if (services.GetRequiredService<Laura.Platform.Windows.Conversation.LlamaCppTextClient>().IsAvailable
+                    && services.GetRequiredService<IChatGptInference>().IsAvailable && speech.GetAvailableVoices().Count > 0)
+                {
+                    using var announcement = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+                    await speech.SpeakAsync(new Laura.Core.Speech.SpeechRequest(services.GetRequiredService<ILocalizer>().Get("ui.local.readySpeech"), settings.Current.Voice, settings.Current.Culture)
+                        { OutputDevice = settings.Current.OutputDevice }, announcement.Token).ConfigureAwait(true);
+                }
+            }
             if (smoke >= 0 && smoke + 1 < args.Length)
             { await MauiSmokeRunner.RunAsync(services, Windows[0], Path.GetFullPath(args[smoke + 1])).ConfigureAwait(true); return; }
         }
@@ -148,7 +157,7 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
     /// <summary>Includes startup source collection in the same delayed voice feedback as model processing.</summary>
     private void OnEngineStateChanged(object? sender, AssistantState state)
     {
-        var live = services.GetRequiredService<GeminiLiveClient>();
+        var live = services.GetRequiredService<Laura.Platform.Windows.Speech.LocalVoiceSession>();
         if (state == AssistantState.Thinking) { live.SetThinking(); }
         else if ((state is AssistantState.Ready or AssistantState.Speaking or AssistantState.Stopped) && live.IsThinking)
         { live.ReturnToReady(); }
@@ -183,9 +192,13 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         await services.GetRequiredService<Laura.Core.Mcp.McpRuntime>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<ClapWakeCoordinator>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<ReminderScheduler>().DisposeAsync().ConfigureAwait(true);
-        await services.GetRequiredService<GeminiLiveClient>().ReconfigureAsync().ConfigureAwait(true);
+        await services.GetRequiredService<Laura.Platform.Windows.Speech.LocalVoiceSession>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<HourlyAnnouncer>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<IAssistantEngine>().StopAsync().ConfigureAwait(true);
+        await services.GetRequiredService<Laura.App.Controls.VulkanReactorHost>().DisposeAsync().ConfigureAwait(true);
+        await services.GetRequiredService<Laura.Platform.Windows.Conversation.LlamaCppRuntime>().DisposeAsync().ConfigureAwait(true);
+        await services.GetRequiredService<ISpeechSynthesizer>().DisposeAsync().ConfigureAwait(true);
+        await services.GetRequiredService<Laura.Platform.Windows.Speech.LocalVoiceWorkerClient>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<Laura.Core.Execution.CommandJobs>().DisposeAsync().ConfigureAwait(true);
         if (_brainStartup is not null) { await _brainStartup.ConfigureAwait(true); }
         await services.GetRequiredService<Laura.Core.Brain.BrainLearning>().DisposeAsync().ConfigureAwait(true);

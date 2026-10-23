@@ -94,6 +94,19 @@ public sealed class BriefingContributorTests
         var briefing = new WakeBriefing([new Canceled()], new StubLocalizer(), new Clock(), NullLogger<WakeBriefing>.Instance);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => briefing.CreateRequestAsync(cancellation.Token));
     }
+    /// <summary>Independent source completion order cannot place reminders after the currency reference.</summary>
+    [Fact]
+    public async Task BriefingOrdersCurrencyLast()
+    {
+        var briefing = new WakeBriefing([new Fixed("USD/BRL"), new Fixed("Reminders"), new Fixed("News"), new Fixed("Weather")],
+            new StubLocalizer(), new Clock(), NullLogger<WakeBriefing>.Instance);
+        string request = await briefing.CreateRequestAsync(CancellationToken.None);
+        int weather = request.IndexOf("\"Topic\":\"Weather\"", StringComparison.Ordinal);
+        int news = request.IndexOf("\"Topic\":\"News\"", StringComparison.Ordinal);
+        int reminders = request.IndexOf("\"Topic\":\"Reminders\"", StringComparison.Ordinal);
+        int currency = request.IndexOf("\"Topic\":\"USD/BRL\"", StringComparison.Ordinal);
+        Assert.True(weather >= 0 && weather < news && news < reminders && reminders < currency);
+    }
     /// <summary>Supplies a deterministic response without making network requests.</summary>
     private static HttpClient Client(string body) => new(new Handler(body));
     /// <summary>Creates a Portuguese catalog for formatted currency assertions.</summary>
@@ -116,4 +129,6 @@ public sealed class BriefingContributorTests
     { public Task<BriefingSection?> CollectAsync(CancellationToken cancellationToken) => throw new HttpRequestException("Source unavailable."); }
     private sealed class Canceled : IBriefingContributor
     { public Task<BriefingSection?> CollectAsync(CancellationToken cancellationToken) { cancellationToken.ThrowIfCancellationRequested(); return Task.FromResult<BriefingSection?>(null); } }
+    private sealed class Fixed(string topic) : IBriefingContributor
+    { public Task<BriefingSection?> CollectAsync(CancellationToken cancellationToken) => Task.FromResult<BriefingSection?>(new(topic, "synthetic", new Clock().Now, "verified")); }
 }

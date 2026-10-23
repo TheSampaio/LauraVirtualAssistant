@@ -41,7 +41,7 @@ Dependencies flow in only one direction: `App -> Platform.Windows -> Core`.
 | Project | Role | May Depend On |
 | --- | --- | --- |
 | `Laura.Core` | Pure domain (net10.0): engine, skills, settings, localization | no platform |
-| `Laura.Platform.Windows` | Gemini audio and Win32/WinRT adapters | `Core` |
+| `Laura.Platform.Windows` | Supervised local inference/voice and Win32/WinRT adapters | `Core` |
 | `Laura.App` | Native MAUI / WinUI UI + Win32 tray | `Core`, `Platform.Windows` |
 | `Laura.Core.Tests` | xUnit tests | `Core` |
 
@@ -96,16 +96,23 @@ Never hard-code spoken text or fixed triggers in a skill.
 
 ## AI Providers and Voice
 
-Google AI Studio / Gemini Live is the sole conversation/voice provider. A key and an
-explicit enabled setting are required before cloud conversation is available.
-Use native Live AUDIO output and input/output transcriptions; the supported voices
-are Charon, Puck, Kore, Fenrir and Aoede. Credentials live in a separate DPAPI file,
-never INI, logs, screenshots or repository files. Importing a Mark-LV configuration
-must leave the source file unchanged. No reference code or assets are bundled.
+Laura offers optional local llama.cpp inference with multilingual Whisper input and
+local female Kokoro/Piper speech, Gemini Live with native audio, and separately
+authorized ChatGPT. Automatic Light requests use the owner's explicit Local or
+Gemini choice. Local inference starts disabled and releases its supervised process
+when deselected. Cloud conversation needs explicit enablement and authorization.
+The AI Studio key lives in a separate DPAPI file, never INI, logs, screenshots or
+repository files. Import from a selected Mark-LV configuration validates the key
+before storing it and leaves the source unchanged. No reference code or assets are bundled.
 
-Do not restore Ollama, local model inference or Windows/offline voice pickers.
-The Brain may use optional local CPU ONNX sentence embeddings, as requested by the
-owner; these provide retrieval vectors, not a local conversation or voice engine.
+The local llama.cpp runtime is an owned loopback-only, authenticated process;
+it cannot require Ollama as a global daemon. Local ASR and female voice synthetic pt-BR and
+en-US round trips passed; physical microphone/accent evaluation remains separate.
+Missing voice assets must leave text conversation available. Native ONNX and
+GPL phonemization live in the isolated `Laura.VoiceWorker` process; distribution
+includes exact licenses and the verified corresponding-source companion. Never
+download weights during a normal build, restore or startup.
+The Brain may also use optional local CPU ONNX sentence embeddings for retrieval.
 Brain Markdown is authoritative. FTS5/vector caches live outside its shared root,
 are rebuildable, and must never become the source of durable facts. New vaults
 must be Git-protected before writes. Never log note bodies or YAML parse contents.
@@ -120,7 +127,7 @@ explicit listening button, held Ctrl+Space chord, or the user's opt-in double-cl
 wake setting, and an unmuted setting. The clap stream is local only, without
 recording or cloud transmission, until wake starts a conversation. Disabling the
 option closes local detection. Muting, stopping, early key release and shutdown
-close cloud capture. Continuous
+close the active provider's capture. Continuous
 listening uses automatic speech-end detection. Brazilian conversation settings
 must request Brazilian vocabulary and accent.
 

@@ -24,9 +24,9 @@ public sealed class RuntimeDiagnosticContext : IDisposable
         _journal.Record("config.brain_learning", outcome: value.Brain.AutoLearn ? "enabled" : "disabled");
         _journal.Record("config.semantic_configured", outcome: "lexical_only");
         _journal.Record("config.context_budget", amount: value.Brain.ContextCharacters);
-        _journal.Record("config.provider", outcome: value.GenerativeAi.Enabled ? "gemini" : "disabled");
-        _journal.Record("config.model", outcome: value.GenerativeAi.Model.Length == 0 ? "default" : GeminiLiveOptions.HasVerifiedImageSupport(value.GenerativeAi.Model) ? "reviewed" : "custom");
-        _journal.Record("config.voice", outcome: value.GenerativeAi.LiveVoice);
+        _journal.Record("config.provider", outcome: value.ProviderSelection.ToString());
+        _journal.Record("config.model", outcome: value.LocalModel.Enabled ? "local_enabled" : value.GenerativeAi.Enabled ? "cloud_enabled" : "cloud_disabled");
+        _journal.Record("config.voice", outcome: "kokoro");
         _journal.Record("config.request_timeout_seconds", amount: (long)value.GenerativeAi.Timeout.TotalSeconds);
         _journal.Record("config.microphone_muted", outcome: value.MicrophoneMuted ? "yes" : "no");
         _journal.Record("config.clap_wake", outcome: value.ClapWakeEnabled ? "enabled" : "disabled");

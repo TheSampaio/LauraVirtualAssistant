@@ -2,6 +2,7 @@ using Laura.Core.Abstractions;
 using Laura.Core.Configuration;
 using Laura.Core.Conversation;
 using Laura.Core.Engine;
+using Laura.Core.Localization;
 using Laura.Core.Skills;
 using Laura.Core.Tests.TestDoubles;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -11,6 +12,51 @@ namespace Laura.Core.Tests.Engine;
 /// <summary>Verifies actual queued cancellation, worker recovery and concise internal briefing history.</summary>
 public sealed class AssistantEngineTests
 {
+    /// <summary>A typed cancel phrase interrupts active inference before its queued command reaches the single consumer.</summary>
+    [Fact]
+    public async Task TypedCancelPreemptsTheActiveTurnWithoutPublishingItsLateAnswer()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var canceled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var localizer = new JsonLocalizer(Path.Combine(AppContext.BaseDirectory, "Localization", "Locales"), NullLogger<JsonLocalizer>.Instance);
+        localizer.SetCulture(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+        var dispatcher = new CallbackSkillDispatcher(async (request, token) =>
+        {
+            if (request.RawText == "longa tarefa")
+            {
+                entered.SetResult();
+                try { await Task.Delay(Timeout.Infinite, token); }
+                finally { if (token.IsCancellationRequested) { canceled.SetResult(); } }
+                return SkillResponse.Speak("Resposta tardia");
+            }
+            return SkillResponse.Speak("Certo.");
+        });
+        var clock = new SystemClock();
+        await using var engine = new AssistantEngine(new RecordingSpeechSynthesizer(), dispatcher,
+            new StubSettingsService(LauraSettings.Default with { GreetOnStartup = false }), localizer, new StubShellController(),
+            new GreetingComposer(localizer, new StubUserContext(), clock), clock, NullLogger<AssistantEngine>.Instance);
+        await engine.StartAsync();
+        Task active = engine.SubmitCommandAsync("longa tarefa");
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Task cancel = engine.SubmitCommandAsync("Cancela");
+        await canceled.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await Task.WhenAll(active, cancel).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.DoesNotContain(engine.ConversationHistory, message => message.Text == "Resposta tardia");
+        Assert.Contains(engine.ConversationHistory, message => message.Text == "Cancela");
+        Assert.Equal(AssistantState.Ready, engine.State);
+    }
+    /// <summary>Written code and links remain intact in chat while speech receives only conversational text.</summary>
+    [Fact]
+    public async Task SpokenViewOmitsMarkupWithoutChangingWrittenAnswer()
+    {
+        const string written = "**Ready.** See [the guide](https://example.com/guide).\n```csharp\nConsole.WriteLine(1);\n```";
+        var speech = new RecordingSpeechSynthesizer();
+        var dispatcher = new CallbackSkillDispatcher((_, _) => Task.FromResult(SkillResponse.Speak(written)));
+        await using var engine = CreateEngine(dispatcher, speech);
+        await engine.StartAsync(); await engine.SubmitCommandAsync("Explain the result");
+        Assert.Equal("Ready. See the guide.", Assert.Single(speech.SpokenTexts));
+        Assert.Contains(engine.ConversationHistory, message => message.Source == ConversationMessageSource.Assistant && message.Text == written);
+    }
     /// <summary>An output failure must preserve text, allow normal post-response actions and leave the next request usable.</summary>
     [Fact]
     public async Task FailedPlaybackPreservesTheCompletedResponseAndPostResponseActions()

@@ -17,8 +17,9 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <ApplicationTitle>Laura Virtual Assistant</ApplicationTitle>
     <ApplicationId>com.laura.assistant</ApplicationId>
-    <ApplicationDisplayVersion>2.0.0</ApplicationDisplayVersion>
-    <ApplicationVersion>2</ApplicationVersion>
+    <ApplicationDisplayVersion>2.2.0</ApplicationDisplayVersion>
+    <ApplicationVersion>22</ApplicationVersion>
+    <Version>2.2.0</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -33,14 +34,29 @@
     <NoWarn>$(NoWarn);CA1848;CA1716;CA1859</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <Content Include="..\_Output\VulkanRenderer\Laura.VulkanRenderer.dll" Link="Laura.VulkanRenderer.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Laura.VulkanRenderer\Vulkan-Headers-LICENSE.md" Link="licenses\Vulkan-Headers-LICENSE.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.20" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Laura.Core\Laura.Core.csproj" />
     <ProjectReference Include="..\Laura.Platform.Windows\Laura.Platform.Windows.csproj" />
+    <ProjectReference Include="..\Laura.VoiceWorker\Laura.VoiceWorker.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" ExcludeAssets="all" />
     <Content Include="..\Data\icon.ico" Link="Assets\icon.ico" CopyToOutputDirectory="PreserveNewest" />
     <MauiIcon Include="Resources\AppIcon\appicon.svg" Color="#100C11" />
     <MauiImage Include="Resources\Images\*.svg" BaseSize="24,24" />
   </ItemGroup>
+  <Target Name="BuildVulkanRenderer" BeforeTargets="PrepareForBuild">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\Build\Build-VulkanRenderer.ps1&quot;" />
+  </Target>
+  <Target Name="CopyLocalVoiceWorker" AfterTargets="Build">
+    <ItemGroup>
+      <VoiceWorkerFiles Include="..\Laura.VoiceWorker\bin\$(Configuration)\net10.0\win-x64\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(VoiceWorkerFiles)" DestinationFiles="@(VoiceWorkerFiles->'$(TargetDir)VoiceWorker\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="PublishLocalVoiceWorker" AfterTargets="Publish">
+    <MSBuild Projects="..\Laura.VoiceWorker\Laura.VoiceWorker.csproj" Targets="Publish" Properties="TargetFramework=net10.0;Configuration=$(Configuration);RuntimeIdentifier=win-x64;SelfContained=true;PublishDir=$(PublishDir)VoiceWorker\" />
+  </Target>
 </Project>

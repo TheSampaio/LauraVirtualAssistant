@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Laura.Core.Tests", "Laura.C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Laura.CredentialBroker", "Laura.CredentialBroker\Laura.CredentialBroker.csproj", "{4BA65DE5-B697-4073-A84D-9A22C14163A5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Laura.VoiceWorker", "Laura.VoiceWorker\Laura.VoiceWorker.csproj", "{824EA21E-B637-4758-A718-64B4D7F801FB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -83,6 +85,18 @@ Global
 		{4BA65DE5-B697-4073-A84D-9A22C14163A5}.Release|x64.Build.0 = Release|Any CPU
 		{4BA65DE5-B697-4073-A84D-9A22C14163A5}.Release|x86.ActiveCfg = Release|Any CPU
 		{4BA65DE5-B697-4073-A84D-9A22C14163A5}.Release|x86.Build.0 = Release|Any CPU
+		{824EA21E-B637-4758-A718-64B4D7F801FB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{824EA21E-B637-4758-A718-64B4D7F801FB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{824EA21E-B637-4758-A718-64B4D7F801FB}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{824EA21E-B637-4758-A718-64B4D7F801FB}.Debug|x64.Build.0 = Debug|Any CPU
+		{824EA21E-B637-4758-A718-64B4D7F801FB}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{824EA21E-B637-4758-A718-64B4D7F801FB}.Debug|x86.Build.0 = Debug|Any CPU
+		{824EA21E-B637-4758-A718-64B4D7F801FB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{824EA21E-B637-4758-A718-64B4D7F801FB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{824EA21E-B637-4758-A718-64B4D7F801FB}.Release|x64.ActiveCfg = Release|Any CPU
+		{824EA21E-B637-4758-A718-64B4D7F801FB}.Release|x64.Build.0 = Release|Any CPU
+		{824EA21E-B637-4758-A718-64B4D7F801FB}.Release|x86.ActiveCfg = Release|Any CPU
+		{824EA21E-B637-4758-A718-64B4D7F801FB}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

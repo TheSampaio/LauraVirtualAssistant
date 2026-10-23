@@ -1,5 +1,7 @@
 # Gemini and native agent execution
 
+> **Laura 2.2 runtime notice (2026-10-20):** Live/audio behavior and measurements below describe historical implementations. Current operation uses local Whisper/Kokoro, supervised local inference and optional text providers. See [current architecture](laura-local-first.md) and [implementation evidence](../../LAURA-2.2-MIGRATION.md). Historical results are not new acceptance measurements.
+
 This document describes the current architecture after the 2026-10-17 agent rework. Earlier dated cognitive and permission validation reports describe historical versions.
 
 Gemini Live is the only conversational and voice implementation. The composition root no longer registers OpenAI, a local conversational model, Whisper, offline Windows synthesis, CUDA, or ONNX inference. Model discovery uses Google's existing API and its independently reviewed Live capabilities. Removing model inference does not remove audio capture/playback, the local clap detector, or the Markdown Brain.

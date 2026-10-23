@@ -15,6 +15,8 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal, Execution.Comm
     private readonly CancellationTokenSource _lifetime = new();
     /// <summary>Reports metadata changes; UI subscribers must use their dispatcher.</summary>
     public event EventHandler? Changed;
+    /// <summary>Gets the latest observed live checkpoint without disk I/O or inferred percentages.</summary>
+    public CognitiveTaskCheckpoint? Latest => _snapshots.Values.MaxBy(checkpoint => checkpoint.Updated);
 
     /// <summary>Admits a new bounded task cycle before inference, preserving task identity, budgets and effect receipts.</summary>
     public async Task<bool> BeginCycleAsync(ConversationWorkingContext working, IReadOnlySet<string> registeredTools, CognitiveTaskOptions options, CancellationToken token)
@@ -66,7 +68,7 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal, Execution.Comm
             string outcome = canceled ? "canceled" : timeout ? "timeout" : failure is null ? "completed_round" : "failed";
             slot.Run.SetActive(false); slot.Active = false; slot.RoundActive = false;
             if (rounds.ActiveMilliseconds + milliseconds >= rounds.MaximumActiveMilliseconds) { outcome = "budget"; }
-            slot.Run.SetRounds(rounds with { ActiveMilliseconds = rounds.ActiveMilliseconds + Math.Max(0, milliseconds), Provider = provider is "gemini" or "chatgpt" ? provider : "",
+            slot.Run.SetRounds(rounds with { ActiveMilliseconds = rounds.ActiveMilliseconds + Math.Max(0, milliseconds), Provider = provider is "chatgpt" or "local" or "gemini" ? provider : "",
                 Model = model.Length <= 256 ? model : "", Outcome = outcome, Recoveries = rounds.Recoveries + (recovery ? 1 : 0), LastFailure = failure?.Kind,
                 ConfirmedProgress = confirmed, StalledCycles = stalled ? Math.Min(128, rounds.StalledCycles + 1) : 0 });
             var checkpoint = slot.Run.Checkpoint(); if (checkpoint.State == "working") { checkpoint = checkpoint with { State = "paused" }; }
@@ -80,14 +82,14 @@ public sealed class CognitiveTasks(ICognitiveTaskJournal journal, Execution.Comm
     public CancellationToken CycleCancellation(Guid id) => _slots.TryGetValue(id, out var slot) ? slot.Cancellation.Token : _lifetime.Token;
 
     /// <summary>Commits the actual provider/model and closed routing reason before dispatch so native progress reflects the active inference.</summary>
-    public async Task RecordProviderAsync(Guid id, string provider, string model, CognitiveTaskRouting decision, CancellationToken token)
+    public async Task RecordProviderAsync(Guid id, string provider, string model, CognitiveTaskRouting decision, CancellationToken token, Models.TaskDifficulty difficulty = Models.TaskDifficulty.Light)
     {
         if (!_slots.TryGetValue(id, out var slot)) { return; }
         await slot.Gate.WaitAsync(token).ConfigureAwait(false);
         try
         {
             if (slot.Retired || slot.Run?.Checkpoint().Rounds is not { } rounds) { return; }
-            slot.Run.SetRounds(rounds with { Provider = provider, Model = model, RoutingReason = decision.Reason, Recovery = decision.Recovery });
+            slot.Run.SetRounds(rounds with { Provider = provider, Model = model, RoutingReason = decision.Reason, Recovery = decision.Recovery, Difficulty = difficulty });
             var checkpoint = slot.Run.Checkpoint(); await journal.SaveAsync(checkpoint, token).ConfigureAwait(false); Publish(checkpoint);
         }
         finally { slot.Gate.Release(); }

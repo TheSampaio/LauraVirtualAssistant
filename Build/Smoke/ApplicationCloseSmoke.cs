@@ -28,7 +28,8 @@ internal static class ApplicationCloseSmoke
         foreach (bool hold in new[] { false, true })
         {
             var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true };
-            start.ArgumentList.Add(typeof(ApplicationCloseSmoke).Assembly.Location); start.ArgumentList.Add("--window-fixture"); start.ArgumentList.Add(hold ? "hold" : "normal");
+            if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase)) { start.ArgumentList.Add(typeof(ApplicationCloseSmoke).Assembly.Location); }
+            start.ArgumentList.Add("--window-fixture"); start.ArgumentList.Add(hold ? "hold" : "normal");
             using var process = new Process { StartInfo = start }; process.Start();
             try
             {

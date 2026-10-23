@@ -13,22 +13,33 @@ public sealed record ChatGptOptions
     public bool AllowAutomatic { get; init; }
     /// <summary>Gets the owner's declaration that this application's additional-credit allowance is zero in ChatGPT Usage.</summary>
     public bool IncludedPlanOnly { get; init; }
+    /// <summary>Gets explicit permission to route exceptional Max tasks through the verified included plan.</summary>
+    public bool AllowMax { get; init; }
+    /// <summary>Gets the separately probed account model selected for exceptional Max work.</summary>
+    public string MaxModel { get; init; } = "";
     /// <summary>Gets the native registration for which the owner saved these disclosure and routing choices.</summary>
     public Guid? Registration { get; init; }
     /// <summary>Validates native options without enabling access or inventing model capabilities.</summary>
     public ChatGptOptions Sanitized() => this with
     {
-        Model = Model?.Trim() is { Length: > 0 and <= 256 } value && value.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_' or '.' or ':') ? value : ""
+        Model = ValidModel(Model),
+        MaxModel = ValidModel(MaxModel)
     };
+
+    /// <summary>Preserves only bounded account model identifiers supplied by the broker.</summary>
+    private static string ValidModel(string? model) => model?.Trim() is { Length: > 0 and <= 256 } value
+        && value.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_' or '.' or ':') ? value : "";
 }
 
 /// <summary>Explicit native provider choice; manual modes take precedence over all task-routing signals.</summary>
 public enum ConversationProviderSelection
 {
-    /// <summary>Use Gemini for conversation and compatible operations.</summary>
-    Gemini,
     /// <summary>Use the optional account-authorized ChatGPT text provider.</summary>
     ChatGpt,
-    /// <summary>Prefer Gemini and consider ChatGPT only with structural task demand and explicit owner permission.</summary>
-    Automatic
+    /// <summary>Prefer a capable local model and consider only explicitly authorized text providers.</summary>
+    Automatic,
+    /// <summary>Use only the explicitly enabled app-managed local model.</summary>
+    Local,
+    /// <summary>Use only the explicitly enabled Google AI Studio connection.</summary>
+    Gemini
 }

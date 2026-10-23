@@ -199,6 +199,29 @@ public static class LocalizationKeys
         /// <summary>Confirmation of opening the settings window.</summary>
         public const string SettingsResponse = "skill.settings.response";
 
+        /// <summary>Whole-command phrases for selecting ChatGPT.</summary>
+        public const string SwitchToChatGptPhrases = "phrases.switchToChatGpt";
+        /// <summary>Whole-command phrases for selecting Gemini Live.</summary>
+        public const string SwitchToGeminiPhrases = "phrases.switchToGemini";
+        /// <summary>Whole-command phrases for selecting local inference.</summary>
+        public const string SwitchToLocalPhrases = "phrases.switchToLocal";
+        /// <summary>Whole-command phrases for selecting authorized automatic routing.</summary>
+        public const string SwitchToAutomaticPhrases = "phrases.switchToAutomatic";
+        /// <summary>Confirms manual local selection.</summary>
+        public const string SwitchToLocalResponse = "skill.switchToLocal.response";
+        /// <summary>Confirms automatic local-first selection.</summary>
+        public const string SwitchToAutomaticResponse = "skill.switchToAutomatic.response";
+        /// <summary>Confirms an explicit ChatGPT selection.</summary>
+        public const string SwitchToChatGptResponse = "skill.switchToChatGpt.response";
+        /// <summary>Confirms an explicit Gemini Live selection.</summary>
+        public const string SwitchToGeminiResponse = "skill.switchToGemini.response";
+        /// <summary>Explains that a requested provider is not configured and ready.</summary>
+        public const string SwitchProviderUnavailable = "skill.switchProvider.unavailable";
+        /// <summary>Whole-command phrases that interrupt an active task.</summary>
+        public const string CancelTaskPhrases = "phrases.cancelTask";
+        /// <summary>Acknowledges an interruption without claiming that completed effects were undone.</summary>
+        public const string CancelTaskResponse = "skill.cancelTask.response";
+
     }
 
     /// <summary>Localized conservative Brain-learning patterns and attributed entity text.</summary>
@@ -241,6 +264,8 @@ public static class LocalizationKeys
         public const string ModelUnavailable = "ui.ai.failure.model";
         /// <summary>Identifies excessive current context.</summary>
         public const string ContextExceeded = "ui.ai.failure.context";
+        /// <summary>Explains the required explicit authorization for exceptional Max routing.</summary>
+        public const string MaxAuthorizationRequired = "ui.ai.failure.maxAuthorization";
         /// <summary>Identifies an elapsed generation deadline.</summary>
         public const string Timeout = "ui.ai.failure.timeout";
         /// <summary>Identifies a failed transport.</summary>

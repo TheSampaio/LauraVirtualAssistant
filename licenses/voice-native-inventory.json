@@ -1,0 +1,17 @@
+[
+  {
+    "File": "VoiceWorker/onnxruntime.dll",
+    "Size": 17799168,
+    "Sha256": "7f66f939a881baf4f46a2216496798edf4a1429878b646d12674aa62f27d8a25"
+  },
+  {
+    "File": "VoiceWorker/sherpa-onnx-c-api.dll",
+    "Size": 4605952,
+    "Sha256": "2729a0da3fbd20fb4e14e157f7cc0e00af848b55f04121319d445c138aeba214"
+  },
+  {
+    "File": "VoiceWorker/sherpa-onnx.dll",
+    "Size": 51200,
+    "Sha256": "4fdc9716e2de7a55463f73989206e627833fa2adc0e22b096eb7ef156507143b"
+  }
+]

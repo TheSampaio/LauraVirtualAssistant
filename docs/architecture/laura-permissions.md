@@ -1,5 +1,7 @@
 # LAURA Permissions
 
+> **Laura 2.2 runtime notice (2026-10-20):** Live/audio behavior and measurements below describe historical implementations. Current operation uses local Whisper/Kokoro, supervised local inference and optional text providers. See [current architecture](laura-local-first.md) and [implementation evidence](../../LAURA-2.2-MIGRATION.md). Historical results are not new acceptance measurements.
+
 ## Laura 2.0 bounded workspace and process foundation — 2026-10-15
 
 `authorize_workspace` requests a native review for the current trusted task identity, existing directory and optional **actual provider** disclosure host. The resulting one-hour grant is session-only and appears in the existing revocable grants list. It authorizes ordinary project text reads/creation/edits only through the file adapter. An approval without a recipient cannot disclose project text; an OpenAI recipient cannot be reused for Gemini. Other tasks, sibling paths, reparse points, protected storage, credentials/policy files, deletion, commands and system changes cannot inherit it. Task grants are deliberately not restored after restart. Task orchestration must explicitly reacquire authority when safely resuming.

@@ -37,8 +37,10 @@ public sealed partial class MainPage
         if (_conversations.IsResetting) { return; }
         long version = _conversations.Version;
         lock (_streamGate) { _pendingStream = update; if (_streamQueued) { return; } _streamQueued = true; }
-        MainThread.BeginInvokeOnMainThread(() =>
+        MainThread.BeginInvokeOnMainThread(async () =>
         {
+            // Limit native text/layout updates while retaining the newest provider delta.
+            await Task.Delay(80).ConfigureAwait(true);
             ConversationStreamUpdate? latest;
             lock (_streamGate) { latest = _pendingStream; _pendingStream = null; _streamQueued = false; }
             if (latest is null || _conversations.IsResetting || _conversations.Version != version || _clearing) { return; }

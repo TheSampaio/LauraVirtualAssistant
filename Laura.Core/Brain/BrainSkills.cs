@@ -61,6 +61,17 @@ public sealed partial class BrainSkills(BrainService brain, ISettingsService set
         return matches.Length == 1 ? matches[0] : null;
     }
 
+    /// <summary>Returns bounded exact-version approved Humanizer prose guidance without granting tools or changing instruction priority.</summary>
+    public string PresentationGuidance()
+    {
+        BrainNote? note = Find("Humanizer");
+        if (note is null || !IsEnabled(note) || note.Procedure is { Kind: not "guidance" }) { return ""; }
+        if (note.Body.Length <= 6000) { return note.Body; }
+        int boundary = note.Body.LastIndexOf("\n\n", 5900, StringComparison.Ordinal);
+        return "Bounded excerpt of the exact approved Humanizer version; remaining guidance is available through native skill retrieval:\n"
+            + note.Body[..(boundary > 1000 ? boundary : 5800)];
+    }
+
     /// <summary>Retrieves matching approved text instructions using names, descriptions and tags, without executing dependencies.</summary>
     public string Relevant(string query, int budget = 1800)
     {

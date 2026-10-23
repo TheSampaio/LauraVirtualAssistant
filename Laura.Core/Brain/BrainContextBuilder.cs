@@ -21,7 +21,7 @@ public sealed class BrainContextBuilder(BrainService brain, ISettingsService set
     {
         ArgumentNullException.ThrowIfNull(input); cancellationToken.ThrowIfCancellationRequested();
         using var measurement = LauraDiagnostics.Measure("cognition.context");
-        if (!NeedsKnowledge(input)) { LauraDiagnostics.Record("cognition.retrieval.skipped"); return new("", ""); }
+        if (!NeedsKnowledge(input)) { LauraDiagnostics.Record("cognition.retrieval.skipped"); return new("", "") { PresentationGuidance = skills?.PresentationGuidance() ?? "" }; }
         string query = input.Length <= 4000 ? input : input[..2000] + "\n" + input[^1999..];
         await brain.RefreshIfDirtyAsync(cancellationToken).ConfigureAwait(false);
         BrainOptions options = settings.Current.Brain;
@@ -49,9 +49,13 @@ public sealed class BrainContextBuilder(BrainService brain, ISettingsService set
             else { LauraDiagnostics.Record("cognition.retrieval.cache-hit"); }
         }
         context ??= "";
-        return new(context, catalogue);
+        return new(context, catalogue) { PresentationGuidance = skills?.PresentationGuidance() ?? "" };
     }
 }
 
 /// <summary>Separates untrusted recalled facts from skill discovery metadata; approved guidance still requires the existing read gate.</summary>
-public sealed record BrainContext(string Memories, string SkillCatalogue);
+public sealed record BrainContext(string Memories, string SkillCatalogue)
+{
+    /// <summary>Gets approved presentation guidance, kept separate from factual memory and native security instructions.</summary>
+    public string PresentationGuidance { get; init; } = "";
+}

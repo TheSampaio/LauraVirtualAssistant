@@ -122,23 +122,12 @@ public static class PermissionSmokeRunner
             await settings.UpdateAsync(settings.Current with { Permissions = settings.Current.Permissions with { Mode = ApprovalMode.Ask } }).ConfigureAwait(true);
             shell.RevealForConfirmation();
             var setup = services.GetRequiredService<Views.SetupPage>();
-            await ((NavigationPage)main.Page!).PushAsync(setup, false).ConfigureAwait(true); setup.SelectTab(4); await Task.Delay(250).ConfigureAwait(true);
+            await ((NavigationPage)main.Page!).PushAsync(setup, false).ConfigureAwait(true); setup.SelectTab(5); await Task.Delay(250).ConfigureAwait(true);
             setup.VerifySettingsForSmoke();
             await CaptureAsync(native, Path.Combine(directory, "security-settings.png")).ConfigureAwait(true);
             results.Add("Native Security tab rendered; main UI remained responsive during pending operations.");
             await setup.SaveSettingsForPermissionSmokeAsync().ConfigureAwait(true);
-            results.Add("Security preferences saved through the real settings lifecycle, including when no Gemini key is configured.");
-            if (Environment.GetCommandLineArgs().Contains("--permissions-live-smoke", StringComparer.Ordinal))
-            {
-                var live = services.GetRequiredService<Laura.Platform.Windows.Conversation.GeminiLiveClient>();
-                if (!live.IsAvailable) { throw new InvalidOperationException("VALIDATION BLOCKED: no configured Gemini credential is available for the required live voice integration."); }
-                await settings.UpdateAsync(settings.Current with { Voice = settings.Current.Voice with { Volume = 0 } }).ConfigureAwait(true);
-                using var voiceTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-                string announcement = services.GetRequiredService<IUiLocalizer>().GetForCulture(settings.Current.Culture, "ui.permissions.announcement");
-                await live.VerifyApprovalVoiceForSmokeAsync(announcement, voiceTimeout.Token).ConfigureAwait(true);
-                results.Add("Live Gemini produced PCM and transcripts for two serialized generic announcements while the conversation gate was occupied. Playback volume was zero; no microphone or personal context was sent.");
-            }
-            else { results.Add("Live cloud TTS was not executed in this offline diagnostic."); }
+            results.Add("Security preferences saved through the real settings lifecycle without cloud credentials.");
             results.Add("OS notification suppression, multiple monitors, audible voice output and screen-reader interaction require separate manual verification; they were not asserted by this isolated run.");
             await File.WriteAllLinesAsync(Path.Combine(directory, "result.txt"), results.Prepend("PASS: isolated permission integration")).ConfigureAwait(true);
         }

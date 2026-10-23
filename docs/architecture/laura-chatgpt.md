@@ -1,5 +1,7 @@
 # ChatGPT plan sharing and bounded task cycles
 
+> **Laura 2.2 runtime notice (2026-10-20):** Live/audio behavior and measurements below describe historical implementations. Current operation uses local Whisper/Kokoro, supervised local inference and optional text providers. See [current architecture](laura-local-first.md) and [implementation evidence](../../LAURA-2.2-MIGRATION.md). Historical results are not new acceptance measurements.
+
 Laura keeps Gemini Live as its default conversation and voice provider. The optional ChatGPT adapter uses the official Sign in with ChatGPT preview for eligible accounts and applications. Availability, models and included usage depend on the actual authorization. No OpenAI API key, browser credential extraction, private endpoint or paid API fallback is configured.
 
 ## Connecting

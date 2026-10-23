@@ -17,10 +17,12 @@
     <NoWarn>$(NoWarn);CA1848;CA1716</NoWarn>
     <!-- Required by the LibraryImport generator used for the Windows API calls. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>Google Live audio, protected credentials and Windows desktop adapters for Laura.Core.</Description>
+    <Description>Supervised local text and voice, protected credentials and Windows desktop adapters for Laura.Core.</Description>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Managed BZip2 decoding for optional, checksum-verified voice archives. MIT. -->
+    <PackageReference Include="SharpCompress" Version="0.50.6" />
     <!-- Maintained Microsoft JWT verifier for official OIDC signatures and claim validation. MIT. -->
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.16.0" />
     <!-- Official minimal MCP client; framing/version negotiation remain outside the cognitive Core. Apache-2.0. -->

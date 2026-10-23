@@ -50,7 +50,7 @@ public sealed class CognitiveRoundTests
         journal.FailFromSave = int.MaxValue;
         Assert.True(await tasks.BeginCycleAsync(working, Tools, new(), CancellationToken.None));
         Assert.Equal(1, tasks.Current(working.TurnId)!.Rounds!.Cycles);
-        await tasks.EndCycleAsync(working.TurnId, 1, "gemini", "synthetic", null);
+        await tasks.EndCycleAsync(working.TurnId, 1, "local", "synthetic", null);
         await tasks.PrepareResumeAsync(working.TurnId);
     }
     /// <summary>A successful inference ends only a cycle; the same durable task can admit another provider cycle.</summary>
@@ -60,7 +60,7 @@ public sealed class CognitiveRoundTests
         var journal = new RecordingTaskJournal(); using var tasks = new CognitiveTasks(journal); var working = Working();
         Assert.True(await tasks.BeginCycleAsync(working, Tools, new(), CancellationToken.None));
         Assert.True(await tasks.AdmitInferenceAsync(working.TurnId, CancellationToken.None));
-        await tasks.EndCycleAsync(working.TurnId, 100, "gemini", "synthetic-gemini", null);
+        await tasks.EndCycleAsync(working.TurnId, 100, "local", "synthetic-local", null);
         Assert.True(await tasks.SetContinuationAsync(working.TurnId, true, CancellationToken.None));
         Assert.True(await tasks.BeginCycleAsync(working, Tools, new(), CancellationToken.None));
         await tasks.EndCycleAsync(working.TurnId, 150, "chatgpt", "synthetic-chatgpt", null);
@@ -76,9 +76,9 @@ public sealed class CognitiveRoundTests
         await tasks.BeginCycleAsync(working, Tools, new() { MaximumRecoveries = 1 }, CancellationToken.None);
         var arguments = JsonSerializer.SerializeToElement(new { path = "synthetic" });
         await tasks.ExecuteAsync(working, Tools, "write_file", arguments, (_, _) => { effects++; return Task.FromResult(new AssistantToolResult("Confirmed synthetic write.")); }, CancellationToken.None);
-        await tasks.EndCycleAsync(working.TurnId, 40, "gemini", "synthetic", new(ConversationFailureKind.Timeout, true));
+        await tasks.EndCycleAsync(working.TurnId, 40, "local", "synthetic", new(ConversationFailureKind.Timeout, true));
         Assert.True(await tasks.BeginCycleAsync(working, Tools, new(), CancellationToken.None));
-        await tasks.EndCycleAsync(working.TurnId, 50, "gemini", "synthetic", new(ConversationFailureKind.Timeout));
+        await tasks.EndCycleAsync(working.TurnId, 50, "local", "synthetic", new(ConversationFailureKind.Timeout));
         Assert.False(await tasks.BeginCycleAsync(working, Tools, new(), CancellationToken.None));
         var saved = (await journal.ReadAsync(working.TurnId))!; Assert.Single(saved.Operations); Assert.Equal(1, effects); Assert.Equal(2, saved.Rounds!.Recoveries);
     }
@@ -89,7 +89,7 @@ public sealed class CognitiveRoundTests
         var journal = new RecordingTaskJournal(); var working = Working();
         using (var tasks = new CognitiveTasks(journal))
         {
-            await tasks.BeginCycleAsync(working, Tools, new(), CancellationToken.None); await tasks.EndCycleAsync(working.TurnId, 25, "gemini", "synthetic", null);
+            await tasks.BeginCycleAsync(working, Tools, new(), CancellationToken.None); await tasks.EndCycleAsync(working.TurnId, 25, "local", "synthetic", null);
             await tasks.PauseAsync(working.TurnId); Assert.False(await tasks.BeginCycleAsync(working, Tools, new(), CancellationToken.None));
         }
         using var restarted = new CognitiveTasks(journal);
@@ -107,7 +107,7 @@ public sealed class CognitiveRoundTests
         var journal = new RecordingTaskJournal(); using var tasks = new CognitiveTasks(journal); var working = Working();
         await tasks.BeginCycleAsync(working, Tools, new() { MaximumCycles = 1, MaximumProviderCalls = 1 }, CancellationToken.None);
         Assert.True(await tasks.AdmitInferenceAsync(working.TurnId, CancellationToken.None)); Assert.False(await tasks.AdmitInferenceAsync(working.TurnId, CancellationToken.None));
-        await tasks.EndCycleAsync(working.TurnId, 10, "gemini", "synthetic", null); Assert.False(await tasks.SetContinuationAsync(working.TurnId, true, CancellationToken.None));
+        await tasks.EndCycleAsync(working.TurnId, 10, "local", "synthetic", null); Assert.False(await tasks.SetContinuationAsync(working.TurnId, true, CancellationToken.None));
         Assert.False(await tasks.BeginCycleAsync(working, Tools, new() { MaximumCycles = 128 }, CancellationToken.None));
         var resumed = await tasks.PrepareResumeAsync(working.TurnId); Assert.Equal(1, resumed.Rounds!.Cycles); Assert.Equal(1, resumed.Rounds.ProviderCalls);
         Assert.True(resumed.Rounds.MaximumCycles > 1);
@@ -117,7 +117,7 @@ public sealed class CognitiveRoundTests
     public async Task TaskCancellationIsScoped()
     {
         using var tasks = new CognitiveTasks(new RecordingTaskJournal()); var first = Working(); var second = Working();
-        await tasks.BeginCycleAsync(first, Tools, new(), CancellationToken.None); await tasks.EndCycleAsync(first.TurnId, 1, "gemini", "synthetic", null);
+        await tasks.BeginCycleAsync(first, Tools, new(), CancellationToken.None); await tasks.EndCycleAsync(first.TurnId, 1, "local", "synthetic", null);
         await tasks.BeginCycleAsync(second, Tools, new(), CancellationToken.None); await tasks.PauseAsync(first.TurnId, cancel: true);
         Assert.True(tasks.CycleCancellation(first.TurnId).IsCancellationRequested); Assert.False(tasks.CycleCancellation(second.TurnId).IsCancellationRequested);
     }

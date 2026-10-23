@@ -32,22 +32,12 @@ internal static class BrainPerformanceSmokeRunner
         timer.Start();
         try
         {
-            using var audioTimeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
-            Task<Laura.Core.Conversation.PcmPlaybackMetrics>? audio = Environment.GetCommandLineArgs().Contains("--brain-audio-concurrency-smoke", StringComparer.Ordinal)
-                ? Laura.Platform.Windows.Conversation.GeminiLiveClient.VerifyFragmentedPlaybackForSmokeAsync(audioTimeout.Token, 90) : null;
             BrainNote note = brain.Snapshot.Notes.Single(item => item.Path == "Knowledge/Fixture0.md");
             for (int index = 0; index < 32; index++)
             {
                 note = await brain.SaveAsync(note with { Body = $"# Synthetic fixture\n\nRevision {index} retains the same graph topology." }).ConfigureAwait(true);
             }
             await Task.Delay(750).ConfigureAwait(true);
-            if (audio is not null)
-            {
-                var audioMetrics = await audio.ConfigureAwait(true);
-                await File.WriteAllTextAsync(Path.Combine(directory, "concurrent-audio.json"), JsonSerializer.Serialize(audioMetrics, JsonOptions)).ConfigureAwait(true);
-                if (audioMetrics.MisalignedReads != 0 || audioMetrics.ReadBytes != audioMetrics.AddedBytes)
-                { throw new InvalidOperationException("Concurrent native audio failed sample alignment or byte preservation."); }
-            }
             process.Refresh();
             double elapsed = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
             double[] ordered = frames.Order().ToArray();

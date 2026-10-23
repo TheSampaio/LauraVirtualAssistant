@@ -24,6 +24,9 @@ public interface ISkill
     /// </summary>
     int Priority { get; }
 
+    /// <summary>Gets whether a model-initiated native command may invoke this skill.</summary>
+    bool ModelCallable => true;
+
     /// <summary>
     /// Reports whether this skill recognizes the command.
     ///

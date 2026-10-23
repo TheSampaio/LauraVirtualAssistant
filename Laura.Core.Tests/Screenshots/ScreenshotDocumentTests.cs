@@ -91,7 +91,7 @@ public sealed class ScreenshotDocumentTests
         Assert.Equal(PermissionRisk.Critical, PermissionPolicy.Risk(new(PermissionOperation.BrainAttachment, "native", "", destination: path, userInitiated: true)));
     }
     [Fact]
-    public async Task ScreenshotSettingsPersistAndUnknownImageModelsFailClosed()
+    public async Task ScreenshotSettingsPersistAndInvalidShortcutFailsClosed()
     {
         string root = Path.Combine(Path.GetTempPath(), "laura-shortcuts-" + Guid.NewGuid().ToString("N"));
         try
@@ -100,8 +100,6 @@ public sealed class ScreenshotDocumentTests
             var original = new ScreenshotOptions { AllDisplays = false, RegionShortcut = "Ctrl+Alt+P", WindowShortcut = "F9", FullScreenShortcut = "Shift+F9" };
             await store.SaveAsync(LauraSettings.Default with { Screenshots = original }); Assert.Equal(original, (await store.LoadAsync()).Screenshots);
             Assert.Equal("", (original with { RegionShortcut = "Win+P" }).Sanitized().RegionShortcut);
-            Assert.True(GeminiLiveOptions.HasVerifiedImageSupport(GeminiLiveOptions.Model)); Assert.True(GeminiLiveOptions.HasVerifiedImageSupport(GeminiLiveOptions.FallbackModel));
-            Assert.False(GeminiLiveOptions.HasVerifiedImageSupport("gemini-unreviewed-override"));
         }
         finally { if (Directory.Exists(root)) { Directory.Delete(root, true); } }
     }

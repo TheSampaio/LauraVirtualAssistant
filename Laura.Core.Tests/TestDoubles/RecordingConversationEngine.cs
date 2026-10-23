@@ -29,6 +29,8 @@ public sealed class RecordingConversationEngine : IConversationEngine
     public bool SupportsImages { get; init; }
     /// <inheritdoc />
     public ConversationFailure? LastFailure { get; init; }
+    /// <inheritdoc />
+    public bool HasProvisionalOutput { get; init; }
 
     /// <summary>Gets how many times the engine was queried.</summary>
     public int CallCount { get; private set; }

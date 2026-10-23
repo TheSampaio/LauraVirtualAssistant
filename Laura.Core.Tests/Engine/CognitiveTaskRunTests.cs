@@ -56,6 +56,32 @@ public sealed class CognitiveTaskRunTests
         var status = restored.NextSourceOperation(); Assert.NotNull(status); Assert.Equal("repository_study_status", status.Name); Assert.Equal(id, status.Arguments.GetProperty("id").GetGuid());
     }
 
+    /// <summary>Keeps verified passage reads across batches of one study and invalidates them when a source version changes.</summary>
+    [Fact]
+    public async Task RepositoryBatchesPreserveReadEvidenceUntilItsVersionChanges()
+    {
+        var tools = new HashSet<string>(Tools) { "start_repository_study", "continue_repository_study", "read_brain_passage" };
+        Guid study = Guid.NewGuid(); var task = new CognitiveTaskRun("Study a synthetic repository.", tools);
+        string originalHash = new('a', 64), revisedHash = new('b', 64), otherHash = new('c', 64);
+        AssistantToolResult Progress(string cursor, string sourceId, string hash) => new(JsonSerializer.Serialize(new
+        {
+            Id = study, PendingFiles = 10, Cursor = cursor, Failure = "",
+            Documents = new[] { new { Id = sourceId, Hash = hash, Path = sourceId + ".md" } }
+        }));
+        using var start = JsonDocument.Parse("{}");
+        await task.ExecuteAsync("start_repository_study", start.RootElement, _ => Task.FromResult(Progress("batch-1", "first", originalHash)), CancellationToken.None);
+        var passage = JsonSerializer.SerializeToElement(new { id = "first", hash = originalHash, start = 0 });
+        await task.ExecuteAsync("read_brain_passage", passage, _ => Task.FromResult(new AssistantToolResult("Actual source passage.")), CancellationToken.None);
+        Assert.True(task.WasSourceRead("first", originalHash));
+        await task.ExecuteAsync("continue_repository_study", JsonSerializer.SerializeToElement(new { id = study, cursor = "batch-1" }),
+            _ => Task.FromResult(Progress("batch-2", "second", otherHash)), CancellationToken.None);
+        Assert.True(task.WasSourceRead("first", originalHash));
+        await task.ExecuteAsync("continue_repository_study", JsonSerializer.SerializeToElement(new { id = study, cursor = "batch-2" }),
+            _ => Task.FromResult(Progress("batch-3", "first", revisedHash)), CancellationToken.None);
+        Assert.False(task.WasSourceRead("first", originalHash));
+        Assert.False(task.WasSourceRead("first", revisedHash));
+    }
+
     [Fact]
     public async Task MultipleToolsRetainOriginalObjectiveAndObservedIntermediateResults()
     {

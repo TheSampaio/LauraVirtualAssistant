@@ -118,6 +118,7 @@ public sealed class IniSettingsStore : ISettingsStore
             DiagnosticLevel = (Microsoft.Extensions.Logging.LogLevel)document.GetInt32("Diagnostics", "MinimumLevel", 2),
             Culture = document.GetString(GeneralSection, "Language", defaults.Culture),
             UiCulture = document.GetString(GeneralSection, "UiLanguage", defaults.UiCulture),
+            VulkanInterface = document.GetBoolean(GeneralSection, "VulkanInterface", false),
             InputDevice = document.GetInt32(VoiceSection, "InputDevice", defaults.InputDevice),
             OutputDevice = document.GetInt32(VoiceSection, "OutputDevice", defaults.OutputDevice),
             MicrophoneMuted = document.GetBoolean(VoiceSection, "MicrophoneMuted", defaults.MicrophoneMuted),
@@ -179,6 +180,8 @@ public sealed class IniSettingsStore : ISettingsStore
                 Model = document.GetString(GenerativeAiSection, "Model", defaults.GenerativeAi.Model),
                 Persona = document.GetString(GenerativeAiSection, "Persona", defaults.GenerativeAi.Persona),
                 LiveVoice = document.GetString(GenerativeAiSection, "LiveVoice", defaults.GenerativeAi.LiveVoice),
+                LightProvider = Enum.TryParse<LightProviderSelection>(document.GetString(GenerativeAiSection, "LightProvider", "Gemini"), out var lightProvider)
+                    ? lightProvider : LightProviderSelection.Gemini,
                 ContinuousListening = document.GetBoolean(GenerativeAiSection, "ContinuousListening", false),
                 SilenceDurationMs = document.GetInt32(GenerativeAiSection, "SilenceDurationMs", defaults.GenerativeAi.SilenceDurationMs),
             },
@@ -186,10 +189,27 @@ public sealed class IniSettingsStore : ISettingsStore
             {
                 Enabled = document.GetBoolean("ChatGPT", "Enabled", false), Model = document.GetString("ChatGPT", "Model", ""),
                 ShareContext = document.GetBoolean("ChatGPT", "ShareContext", false), AllowAutomatic = document.GetBoolean("ChatGPT", "AllowAutomatic", false),
+                AllowMax = document.GetBoolean("ChatGPT", "AllowMax", false),
+                MaxModel = document.GetString("ChatGPT", "MaxModel", ""),
                 IncludedPlanOnly = document.GetBoolean("ChatGPT", "IncludedPlanOnly", false),
                 Registration = Guid.TryParse(document.GetString("ChatGPT", "Registration", ""), out var registration) && registration != Guid.Empty ? registration : null
             },
-            ProviderSelection = Enum.TryParse<ConversationProviderSelection>(document.GetString("ChatGPT", "Selection", "Gemini"), out var selection) ? selection : ConversationProviderSelection.Gemini,
+            LocalModel = new LocalModelOptions
+            {
+                Enabled = document.GetBoolean("LocalModel", "Enabled", defaults.LocalModel.Enabled), Executable = document.GetString("LocalModel", "Executable", defaults.LocalModel.Executable),
+                ModelPath = document.GetString("LocalModel", "ModelPath", defaults.LocalModel.ModelPath), ExecutableHash = document.GetString("LocalModel", "ExecutableHash", ""), ModelHash = document.GetString("LocalModel", "ModelHash", ""),
+                ContextTokens = document.GetInt32("LocalModel", "ContextTokens", 8192), Threads = document.GetInt32("LocalModel", "Threads", defaults.LocalModel.Threads),
+                GpuLayers = document.GetInt32("LocalModel", "GpuLayers", -1), IdleMinutes = document.GetInt32("LocalModel", "IdleMinutes", 5),
+                MaximumDifficulty = (Models.TaskDifficulty)document.GetInt32("LocalModel", "MaximumDifficulty", 1)
+            },
+            LocalVoice = new LocalVoiceOptions
+            {
+                KokoroDirectory = document.GetString("LocalVoice", "KokoroDirectory", defaults.LocalVoice.KokoroDirectory), WhisperDirectory = document.GetString("LocalVoice", "WhisperDirectory", defaults.LocalVoice.WhisperDirectory),
+                KokoroDataDirectory = document.GetString("LocalVoice", "KokoroDataDirectory", ""),
+                PortugueseVoice = document.GetString("LocalVoice", "PortugueseVoice", "pf_dora"), EnglishVoice = document.GetString("LocalVoice", "EnglishVoice", "af_heart"),
+                Threads = document.GetInt32("LocalVoice", "Threads", 2), DetectLanguage = document.GetBoolean("LocalVoice", "DetectLanguage", defaults.LocalVoice.DetectLanguage)
+            },
+            ProviderSelection = Enum.TryParse<ConversationProviderSelection>(document.GetString("ChatGPT", "Selection", "Automatic"), out var selection) ? selection : ConversationProviderSelection.Automatic,
             CognitiveTasks = new CognitiveTaskOptions
             {
                 MaximumCycles = document.GetInt32("CognitiveTasks", "MaximumCycles", 32), ActiveMinutes = document.GetInt32("CognitiveTasks", "ActiveMinutes", 10),
@@ -216,6 +236,7 @@ public sealed class IniSettingsStore : ISettingsStore
 
         document.Set(GeneralSection, "Language", settings.Culture);
         document.Set(GeneralSection, "UiLanguage", settings.UiCulture);
+        document.SetBoolean(GeneralSection, "VulkanInterface", settings.VulkanInterface);
         document.SetNumber(VoiceSection, "InputDevice", settings.InputDevice);
         document.SetNumber(VoiceSection, "OutputDevice", settings.OutputDevice);
         document.SetBoolean(VoiceSection, "MicrophoneMuted", settings.MicrophoneMuted);
@@ -258,10 +279,21 @@ public sealed class IniSettingsStore : ISettingsStore
         document.SetNumber(VoiceSection, "Rate", settings.Voice.Rate);
         document.SetNumber(VoiceSection, "Pitch", settings.Voice.Pitch);
         document.SetNumber(VoiceSection, "Volume", settings.Voice.Volume);
+        document.SetBoolean("LocalModel", "Enabled", settings.LocalModel.Enabled);
+        document.Set("LocalModel", "Executable", settings.LocalModel.Executable); document.Set("LocalModel", "ModelPath", settings.LocalModel.ModelPath);
+        document.Set("LocalModel", "ExecutableHash", settings.LocalModel.ExecutableHash); document.Set("LocalModel", "ModelHash", settings.LocalModel.ModelHash);
+        document.SetNumber("LocalModel", "ContextTokens", settings.LocalModel.ContextTokens); document.SetNumber("LocalModel", "Threads", settings.LocalModel.Threads);
+        document.SetNumber("LocalModel", "GpuLayers", settings.LocalModel.GpuLayers); document.SetNumber("LocalModel", "IdleMinutes", settings.LocalModel.IdleMinutes);
+        document.SetNumber("LocalModel", "MaximumDifficulty", (int)settings.LocalModel.MaximumDifficulty);
+        document.Set("LocalVoice", "KokoroDataDirectory", settings.LocalVoice.KokoroDataDirectory);
+        document.Set("LocalVoice", "KokoroDirectory", settings.LocalVoice.KokoroDirectory); document.Set("LocalVoice", "WhisperDirectory", settings.LocalVoice.WhisperDirectory);
+        document.Set("LocalVoice", "PortugueseVoice", settings.LocalVoice.PortugueseVoice); document.Set("LocalVoice", "EnglishVoice", settings.LocalVoice.EnglishVoice);
+        document.SetNumber("LocalVoice", "Threads", settings.LocalVoice.Threads); document.SetBoolean("LocalVoice", "DetectLanguage", settings.LocalVoice.DetectLanguage);
 
-        document.SetBoolean(GenerativeAiSection, "Enabled", settings.GenerativeAi.Enabled);
         document.SetBoolean("ChatGPT", "Enabled", settings.ChatGpt.Enabled); document.Set("ChatGPT", "Model", settings.ChatGpt.Model);
         document.SetBoolean("ChatGPT", "ShareContext", settings.ChatGpt.ShareContext); document.SetBoolean("ChatGPT", "AllowAutomatic", settings.ChatGpt.AllowAutomatic);
+        document.SetBoolean("ChatGPT", "AllowMax", settings.ChatGpt.AllowMax);
+        document.Set("ChatGPT", "MaxModel", settings.ChatGpt.MaxModel);
         document.SetBoolean("ChatGPT", "IncludedPlanOnly", settings.ChatGpt.IncludedPlanOnly); document.Set("ChatGPT", "Selection", settings.ProviderSelection.ToString());
         document.Set("ChatGPT", "Registration", settings.ChatGpt.Registration?.ToString("N") ?? "");
         document.SetNumber("CognitiveTasks", "MaximumCycles", settings.CognitiveTasks.MaximumCycles); document.SetNumber("CognitiveTasks", "ActiveMinutes", settings.CognitiveTasks.ActiveMinutes);
@@ -270,10 +302,12 @@ public sealed class IniSettingsStore : ISettingsStore
         document.SetNumber("CognitiveTasks", "MaximumProviderCalls", settings.CognitiveTasks.MaximumProviderCalls); document.SetNumber("CognitiveTasks", "IdleMinutes", settings.CognitiveTasks.IdleMinutes);
         document.SetNumber("CognitiveTasks", "ToolTimeoutSeconds", settings.CognitiveTasks.ToolTimeoutSeconds);
         document.SetNumber("Diagnostics", "MinimumLevel", (int)settings.DiagnosticLevel);
+        document.SetBoolean(GenerativeAiSection, "Enabled", settings.GenerativeAi.Enabled);
         document.Set(GenerativeAiSection, "Provider", settings.GenerativeAi.Provider);
         document.Set(GenerativeAiSection, "Model", settings.GenerativeAi.Model);
-        document.Set(GenerativeAiSection, "Persona", settings.GenerativeAi.Persona);
         document.Set(GenerativeAiSection, "LiveVoice", settings.GenerativeAi.LiveVoice);
+        document.Set(GenerativeAiSection, "LightProvider", settings.GenerativeAi.LightProvider.ToString());
+        document.Set(GenerativeAiSection, "Persona", settings.GenerativeAi.Persona);
         document.SetBoolean(GenerativeAiSection, "ContinuousListening", settings.GenerativeAi.ContinuousListening);
         document.SetNumber(GenerativeAiSection, "SilenceDurationMs", settings.GenerativeAi.SilenceDurationMs);
 

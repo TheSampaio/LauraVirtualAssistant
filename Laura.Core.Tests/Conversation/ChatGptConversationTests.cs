@@ -3,6 +3,8 @@ using System.Text.Json;
 using Laura.Core.ChatGpt;
 using Laura.Core.Configuration;
 using Laura.Core.Conversation;
+using Laura.Core.Engine;
+using Laura.Core.Skills;
 using Laura.Core.Tests.TestDoubles;
 
 namespace Laura.Core.Tests.Conversation;
@@ -10,13 +12,23 @@ namespace Laura.Core.Tests.Conversation;
 /// <summary>Verifies shared native tools, data-disclosure opt-in and stable task identities across independent ChatGPT rounds.</summary>
 public sealed class ChatGptConversationTests
 {
+    /// <summary>Exceptional work uses the separately verified Max model instead of the ordinary model.</summary>
+    [Fact]
+    public async Task MaxUsesSeparateModel()
+    {
+        var inference = new RecordingChatGptInference(); var settings = Settings(false);
+        await settings.UpdateAsync(settings.Current with { ChatGpt = settings.Current.ChatGpt with { MaxModel = "verified-max-model", AllowMax = true } });
+        using var engine = new ChatGptConversationEngine(inference, settings, new WorkingConversationMemory(), new LocalAgentTools());
+        await engine.AskAsync(Turn() with { Prompt = "Use modo max for this synthetic fixture." });
+        Assert.Equal("verified-max-model", Assert.Single(inference.Requests).Model);
+    }
     /// <summary>Context-limit recovery discards oversized protocol/retrieval context while keeping a bounded recent conversation and the same native task.</summary>
     [Fact]
     public async Task ContextRecoveryRebuildsBoundedInput()
     {
         var inference = new RecordingChatGptInference(); for (int index = 0; index < 4; index++) { inference.Results.Enqueue(Call("old" + index)); }
         var memory = new WorkingConversationMemory(); var tools = new LocalAgentTools(); var turn = Turn();
-        using var engine = new ChatGptConversationEngine(inference, Settings(true), memory, tools, localizer: new StubLocalizer());
+        using var engine = new ChatGptConversationEngine(inference, Settings(true), memory, tools);
         await engine.AskAsync(turn); Assert.NotNull(engine.PendingRound(turn.TurnId));
         await engine.AskAsync(turn with { TurnId = Guid.NewGuid(), ContinuingTaskTurnId = turn.TurnId,
             History = Enumerable.Range(0, 8).Select(index => new ConversationMessage(ConversationMessageSource.Assistant, "history-" + index, DateTimeOffset.UtcNow)).ToArray(),
@@ -34,6 +46,19 @@ public sealed class ChatGptConversationTests
         await settings.UpdateAsync(settings.Current with { ChatGpt = settings.Current.ChatGpt with { Registration = Guid.NewGuid() } });
         using var engine = new ChatGptConversationEngine(inference, settings, new WorkingConversationMemory(), new LocalAgentTools());
         Assert.False(engine.IsAvailable); Assert.Null(await engine.AskAsync(Turn())); Assert.Empty(inference.Requests);
+    }
+    /// <summary>ChatGPT receives the editable Laura persona as provider instructions, preserving the selected language.</summary>
+    [Fact]
+    public async Task ChatGptUsesSharedConfiguredPersona()
+    {
+        var inference = new RecordingChatGptInference(); var settings = Settings(true);
+        await settings.UpdateAsync(settings.Current with { GenerativeAi = settings.Current.GenerativeAi with { Persona = "Speak with a measured cadence." } });
+        using var engine = new ChatGptConversationEngine(inference, settings, new WorkingConversationMemory(), new LocalAgentTools());
+        await engine.AskAsync(Turn() with { Culture = CultureInfo.GetCultureInfo("pt-BR") });
+        string instructions = Assert.Single(inference.Requests).Instructions;
+        Assert.Contains("Speak with a measured cadence.", instructions, StringComparison.Ordinal);
+        Assert.Contains("Brazilian Portuguese", instructions, StringComparison.Ordinal);
+        Assert.Contains("one personal assistant across all model providers", instructions, StringComparison.Ordinal);
     }
     /// <summary>Never sends saved dialogue, Brain data or tool definitions without recipient-specific owner opt-in.</summary>
     [Fact]
@@ -108,11 +133,26 @@ public sealed class ChatGptConversationTests
     {
         var inference = new RecordingChatGptInference(); for (int index = 0; index < 4; index++) { inference.Results.Enqueue(Call("call" + index)); }
         var tools = new LocalAgentTools(); var memory = new WorkingConversationMemory(); var turn = Turn();
-        using var engine = new ChatGptConversationEngine(inference, Settings(true), memory, tools, localizer: new StubLocalizer());
-        Assert.Equal("ui.ai.taskCycleSaved", await engine.AskAsync(turn)); Assert.Equal(4, tools.Calls); Assert.NotNull(engine.PendingRound(turn.TurnId));
+        using var engine = new ChatGptConversationEngine(inference, Settings(true), memory, tools);
+        Assert.Null(await engine.AskAsync(turn)); Assert.Null(engine.LastFailure); Assert.Equal(4, tools.Calls); Assert.NotNull(engine.PendingRound(turn.TurnId));
         Assert.Equal("Synthetic completed response.", await engine.AskAsync(turn with { TurnId = Guid.NewGuid(), ContinuingTaskTurnId = turn.TurnId }));
         Assert.Equal(4, tools.Calls); Assert.Null(engine.PendingRound(turn.TurnId));
         Assert.Equal(4, inference.Requests[^1].Input.Count(item => item.TryGetProperty("type", out var type) && type.GetString() == "function_call_output"));
+    }
+    /// <summary>A protocol checkpoint schedules another round without publishing a chat or speech response.</summary>
+    [Fact]
+    public async Task ProtocolCheckpointRemainsSilentInDispatcher()
+    {
+        var inference = new RecordingChatGptInference();
+        for (int index = 0; index < 4; index++) { inference.Results.Enqueue(Call("silent" + index)); }
+        var settings = Settings(true); var memory = new WorkingConversationMemory();
+        using var conversation = new ChatGptConversationEngine(inference, settings, memory, new LocalAgentTools());
+        var dispatcher = new AssistantSkillDispatcher(conversation, settings, new StubUserContext(), memory, new StubLocalizer());
+        var request = SkillRequest.Create("Complete the synthetic task.", CultureInfo.GetCultureInfo("en-US"), DateTimeOffset.UtcNow, SkillRequestSource.Text)
+            with { TurnId = Guid.NewGuid() };
+        SkillResponse response = await dispatcher.DispatchAsync(request);
+        Assert.True(response.Handled); Assert.Null(response.SpokenText);
+        Assert.NotNull(conversation.PendingRound(request.TurnId));
     }
     /// <summary>Builds an authorized synthetic configuration without selecting a real model.</summary>
     private static StubSettingsService Settings(bool share) => new(LauraSettings.Default with { ChatGpt = new() { Enabled = true, Model = "synthetic", ShareContext = share, IncludedPlanOnly = true } });

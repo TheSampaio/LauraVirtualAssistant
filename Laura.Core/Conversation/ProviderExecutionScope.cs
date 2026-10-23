@@ -10,7 +10,7 @@ public sealed class ProviderExecutionScope : IDisposable
     /// <summary>Enters a known provider scope. Args: provider: Native runtime identifier. Raises: ArgumentException for unknown providers.</summary>
     public ProviderExecutionScope(string provider)
     {
-        if (provider is not ("gemini" or "chatgpt" or "local")) { throw new ArgumentException("Unknown execution provider.", nameof(provider)); }
+        if (provider is not ("chatgpt" or "local" or "gemini")) { throw new ArgumentException("Unknown execution provider.", nameof(provider)); }
         _previous = ActiveProvider.Value; ActiveProvider.Value = provider;
     }
 
@@ -20,8 +20,8 @@ public sealed class ProviderExecutionScope : IDisposable
     /// <summary>Gets the fixed actual disclosure host. Raises: InvalidOperationException when no runtime is bound.</summary>
     public static string Destination => Provider switch
     {
-        "gemini" => "generativelanguage.googleapis.com",
         "chatgpt" => "api.openai.com",
+        "gemini" => "generativelanguage.googleapis.com",
         "local" => "",
         _ => throw new InvalidOperationException("Disclosure requires a trusted execution provider."),
     };

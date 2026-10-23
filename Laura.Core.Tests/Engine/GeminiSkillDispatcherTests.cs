@@ -9,7 +9,7 @@ using Laura.Core.Tests.TestDoubles;
 namespace Laura.Core.Tests.Engine;
 
 /// <summary>Checks natural app routing and privacy boundaries through the selected provider.</summary>
-public sealed class GeminiSkillDispatcherTests : IDisposable
+public sealed class AssistantSkillDispatcherTests : IDisposable
 {
     /// <summary>Recognized capabilities consume no reasoning calls even when ChatGPT works independently of disabled Gemini.</summary>
     [Theory]
@@ -22,7 +22,7 @@ public sealed class GeminiSkillDispatcherTests : IDisposable
         var skill = new FakeSkill("native-fixture", 1, "native command", SkillResponse.Speak("Native evidence"));
         var localizer = new StubLocalizer(); var user = new StubUserContext(); var memory = CreateMemory();
         var local = new SkillDispatcher([skill], localizer, conversation, settings, user, Microsoft.Extensions.Logging.Abstractions.NullLogger<SkillDispatcher>.Instance, memory);
-        var dispatcher = new GeminiSkillDispatcher(conversation, settings, user, memory, localizer, local);
+        var dispatcher = new AssistantSkillDispatcher(conversation, settings, user, memory, localizer, local);
         var request = SkillRequest.Create("native command", CultureInfo.GetCultureInfo("en-US"), DateTimeOffset.UtcNow, SkillRequestSource.Text) with { TurnId = Guid.NewGuid() };
         Assert.False(dispatcher.CanUseGenerativeFallback(request));
         Assert.Equal("Native evidence", (await dispatcher.DispatchAsync(request)).SpokenText);
@@ -43,7 +43,7 @@ public sealed class GeminiSkillDispatcherTests : IDisposable
         var settings = new StubSettingsService(LauraSettings.Default with { GenerativeAi = new() { Provider = selected } });
         var localizer = new StubLocalizer(); var user = new StubUserContext(); var memory = CreateMemory();
         var local = new SkillDispatcher([], localizer, conversation, settings, user, Microsoft.Extensions.Logging.Abstractions.NullLogger<SkillDispatcher>.Instance, memory);
-        var dispatcher = new GeminiSkillDispatcher(conversation, settings, user, memory, localizer, local);
+        var dispatcher = new AssistantSkillDispatcher(conversation, settings, user, memory, localizer, local);
         var answer = await dispatcher.DispatchAsync(SkillRequest.Create("Synthetic unrecognized request", CultureInfo.GetCultureInfo("pt-BR"), DateTimeOffset.UtcNow, SkillRequestSource.Text));
         Assert.Equal("ui.ai.failure.usage ui.ai.failure.priorEffects", answer.SpokenText); Assert.Equal(1, conversation.CallCount);
     }
@@ -55,7 +55,7 @@ public sealed class GeminiSkillDispatcherTests : IDisposable
         var skill = new FakeSkill("native-fixture", 1, "native command", SkillResponse.Speak("Observed native result"));
         var localizer = new StubLocalizer(); var user = new StubUserContext(); var memory = CreateMemory();
         var local = new SkillDispatcher([skill], localizer, conversation, settings, user, Microsoft.Extensions.Logging.Abstractions.NullLogger<SkillDispatcher>.Instance, memory);
-        var dispatcher = new GeminiSkillDispatcher(conversation, settings, user, memory, localizer, local);
+        var dispatcher = new AssistantSkillDispatcher(conversation, settings, user, memory, localizer, local);
         var request = SkillRequest.Create("native command", CultureInfo.GetCultureInfo("pt-BR"), DateTimeOffset.UtcNow, SkillRequestSource.Text);
         Assert.False(dispatcher.CanUseGenerativeFallback(request));
         Assert.Equal("Observed native result", (await dispatcher.DispatchAsync(request)).SpokenText); Assert.Equal(1, skill.ExecutionCount); Assert.Equal(0, conversation.CallCount);
@@ -77,7 +77,7 @@ public sealed class GeminiSkillDispatcherTests : IDisposable
     public async Task Dispatch_AppRequestUsesGeminiWithBrazilianLocaleAndRespectsMemoryPreference(bool remember, int expectedHistory)
     {
         var conversation = new RecordingConversationEngine(true, "Aplicativo aberto.");
-        var dispatcher = new GeminiSkillDispatcher(conversation, new StubSettingsService(LauraSettings.Default with { RememberConversations = remember }),
+        var dispatcher = new AssistantSkillDispatcher(conversation, new StubSettingsService(LauraSettings.Default with { RememberConversations = remember }),
             new StubUserContext(), CreateMemory(), new StubLocalizer());
         var request = SkillRequest.Create("Abra o meu emulador de PS2", CultureInfo.GetCultureInfo("pt-BR"), DateTimeOffset.Now, SkillRequestSource.Text);
         var answer = await dispatcher.DispatchAsync(request);
@@ -92,7 +92,7 @@ public sealed class GeminiSkillDispatcherTests : IDisposable
         memory.Append(new(ConversationMessageSource.UserTyped, "Repeat this question", DateTimeOffset.UtcNow) { TurnId = earlier });
         memory.Append(new(ConversationMessageSource.UserTyped, "Short display title", DateTimeOffset.UtcNow) { TurnId = current });
         var conversation = new RecordingConversationEngine(true, "Answer");
-        var dispatcher = new GeminiSkillDispatcher(conversation, new StubSettingsService(LauraSettings.Default), new StubUserContext(), memory, new StubLocalizer());
+        var dispatcher = new AssistantSkillDispatcher(conversation, new StubSettingsService(LauraSettings.Default), new StubUserContext(), memory, new StubLocalizer());
         await dispatcher.DispatchAsync(SkillRequest.Create("Repeat this question", CultureInfo.GetCultureInfo("en-US"), DateTimeOffset.UtcNow, SkillRequestSource.Context) with { TurnId = current });
         Assert.Equal(current, conversation.LastTurn!.TurnId);
         Assert.DoesNotContain(conversation.LastTurn.History, message => message.TurnId == current);
@@ -102,7 +102,7 @@ public sealed class GeminiSkillDispatcherTests : IDisposable
     public async Task Dispatch_UnconfiguredSelectedProviderRequestsKeyInsteadOfCallingAProvider()
     {
         var conversation = new RecordingConversationEngine(false, null);
-        var dispatcher = new GeminiSkillDispatcher(conversation, new StubSettingsService(LauraSettings.Default with { GenerativeAi = new() { Provider = "gemini" } }), new StubUserContext(), CreateMemory(), new StubLocalizer());
+        var dispatcher = new AssistantSkillDispatcher(conversation, new StubSettingsService(LauraSettings.Default with { GenerativeAi = new() { Provider = "gemini" } }), new StubUserContext(), CreateMemory(), new StubLocalizer());
         var response = await dispatcher.DispatchAsync(SkillRequest.Create("Open Steam", CultureInfo.GetCultureInfo("en-US"), DateTimeOffset.Now, SkillRequestSource.Text));
         Assert.Equal("ui.ai.configureProvider", response.SpokenText); Assert.Equal(0, conversation.CallCount);
     }
