@@ -34,8 +34,6 @@
     <NoWarn>$(NoWarn);CA1848;CA1716;CA1859</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="..\_Output\VulkanRenderer\Laura.VulkanRenderer.dll" Link="Laura.VulkanRenderer.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\Laura.VulkanRenderer\Vulkan-Headers-LICENSE.md" Link="licenses\Vulkan-Headers-LICENSE.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.20" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
   </ItemGroup>
@@ -47,9 +45,6 @@
     <MauiIcon Include="Resources\AppIcon\appicon.svg" Color="#100C11" />
     <MauiImage Include="Resources\Images\*.svg" BaseSize="24,24" />
   </ItemGroup>
-  <Target Name="BuildVulkanRenderer" BeforeTargets="PrepareForBuild">
-    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\Build\Build-VulkanRenderer.ps1&quot;" />
-  </Target>
   <Target Name="CopyLocalVoiceWorker" AfterTargets="Build">
     <ItemGroup>
       <VoiceWorkerFiles Include="..\Laura.VoiceWorker\bin\$(Configuration)\net10.0\win-x64\**\*" />

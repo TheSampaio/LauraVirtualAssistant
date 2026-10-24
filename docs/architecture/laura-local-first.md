@@ -51,8 +51,8 @@ layers to Vulkan when compatible hardware exists. Software Vulkan adapters do no
 qualify. CPU is selected when no compatible GPU is enumerated. A GPU startup failure
 is reported rather than silently rerunning a GPU request on CPU. Qwen3.5-4B Q4_K_M
 is the starter model; local voice uses multilingual Kokoro/Piper and Whisper Small ONNX, with Whisper Base as fallback.
-Whisper and Kokoro use the isolated CPU ONNX worker; Qwen GPU offload and Vulkan HUD
-rendering are independent. No Ollama, Python, Node or global model daemon is needed.
+Whisper and Kokoro use the isolated CPU ONNX worker; the HUD uses native MAUI rendering.
+No Ollama, Python, Node or global model daemon is needed.
 
 Downloads resume into .partial and verify exact size/SHA-256 before rename. Extraction
 rejects links/traversal and checks its inventory on reuse. Differing existing files
@@ -60,14 +60,9 @@ are preserved for inspection. The published application's pinned Microsoft C++
 redistributables are copied beside llama-server.exe with RuntimeLicenses and included
 in its integrity manifest. Imported runtimes still require native trust/hash review.
 
-Preferences offers optional Vulkan reactor acceleration. A bundled native renderer
-owns a Win32 child surface, hardware Vulkan device and swapchain. Presentation and
-resize waits stay on its dedicated thread; no CPU image rasterization/readback is used
-for presentation. Native MAUI/WinUI controls retain the Windows compositor, not a
-claimed Vulkan backend. Hiding/navigating away suspends presentation. Missing Vulkan
-or initialization failure retains the standard vector renderer; disabling Windows
-animations uses the static accessible renderer. The idle UI timer is 10 Hz, active
-feedback at most 30 Hz, with fewer glow passes. Monitor sampling skips hidden panels,
+The reactor uses the native MAUI vector renderer with a 16 ms update interval while
+visible. Hiding or navigating away suspends updates, and disabling Windows animations
+uses the static accessible renderer. Monitor sampling skips hidden panels,
 settings panels load on demand, and streamed bubbles update native text in place at
 most roughly 12 times per second instead of recreating their control trees per token.
 

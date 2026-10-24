@@ -14,8 +14,8 @@ public sealed class IniSettingsStoreTests : IDisposable
     {
         var model = new LocalModelOptions { Enabled = true, Executable = "D:/Synthetic/llama-server.exe", ModelPath = "D:/Synthetic/Qwen.gguf", ExecutableHash = new string('A', 64), ModelHash = new string('B', 64), ContextTokens = 12288, Threads = 3, IdleMinutes = 2, MaximumDifficulty = Laura.Core.Models.TaskDifficulty.Standard };
         var voice = new LocalVoiceOptions { KokoroDirectory = "D:/Synthetic/Models", KokoroDataDirectory = "D:/Synthetic/Runtime/espeak-ng-data", WhisperDirectory = "D:/Synthetic/Models", EnglishVoice = "af_bella", DetectLanguage = true };
-        var store = CreateStore(); await store.SaveAsync(LauraSettings.Default with { LocalModel = model, LocalVoice = voice, VulkanInterface = true }); var loaded = await store.LoadAsync();
-        Assert.True(loaded.VulkanInterface); Assert.Equal(-1, loaded.LocalModel.GpuLayers);
+        var store = CreateStore(); await store.SaveAsync(LauraSettings.Default with { LocalModel = model, LocalVoice = voice }); var loaded = await store.LoadAsync();
+        Assert.Equal(-1, loaded.LocalModel.GpuLayers);
         Assert.Equal(model, loaded.LocalModel); Assert.Equal(voice, loaded.LocalVoice); Assert.False(loaded.GenerativeAi.Enabled); Assert.False(loaded.ChatGpt.Enabled);
         Assert.Equal(new byte[] { 0xef, 0xbb, 0xbf }, (await File.ReadAllBytesAsync(_filePath)).Take(3));
     }

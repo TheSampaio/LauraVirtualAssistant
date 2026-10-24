@@ -25,8 +25,7 @@ files stay outside Models. Compatible GPUs are selected automatically through Vu
 machines without compatible GPUs use CPU. No separate Ollama installation is needed.
 
 Settings uses a vertical navigation rail, with GPT in Connections and MCP last.
-Preferences offers optional Vulkan acceleration for the reactor; native controls
-keep the Windows compositor. See the [operation guide](docs/architecture/laura-local-first.md).
+The reactor uses native MAUI rendering. See the [operation guide](docs/architecture/laura-local-first.md).
 
 ## Conversation and execution
 

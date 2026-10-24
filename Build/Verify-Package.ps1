@@ -12,7 +12,6 @@ $required = @('Laura.exe', 'Laura.dll', 'Laura.runtimeconfig.json', 'coreclr.dll
     'Microsoft.IdentityModel.JsonWebTokens.dll', 'Microsoft.IdentityModel.Tokens.dll', 'licenses/Microsoft.IdentityModel-8.16.0-LICENSE.txt',
     'Install-CredentialBroker.ps1', 'CredentialBroker/Laura.CredentialBroker.exe', 'CredentialBroker/broker-manifest.json',
     'CredentialBroker/System.ServiceProcess.ServiceController.dll', 'CredentialBroker/System.Diagnostics.EventLog.dll',
-    'Laura.VulkanRenderer.dll', 'licenses/Vulkan-Headers-LICENSE.md',
     'VoiceWorker/Laura.VoiceWorker.exe', 'VoiceWorker/onnxruntime.dll', 'VoiceWorker/sherpa-onnx-c-api.dll',
     'VoiceSources/source-manifest.json', 'VoiceSources/voice-source-assets.json', 'licenses/eSpeak-NG-GPL-3.0.txt', 'licenses/sherpa-onnx-1.13.8-LICENSE.txt')
 foreach ($relative in $required) {

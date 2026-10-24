@@ -253,7 +253,6 @@ public static class ServiceConfiguration
         services.AddSingleton<IDesktopTools, MauiDesktopTools>();
         services.AddSingleton<MauiShellController>();
         services.AddSingleton<Laura.Core.Abstractions.IShellController>(provider => provider.GetRequiredService<MauiShellController>());
-        services.AddSingleton<Laura.App.Controls.VulkanReactorHost>();
         services.AddSingleton<MainPage>();
         services.AddTransient<SetupPage>();
         services.AddTransient<MemoryPage>();

@@ -118,7 +118,6 @@ public sealed class IniSettingsStore : ISettingsStore
             DiagnosticLevel = (Microsoft.Extensions.Logging.LogLevel)document.GetInt32("Diagnostics", "MinimumLevel", 2),
             Culture = document.GetString(GeneralSection, "Language", defaults.Culture),
             UiCulture = document.GetString(GeneralSection, "UiLanguage", defaults.UiCulture),
-            VulkanInterface = document.GetBoolean(GeneralSection, "VulkanInterface", false),
             InputDevice = document.GetInt32(VoiceSection, "InputDevice", defaults.InputDevice),
             OutputDevice = document.GetInt32(VoiceSection, "OutputDevice", defaults.OutputDevice),
             MicrophoneMuted = document.GetBoolean(VoiceSection, "MicrophoneMuted", defaults.MicrophoneMuted),
@@ -236,7 +235,6 @@ public sealed class IniSettingsStore : ISettingsStore
 
         document.Set(GeneralSection, "Language", settings.Culture);
         document.Set(GeneralSection, "UiLanguage", settings.UiCulture);
-        document.SetBoolean(GeneralSection, "VulkanInterface", settings.VulkanInterface);
         document.SetNumber(VoiceSection, "InputDevice", settings.InputDevice);
         document.SetNumber(VoiceSection, "OutputDevice", settings.OutputDevice);
         document.SetBoolean(VoiceSection, "MicrophoneMuted", settings.MicrophoneMuted);

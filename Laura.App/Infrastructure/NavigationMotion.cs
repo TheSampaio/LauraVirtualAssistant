@@ -5,7 +5,7 @@ internal static class NavigationMotion
 {
     private static readonly global::Windows.UI.ViewManagement.UISettings Accessibility = new();
     /// <summary>Gets the shared navigation transition duration in milliseconds.</summary>
-    internal const uint Duration = 300;
+    internal const uint Duration = 160;
 
     /// <summary>Opens a page immediately with a short, accessible arrival transition.</summary>
     internal static async Task PushAsync(INavigation navigation, Page page)

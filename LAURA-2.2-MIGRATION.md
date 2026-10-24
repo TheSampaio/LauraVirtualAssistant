@@ -14,7 +14,7 @@ The default model directory is `Documents/Laura Virtual Assistant/Models`, besid
 
 Whisper Small is preferred for English and Brazilian Portuguese recognition, with Base as fallback. Language detection is enabled by default. Portuguese speech defaults to the female Brazilian Piper Dii voice (`pt_dii`); the female UK English Piper Cori voice (`gb_cori`) is available alongside female American Kokoro voices. Dii is CC BY-NC-ND 4.0 for noncommercial use with TigreGotico Lda attribution. Cori is described as UK English by its model card; a specific Modern RP accent was not independently verified. The Sherpa Kokoro v1.0 package produces silence with its British phonemizer path, so the app uses Piper Cori for British pronunciation.
 
-The optional Vulkan HUD uses a real hardware swapchain on a separate render thread. It preserves the red palette, grid, segmented rings and central labels of the normal orb. Its rasterization remains visually less smooth than the MAUI vector view; exact pixel parity is still open. Native controls stay on WinUI.
+At the 2.2 delivery, the optional Vulkan HUD used a hardware swapchain on a separate render thread. It was later removed; the current HUD uses the native MAUI vector view. Native controls stay on WinUI.
 
 ## Executed checks
 
