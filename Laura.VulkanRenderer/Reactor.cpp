@@ -223,7 +223,7 @@ struct Reactor {
             Initialize(); status = 1;
             while (!stop) {
                 if (visible && IsWindowVisible(window) && !IsIconic(GetAncestor(window, GA_ROOT))) { Draw(); }
-                std::this_thread::sleep_for(std::chrono::milliseconds(visible ? (mode.load() ? 33 : 67) : 100));
+                std::this_thread::sleep_for(std::chrono::milliseconds(visible ? 33 : 100));
             }
         } catch (...) { status = -1; }
         if (device) {

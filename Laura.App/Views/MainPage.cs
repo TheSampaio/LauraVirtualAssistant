@@ -320,7 +320,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     {
         base.OnAppearing(); _pageVisible = true; _lastFrame = Stopwatch.GetTimestamp(); Reload(); InvalidateReactor();
         _timer ??= Dispatcher.CreateTimer();
-        _timer.Interval = TimeSpan.FromMilliseconds(67); _timer.Tick -= Tick; _timer.Tick += Tick;
+        _timer.Interval = TimeSpan.FromMilliseconds(33); _timer.Tick -= Tick; _timer.Tick += Tick;
         if (_windowVisible) { _timer.Start(); }
     }
     /// <inheritdoc />
@@ -334,7 +334,6 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _core.Mode = _smokeMode ?? (_live.IsPlaying ? ReactorMode.Speaking : _live.IsThinking || _engine.State == AssistantState.Thinking ? ReactorMode.Thinking : _live.IsListening ? ReactorMode.Listening : _engine.State == AssistantState.Working ? ReactorMode.Working : ReactorMode.Idle);
         if (_visualMode != _core.Mode) { _visualMode = _core.Mode; RefreshFeedback(); }
         bool animate = _accessibility.AnimationsEnabled && _center.IsVisible;
-        if (_timer is not null) { _timer.Interval = TimeSpan.FromMilliseconds(_core.Active && _center.IsVisible ? 33 : 100); }
         long frame = Stopwatch.GetTimestamp();
         double frameDelay = Stopwatch.GetElapsedTime(_lastFrame, frame).TotalMilliseconds;
         if (_windowVisible && _pageVisible && frameDelay > 100) { Laura.Core.Diagnostics.LauraDiagnostics.Record("ui.dispatcher_gap", frameDelay); }
