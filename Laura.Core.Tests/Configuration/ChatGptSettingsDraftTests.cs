@@ -10,7 +10,8 @@ public sealed class ChatGptSettingsDraftTests
     [Fact]
     public void MissingBrokerMetadataIsNotLogout()
     {
-        var saved = new ChatGptOptions { Registration = Guid.NewGuid(), Enabled = true, IncludedPlanOnly = true, ShareContext = true, AllowAutomatic = true, Model = "discovered-owner-model" };
+        var saved = new ChatGptOptions { Registration = Guid.NewGuid(), Enabled = true, IncludedPlanOnly = true, ShareContext = true,
+            AllowAutomatic = true, AllowMax = true, Model = "discovered-owner-model", MaxModel = "verified-max-model" };
         Assert.Same(saved, ChatGptSettingsDraft.Reconcile(saved, new(null, [], "disconnected", "broker_required")));
         Assert.Same(saved, ChatGptSettingsDraft.Reconcile(saved, new(saved.Registration, [], "plan_authorized")));
     }
@@ -21,11 +22,12 @@ public sealed class ChatGptSettingsDraftTests
     [InlineData(true)]
     public void NewAccountAndExplicitDisconnectClearConsent(bool disconnected)
     {
-        var saved = new ChatGptOptions { Registration = Guid.NewGuid(), Enabled = true, IncludedPlanOnly = true, ShareContext = true, AllowAutomatic = true, Model = "discovered-owner-model" };
+        var saved = new ChatGptOptions { Registration = Guid.NewGuid(), Enabled = true, IncludedPlanOnly = true, ShareContext = true,
+            AllowAutomatic = true, AllowMax = true, Model = "discovered-owner-model", MaxModel = "verified-max-model" };
         Guid other = Guid.NewGuid();
         var result = ChatGptSettingsDraft.Reconcile(saved, new(other, [], "plan_authorized"), disconnected);
         Assert.Equal(disconnected ? null : (Guid?)other, result.Registration);
         Assert.False(result.Enabled); Assert.False(result.IncludedPlanOnly); Assert.False(result.ShareContext); Assert.False(result.AllowAutomatic);
-        Assert.Equal(saved.Model, result.Model);
+        Assert.False(result.AllowMax); Assert.Empty(result.Model); Assert.Empty(result.MaxModel);
     }
 }

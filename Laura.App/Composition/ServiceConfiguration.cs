@@ -86,10 +86,6 @@ public static class ServiceConfiguration
         services.AddSingleton<ICognitiveTaskJournal>(provider => new FileCognitiveTaskJournal(
             Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Tasks"), provider.GetRequiredService<IPrivateDataProtector>()));
         services.AddSingleton<CognitiveTasks>();
-        services.AddSingleton<IProviderModelCatalog>(provider => Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)
-            ? new UiSmokeModelCatalog()
-            : new ProviderModelCatalog(new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan },
-                Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "ModelCatalog")));
         services.AddSingleton(provider => new PermissionStore(Path.Combine(provider.GetRequiredService<AssistantStorage>().Directory, "Security", "permissions.json")));
         services.AddSingleton(provider => new PermissionManager(provider.GetRequiredService<PermissionStore>(),
             () =>
@@ -134,7 +130,8 @@ public static class ServiceConfiguration
         services.AddSingleton(provider => new ChatGptBrokerClient(provider.GetRequiredService<ChatGptCredentialStore>(), Path.Combine(chatGptDirectory, "Credentials")));
         services.AddSingleton<UiSmokeChatGptConnection>();
         bool offlineChatGptSmoke = Environment.GetCommandLineArgs().Contains("--ui-smoke", StringComparer.Ordinal)
-            && !Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal);
+            && !Environment.GetCommandLineArgs().Contains("--chatgpt-live-smoke", StringComparer.Ordinal)
+            && !Environment.GetCommandLineArgs().Contains("--spoken-providers-smoke", StringComparer.Ordinal);
         services.AddSingleton<IChatGptConnection>(provider => offlineChatGptSmoke ? provider.GetRequiredService<UiSmokeChatGptConnection>() : provider.GetRequiredService<ChatGptBrokerClient>());
         services.AddSingleton<IChatGptInference>(provider => offlineChatGptSmoke ? provider.GetRequiredService<UiSmokeChatGptConnection>() : provider.GetRequiredService<ChatGptBrokerClient>());
         services.AddSingleton<IChatGptBrokerSetup>(_ => new ChatGptBrokerSetup(AppContext.BaseDirectory));
@@ -155,7 +152,18 @@ public static class ServiceConfiguration
         services.AddSingleton<IWeatherProvider, WttrWeatherProvider>();
         services.AddSingleton<WeatherGreetingFormatter>();
 
+        services.AddSingleton(provider => new LlamaCppRuntime(provider.GetRequiredService<ISettingsService>(),
+            new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false, ConnectTimeout = TimeSpan.FromSeconds(3) }) { Timeout = Timeout.InfiniteTimeSpan }));
+        services.AddSingleton(provider => new LlamaCppTextClient(provider.GetRequiredService<LlamaCppRuntime>(),
+            new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = Timeout.InfiniteTimeSpan }, provider.GetRequiredService<ISettingsService>()));
+        services.AddKeyedSingleton<TextConversationEngine>("local", (provider, _) => new TextConversationEngine(provider.GetRequiredService<LlamaCppTextClient>(),
+            provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<IConversationMemory>(), provider.GetRequiredService<IAssistantTools>(),
+            provider.GetRequiredService<BrainContextBuilder>(), provider.GetRequiredService<CognitiveTasks>(), provider.GetRequiredService<BrainSkills>(), provider.GetRequiredService<PermissionManager>()));
         services.AddSingleton<GeminiLiveClient>();
+        services.AddSingleton<IVoiceInput, WhisperSpeechRecognizer>();
+        services.AddSingleton<LocalVoiceWorkerClient>();
+        services.AddSingleton<LocalVoiceSession>();
+        services.AddSingleton(_ => new LocalPackInstaller(new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan }));
         services.AddSingleton<ListeningControl>();
         services.AddSingleton<WindowsClapListener>();
         services.AddSingleton<WakeBriefing>();
@@ -164,8 +172,9 @@ public static class ServiceConfiguration
         services.AddSingleton<IBriefingContributor, WeatherBriefingContributor>();
         services.AddSingleton<IBriefingContributor, ReminderBriefingContributor>();
         services.AddSingleton<ClapWakeCoordinator>();
-        services.AddSingleton<MarkLvConfigurationImporter>();
-        services.AddSingleton(provider => new ConversationProviderRouter(provider.GetRequiredService<ISettingsService>(), provider.GetRequiredService<GeminiLiveClient>(), provider.GetRequiredService<ChatGptConversationEngine>(), provider.GetRequiredService<CognitiveTasks>()));
+        services.AddSingleton(provider => new ConversationProviderRouter(provider.GetRequiredService<ISettingsService>(),
+            provider.GetRequiredService<ChatGptConversationEngine>(), provider.GetRequiredService<CognitiveTasks>(),
+            provider.GetRequiredKeyedService<TextConversationEngine>("local"), provider.GetRequiredService<GeminiLiveClient>()));
         services.AddSingleton<IConversationEngine>(provider => provider.GetRequiredService<ConversationProviderRouter>());
         services.AddSingleton<WindowsApplicationCatalog>();
         services.AddSingleton<WindowsResourceMonitor>();
@@ -177,7 +186,7 @@ public static class ServiceConfiguration
 
         AddSkills(services);
         services.AddSingleton<SkillDispatcher>();
-        services.AddSingleton<ISkillDispatcher, GeminiSkillDispatcher>();
+        services.AddSingleton<ISkillDispatcher, AssistantSkillDispatcher>();
 
         services.AddSingleton<IAssistantEngine, AssistantEngine>();
         services.AddSingleton<HourlyAnnouncer>();
@@ -191,6 +200,11 @@ public static class ServiceConfiguration
     /// </summary>
     private static void AddSkills(IServiceCollection services)
     {
+        services.AddSingleton<ISkill, CancelTaskSkill>();
+        services.AddSingleton<ISkill>(provider => new SwitchProviderSkill(provider.GetRequiredService<ILocalizer>(),
+            provider.GetRequiredService<ISettingsService>(), () => provider.GetRequiredService<ChatGptConversationEngine>().IsAvailable,
+            () => provider.GetRequiredService<LlamaCppTextClient>().IsAvailable,
+            () => provider.GetRequiredService<GeminiLiveClient>().IsAvailable));
         services.AddSingleton<ISkill, OpenSettingsSkill>();
         services.AddSingleton<ISkill, DesktopToolSkill>();
         services.AddSingleton<ISkill, TimeSkill>();
@@ -213,7 +227,8 @@ public static class ServiceConfiguration
     /// </summary>
     private static void AddPlatform(IServiceCollection services)
     {
-        services.AddSingleton<ISpeechSynthesizer, SpeechRouter>();
+        services.AddSingleton<KokoroSpeechSynthesizer>();
+        services.AddSingleton<ISpeechSynthesizer, ProviderSpeechRouter>();
         services.AddSingleton<ISystemController, WindowsSystemController>();
         services.AddSingleton<IProcessLauncher, WindowsProcessLauncher>();
         services.AddSingleton<ICommandExecutor, WindowsCommandExecutor>();
@@ -238,6 +253,7 @@ public static class ServiceConfiguration
         services.AddSingleton<IDesktopTools, MauiDesktopTools>();
         services.AddSingleton<MauiShellController>();
         services.AddSingleton<Laura.Core.Abstractions.IShellController>(provider => provider.GetRequiredService<MauiShellController>());
+        services.AddSingleton<Laura.App.Controls.VulkanReactorHost>();
         services.AddSingleton<MainPage>();
         services.AddTransient<SetupPage>();
         services.AddTransient<MemoryPage>();

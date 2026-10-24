@@ -38,8 +38,12 @@ public sealed record ConversationTurn(string Prompt, CultureInfo Culture, string
     public string ImageMimeType { get; init; } = "image/png";
     /// <summary>Gets a native continuation's original turn identity; it never grants or restores an execution authorization.</summary>
     public Guid ContinuingTaskTurnId { get; init; }
+    /// <summary>Gets whether this native request contains the complete startup briefing facts.</summary>
+    public bool IsStartupBriefing { get; init; }
     /// <summary>Gets a native structured task requirement; ordinary input remains routine regardless of wording.</summary>
     public CognitiveTaskDemand TaskDemand { get; init; }
     /// <summary>Gets native progress/recovery evidence; this value never originates in a model-supplied tool argument.</summary>
     public CognitiveTaskRouting? TaskRouting { get; init; }
+    /// <summary>Gets the native recommended difficulty floor; it never grants access to a provider or budget.</summary>
+    public Models.TaskDifficulty Difficulty => Models.TaskDifficultyClassifier.Classify(Prompt, TaskDemand, Image is not null);
 }

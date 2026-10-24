@@ -5,6 +5,7 @@ using Laura.Core.Abstractions;
 using Laura.Core.Conversation;
 using Laura.Core.Engine;
 using Laura.Platform.Windows.Conversation;
+using Laura.Platform.Windows.Speech;
 using Laura.Platform.Windows.System;
 using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics;
@@ -19,16 +20,20 @@ public sealed partial class MainPage : ContentPage, IDisposable
     private readonly IAssistantEngine _engine;
     private readonly ISettingsService _settings;
     private readonly IUiLocalizer _ui;
-    private readonly GeminiLiveClient _live;
+    private readonly LocalVoiceSession _live;
+    private readonly TextConversationEngine _localText;
     private readonly ChatGptConversationEngine _chatGpt;
     private readonly AssistantCoreDrawable _core = new();
     private readonly GraphicsView _reactor;
+    private readonly VulkanReactorHost _vulkan;
     private readonly Grid _body = new() { ColumnSpacing = 16, RowSpacing = 16 };
     private readonly ObservableCollection<ConversationMessage> _messages = [];
     private readonly CollectionView _chat;
     private readonly Editor _draft = new() { AutoSize = EditorAutoSizeOption.TextChanges, MinimumHeightRequest = 44, MaximumHeightRequest = 180, TextColor = Theme.Text, FontSize = 14, PlaceholderColor = Theme.Muted };
     private readonly Label _status = Theme.Label("Ready", 15, Theme.Accent);
     private readonly Label _provider = Theme.Label("", 12, Theme.Muted);
+    private readonly Label _taskProgress = Theme.Label("", 11, Theme.Muted);
+    private readonly CognitiveTasks _tasks;
     private readonly Label _clock = Theme.Label("", 22, Theme.Accent);
     private readonly Label _metrics = Theme.Label("", 11, Theme.Muted);
     private readonly ResourceMeter _cpuMeter = new("cpu"), _memoryMeter = new("memory_stick"), _networkMeter = new("ethernet");
@@ -58,7 +63,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     private readonly Label _activityTitle;
     private readonly ImageButton _setupButton;
     private readonly Button _approvalsButton;
-    private readonly Button _memoryButton;
+    private readonly ImageButton _memoryButton;
     private readonly ImageButton _tasksButton;
     private readonly ImageButton _interruptButton;
     private readonly ImageButton _microphoneButton;
@@ -86,11 +91,14 @@ public sealed partial class MainPage : ContentPage, IDisposable
     private readonly global::Windows.UI.ViewManagement.UISettings _accessibility = new();
 
     /// <summary>Composes the HUD and subscribes to domain and Live events through the UI dispatcher.</summary>
-    public MainPage(IServiceProvider services, IAssistantEngine engine, ISettingsService settings, IUiLocalizer ui, GeminiLiveClient live, WindowsResourceMonitor resources, WindowsClapListener clapListener)
+    public MainPage(IServiceProvider services, IAssistantEngine engine, ISettingsService settings, IUiLocalizer ui, LocalVoiceSession live, WindowsResourceMonitor resources, WindowsClapListener clapListener)
     {
         using var performance = PerformanceTrace.Measure("hud.construct");
         _services = services; _engine = engine; _settings = settings; _ui = ui; _live = live; _resources = resources; _clapListener = clapListener;
+        _vulkan = services.GetRequiredService<VulkanReactorHost>();
+        _tasks = services.GetRequiredService<CognitiveTasks>(); _tasks.Changed += OnTaskProgress;
         _chatGpt = services.GetRequiredService<ChatGptConversationEngine>();
+        _localText = services.GetRequiredKeyedService<TextConversationEngine>("local");
         _conversations = services.GetRequiredService<ConversationActions>();
         _returnLatest = Theme.IconButton("chevron_down", FollowLatestAsync);
         _returnLatest.IsVisible = false; _returnLatestHost.Add(_returnLatest);
@@ -106,7 +114,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _chat.ItemTemplate = new DataTemplate(() =>
         {
             var cell = new ContentView { Padding = new Thickness(0, 4, 4, 8) };
-            cell.BindingContextChanged += (_, _) => { if (cell.BindingContext is ConversationMessage message) { cell.Content = new ConversationBubble(message, Author(message), _ui); } };
+            cell.BindingContextChanged += (_, _) => { if (cell.BindingContext is ConversationMessage message) { if (cell.Content is ConversationBubble existing && existing.Message.Source == message.Source) { existing.Update(message); existing.SetAuthor(Author(message)); } else { cell.Content = new ConversationBubble(message, Author(message), _ui); } } };
             return cell;
         });
         _chat.Loaded += (_, _) => AttachConversationScroll(); _chat.HandlerChanged += (_, _) => AttachConversationScroll(); _chat.SizeChanged += (_, _) => RequestConversationScroll();
@@ -116,7 +124,8 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _approvalsButton = Theme.ActionButton("", "shield_check", () => { _services.GetRequiredService<Laura.App.Platforms.Windows.WindowsApprovalCenter>().Show(); return Task.CompletedTask; });
         _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed += OnApprovalsChanged;
         UpdateApprovals();
-        _memoryButton = Theme.ActionButton("", "brain", OpenBrainAsync);
+        _memoryButton = Theme.IconButton("brain", OpenBrainAsync);
+        Theme.DescribeAction(_memoryButton, _ui.Get("ui.brain.title"));
         _tasksButton = Theme.IconButton("activity", () => NavigationMotion.PushAsync(Navigation, _services.GetRequiredService<TasksPage>()));
         _interruptButton = Theme.IconButton("square", InterruptAsync);
         _microphoneButton = Theme.IconButton("mic_off", ToggleMicrophoneAsync);
@@ -134,7 +143,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
         var centerGrid = new Grid { RowDefinitions = [new(GridLength.Auto), new(GridLength.Star), new(GridLength.Auto)], RowSpacing = 12 };
         centerGrid.Add(SectionHeader("audio_lines", _coreTitle)); centerGrid.Add(_reactor, 0, 1);
         var footer = new Grid { ColumnDefinitions = [new(GridLength.Star), new(GridLength.Auto)], ColumnSpacing = 12 };
-        var state = Theme.Stack(_status, _provider); state.Spacing = 4; state.VerticalOptions = LayoutOptions.Center;
+        var state = Theme.Stack(_status, _provider, _taskProgress); state.Spacing = 4; state.VerticalOptions = LayoutOptions.Center;
         footer.Add(state); footer.Add(new HorizontalStackLayout { Spacing = 8, Children = { _tasksButton, _memoryButton } }, 1); centerGrid.Add(footer, 0, 2); _center = Theme.Card(centerGrid, 20);
         _center.BackgroundColor = Theme.Background;
         var chatGrid = new Grid { RowDefinitions = [new(GridLength.Auto), new(GridLength.Star), new(GridLength.Auto)], RowSpacing = 16 };
@@ -167,9 +176,9 @@ public sealed partial class MainPage : ContentPage, IDisposable
         SetLayout(false);
         SizeChanged += (_, _) => { if (Width <= 0) { return; } bool narrow = Width < 1220; if (narrow != _narrow) { SetLayout(narrow); } };
         engine.ConversationMessageReceived += ReceiveMessage;
+        _live.MessageReceived += ReceiveMessage;
         engine.StateChanged += (_, state) => MainThread.BeginInvokeOnMainThread(() => SetState(state.ToString()));
-        live.MessageReceived += ReceiveMessage;
-        live.StreamUpdated += ReceiveStream;
+        _localText.StreamUpdated += ReceiveStream;
         _chatGpt.StreamUpdated += ReceiveStream;
         live.Interrupted += StreamInterrupted;
         live.StatusChanged += (_, state) => MainThread.BeginInvokeOnMainThread(() => SetState(state));
@@ -206,7 +215,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
         Theme.DescribeAction(_chatActionsButton, _ui.Get("ui.chat.actions"));
         _subtitle.Text = _ui.Get("ui.hud.subtitle");
         _monitorTitle.Text = _ui.Get("ui.maui.monitor").ToUpperInvariant(); _coreTitle.Text = _ui.Get("ui.maui.core").ToUpperInvariant(); _activityTitle.Text = _ui.Get("ui.maui.activity").ToUpperInvariant();
-        Theme.DescribeAction(_setupButton, _ui.Get("ui.maui.setup")); _memoryButton.Text = _ui.Get("ui.tab.memory");
+        Theme.DescribeAction(_setupButton, _ui.Get("ui.maui.setup"));
         Theme.DescribeAction(_tasksButton, _ui.Get("ui.tasks.title"));
         Theme.DescribeAction(_memoryButton, _ui.Get("ui.tab.memory"));
         Theme.DescribeAction(_interruptButton, _ui.Get("ui.maui.interrupt") + " · Esc");
@@ -238,8 +247,11 @@ public sealed partial class MainPage : ContentPage, IDisposable
     {
         bool muted = _settings.Current.MicrophoneMuted, listening = _live.IsListening;
         string activeProvider = _services.GetRequiredService<ConversationProviderRouter>().ActiveProvider;
-        string providerText = activeProvider.ToUpperInvariant() + " · " + _ui.Get("ui.voice.provider") + ": GEMINI LIVE · " + _settings.Current.GenerativeAi.LiveVoice;
+        string voice = _settings.Current.Culture == "pt-BR" ? _settings.Current.LocalVoice.PortugueseVoice : _settings.Current.LocalVoice.EnglishVoice;
+        string providerText = activeProvider == "gemini" ? "GEMINI · " + _settings.Current.GenerativeAi.LiveVoice
+            : activeProvider.ToUpperInvariant() + (voice is "pt_dii" or "gb_cori" ? " · PIPER · " : " · KOKORO · ") + voice;
         if (_provider.Text != providerText) { _provider.Text = providerText; }
+        RefreshTaskProgress();
         bool voiceSupported = _live.IsAvailable;
         _listen.IsEnabled = voiceSupported || listening; _microphoneButton.IsEnabled = true;
         string micAction = _ui.Get(muted ? "ui.hud.unmute" : "ui.hud.mute");
@@ -258,11 +270,23 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _status.TextColor = _visualMode == ReactorMode.Speaking ? Theme.Speaking : Theme.Accent;
         SemanticProperties.SetDescription(_reactor, "Laura · " + _status.Text);
     }
+    /// <summary>Publishes observed task metadata on the UI dispatcher without adding chat messages or speech.</summary>
+    private void OnTaskProgress(object? sender, EventArgs args) => MainThread.BeginInvokeOnMainThread(RefreshTaskProgress);
+    /// <summary>Shows exact completed steps and tool counts; the native plan supplies no estimated percentage or time.</summary>
+    private void RefreshTaskProgress()
+    {
+        var checkpoint = _tasks.Latest;
+        _taskProgress.IsVisible = checkpoint is not null;
+        if (checkpoint is null) { return; }
+        int completed = checkpoint.Steps.Count(step => step.State is "success" or "completed");
+        string label = _ui.Get("ui.local.taskProgress", completed, checkpoint.Steps.Count, checkpoint.Calls, checkpoint.MaximumCalls);
+        if (checkpoint.Rounds is { } rounds) { label += " · " + rounds.Difficulty + " · " + rounds.Provider.ToUpperInvariant(); }
+        _taskProgress.Text = label;
+    }
     /// <summary>Enables sending only when a draft exists and the previous command has completed.</summary>
     private void UpdateSendAction() => _sendButton.IsEnabled = CanSend();
     /// <summary>Explains disabled voice separately from protected credential health.</summary>
-    private string VoiceUnavailableText() => !_settings.Current.GenerativeAi.Enabled ? _ui.Get("ui.voice.disabled")
-        : _ui.Get("ui.credential." + _live.CredentialState);
+    private string VoiceUnavailableText() => _ui.Get("ui.local.voiceUnavailable");
     /// <summary>Checks the same submission condition for typing and action completion.</summary>
     private bool CanSend() => !_clearing && !_conversations.IsResetting && _command is null && !string.IsNullOrWhiteSpace(_draft.Text);
     /// <summary>Opens the native settings workspace.</summary>
@@ -294,22 +318,23 @@ public sealed partial class MainPage : ContentPage, IDisposable
     /// <inheritdoc />
     protected override void OnAppearing()
     {
-        base.OnAppearing(); _pageVisible = true; _lastFrame = Stopwatch.GetTimestamp(); Reload(); _reactor.Invalidate();
+        base.OnAppearing(); _pageVisible = true; _lastFrame = Stopwatch.GetTimestamp(); Reload(); InvalidateReactor();
         _timer ??= Dispatcher.CreateTimer();
-        _timer.Interval = TimeSpan.FromMilliseconds(33); _timer.Tick -= Tick; _timer.Tick += Tick;
+        _timer.Interval = TimeSpan.FromMilliseconds(67); _timer.Tick -= Tick; _timer.Tick += Tick;
         if (_windowVisible) { _timer.Start(); }
     }
     /// <inheritdoc />
-    protected override void OnDisappearing() { _pageVisible = false; _timer?.Stop(); base.OnDisappearing(); }
+    protected override void OnDisappearing() { _vulkan.Hide(); _pageVisible = false; _timer?.Stop(); base.OnDisappearing(); }
     /// <summary>Suspends vector animation while the native window is hidden in the tray.</summary>
     public void SetWindowVisible(bool visible)
-    { _windowVisible = visible; _lastFrame = Stopwatch.GetTimestamp(); if (visible && _pageVisible) { Reload(); _reactor.Invalidate(); _timer?.Start(); } else { _timer?.Stop(); } }
+    { _windowVisible = visible; _lastFrame = Stopwatch.GetTimestamp(); if (visible && _pageVisible) { Reload(); InvalidateReactor(); _timer?.Start(); } else { _timer?.Stop(); _vulkan.Hide(); } }
     /// <summary>Animates vector rings and refreshes measured system statistics at one-second intervals.</summary>
     private void Tick(object? sender, EventArgs args)
     {
         _core.Mode = _smokeMode ?? (_live.IsPlaying ? ReactorMode.Speaking : _live.IsThinking || _engine.State == AssistantState.Thinking ? ReactorMode.Thinking : _live.IsListening ? ReactorMode.Listening : _engine.State == AssistantState.Working ? ReactorMode.Working : ReactorMode.Idle);
-        if (_visualMode != _core.Mode) { _visualMode = _core.Mode; RefreshFeedback(); _reactor.Invalidate(); }
-        bool animate = _accessibility.AnimationsEnabled;
+        if (_visualMode != _core.Mode) { _visualMode = _core.Mode; RefreshFeedback(); }
+        bool animate = _accessibility.AnimationsEnabled && _center.IsVisible;
+        if (_timer is not null) { _timer.Interval = TimeSpan.FromMilliseconds(_core.Active && _center.IsVisible ? 33 : 100); }
         long frame = Stopwatch.GetTimestamp();
         double frameDelay = Stopwatch.GetElapsedTime(_lastFrame, frame).TotalMilliseconds;
         if (_windowVisible && _pageVisible && frameDelay > 100) { Laura.Core.Diagnostics.LauraDiagnostics.Record("ui.dispatcher_gap", frameDelay); }
@@ -317,13 +342,19 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _core.Advance(seconds, animate && _smokeAngle is null);
         float blend = 1 - MathF.Exp(-seconds / .09f);
         _core.Level = animate ? _core.Level + ((_core.Mode == ReactorMode.Listening ? _live.InputLevel : _live.OutputLevel) - _core.Level) * blend : 0;
-        if (_smokeAngle is { } angle) { _core.Angle = angle; _core.Level = 0; _reactor.Invalidate(); }
-        else if (animate) { _core.Angle = (_core.Angle + (14 + 22 * _core.ActivityAmount) * seconds) % AssistantCoreDrawable.CycleDegrees; _reactor.Invalidate(); }
+        if (_smokeAngle is { } angle) { _core.Angle = angle; _core.Level = 0; }
+        else if (animate) { _core.Angle = (_core.Angle + (14 + 22 * _core.ActivityAmount) * seconds) % AssistantCoreDrawable.CycleDegrees; }
+        InvalidateReactor();
         if (Environment.TickCount64 < _nextMetrics) { return; }
-        _nextMetrics = Environment.TickCount64 + 1000;
+        _nextMetrics = Environment.TickCount64 + 2000;
         _clock.Text = DateTime.Now.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
-        if (!_samplingMetrics) { _ = RefreshMetricsAsync(); }
-        if (!animate) { _reactor.Invalidate(); }
+        if (_monitor.IsVisible && !_samplingMetrics) { _ = RefreshMetricsAsync(); }
+
+    }
+    /// <summary>Uses the optional GPU surface without redrawing the managed vector canvas underneath it.</summary>
+    private void InvalidateReactor()
+    {
+        if (!_vulkan.Update(_reactor, _settings.Current.VulkanInterface && _pageVisible && _windowVisible && _center.IsVisible && _accessibility.AnimationsEnabled, _core.Mode, _core.Level)) { _reactor.Invalidate(); }
     }
     /// <summary>Samples native hardware off the UI thread and publishes one coherent dashboard update.</summary>
     private async Task RefreshMetricsAsync()
@@ -390,19 +421,23 @@ public sealed partial class MainPage : ContentPage, IDisposable
         {
             _body.ColumnDefinitions.Add(new(GridLength.Star)); _body.ColumnDefinitions.Add(new(new GridLength(1.1, GridUnitType.Star)));
             _body.Add(_showMonitor ? _monitor : _center, 0, 0); _body.Add(_activity, 1, 0);
-            _memoryButton.ImageSource = null;
+            _memoryButton.Source = null;
         }
         else
         {
             _body.ColumnDefinitions.Add(new(new GridLength(256))); _body.ColumnDefinitions.Add(new(GridLength.Star)); _body.ColumnDefinitions.Add(new(new GridLength(368)));
             _body.Add(_monitor, 0, 0); _body.Add(_center, 1, 0); _body.Add(_activity, 2, 0);
-            _memoryButton.ImageSource = Theme.IconSource("brain");
+            _memoryButton.Source = Theme.IconSource("brain");
         }
     }
     /// <summary>Adds a bounded chat bubble and scrolls it into view.</summary>
     private void AddMessage(ConversationMessage message)
     {
-        if (message.Source == ConversationMessageSource.Assistant) { RemoveProvisional(); }
+        if (message.Source == ConversationMessageSource.Assistant)
+        {
+            lock (_streamGate) { _pendingStream = null; }
+            RemoveProvisional();
+        }
         if (_messages.Contains(message)) { return; }
         _messages.Add(message); if (_messages.Count > 200) { _messages.RemoveAt(0); }
         _emptyState.IsVisible = false;
@@ -462,7 +497,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     {
         if (held && !_live.IsAvailable) { Notice(VoiceUnavailableText()); return; }
         if (!held)
-        { var lifetime = _holdLifetime; _holdLifetime = null; lifetime?.Cancel(); await _live.StopListeningAsync().ConfigureAwait(true); lifetime?.Dispose(); Reload(); return; }
+        { var lifetime = _holdLifetime; _holdLifetime = null; await _live.StopListeningAsync(submitCaptured: true).ConfigureAwait(true); lifetime?.Cancel(); lifetime?.Dispose(); Reload(); return; }
         if (_settings.Current.MicrophoneMuted) { _micStatus.Text = _ui.Get("ui.maui.unmuteFirst"); return; }
         _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); var capture = new CancellationTokenSource(); _holdLifetime = capture;
         CancellationToken token = capture.Token;
@@ -509,7 +544,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
     }
     /// <summary>Freezes the actual drawable for a boundary continuity render test without recording sound.</summary>
     internal void PreviewReactorAngleForSmoke(float? angle)
-    { EnsureSmoke(); _smokeAngle = angle; if (angle.HasValue) { _core.Angle = angle.Value; _core.Level = 0; _reactor.Invalidate(); } }
+    { EnsureSmoke(); _smokeAngle = angle; if (angle.HasValue) { _core.Angle = angle.Value; _core.Level = 0; InvalidateReactor(); } }
     /// <summary>Exposes only the reactor's native visual to isolated pixel verification.</summary>
     internal Microsoft.UI.Xaml.UIElement ReactorVisualForSmoke()
     { EnsureSmoke(); return (Microsoft.UI.Xaml.UIElement)_reactor.Handler!.PlatformView!; }
@@ -556,8 +591,9 @@ public sealed partial class MainPage : ContentPage, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        _engine.ConversationMessageReceived -= ReceiveMessage; _live.MessageReceived -= ReceiveMessage; _live.StreamUpdated -= ReceiveStream; _live.Interrupted -= StreamInterrupted;
+        _engine.ConversationMessageReceived -= ReceiveMessage; _live.MessageReceived -= ReceiveMessage; _localText.StreamUpdated -= ReceiveStream; _live.Interrupted -= StreamInterrupted;
         _chatGpt.StreamUpdated -= ReceiveStream;
-        _conversationScroll.Dispose(); _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed -= OnApprovalsChanged; _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this);
+        _tasks.Changed -= OnTaskProgress;
+        _vulkan.Hide(); _conversationScroll.Dispose(); _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed -= OnApprovalsChanged; _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this);
     }
 }

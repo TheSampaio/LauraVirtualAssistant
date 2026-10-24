@@ -30,7 +30,7 @@ internal static class ReliabilityUiSmokeRunner
             services.GetRequiredService<IUiLocalizer>().SetCulture(settings.Current.ResolveUiCulture());
             for (int index = 0; index < 10; index++)
             {
-                await settings.UpdateAsync(current => current with { ProviderSelection = index % 2 == 0 ? ConversationProviderSelection.Gemini : ConversationProviderSelection.ChatGpt }).ConfigureAwait(true);
+                await settings.UpdateAsync(current => current with { ProviderSelection = index % 2 == 0 ? ConversationProviderSelection.Local : ConversationProviderSelection.ChatGpt }).ConfigureAwait(true);
                 main.VerifyProviderFeedbackForSmoke();
             }
             foreach (int width in new[] { 1440, 720 })
@@ -39,16 +39,14 @@ internal static class ReliabilityUiSmokeRunner
                 await Task.Delay(350).ConfigureAwait(true);
                 await MauiSmokeRunner.CaptureAsync(window, Path.Combine(directory, $"providers-{culture}-{width}.png")).ConfigureAwait(true);
             }
-            await settings.UpdateAsync(current => current with { ProviderSelection = ConversationProviderSelection.Gemini }).ConfigureAwait(true);
+            await settings.UpdateAsync(current => current with { ProviderSelection = ConversationProviderSelection.Local }).ConfigureAwait(true);
             var navigation = (NavigationPage)window.Page!;
             var setup = services.GetRequiredService<SetupPage>(); await navigation.PushAsync(setup, false).ConfigureAwait(true);
             await setup.VerifyProviderIsolationForSmokeAsync().ConfigureAwait(true);
-            setup.SelectTab(4); await Task.Delay(350).ConfigureAwait(true);
+            setup.SelectTab(5); await Task.Delay(350).ConfigureAwait(true);
             await MauiSmokeRunner.CaptureAsync(window, Path.Combine(directory, $"permissions-{culture}.png")).ConfigureAwait(true);
             await navigation.PopAsync(false).ConfigureAwait(true);
         }
-        if (LauraDiagnostics.Snapshot().Any(sample => sample.Operation == "gemini.session.reset"))
-        { throw new InvalidOperationException("A provider-only settings save reset the Gemini session."); }
         var memory = services.GetRequiredService<IConversationMemory>();
         memory.SetWorkingContext(new ConversationWorkingContext(Guid.NewGuid(), "Verify one synthetic scoped HTML correction and durable rollback."));
         var tools = services.GetRequiredService<IAssistantTools>();
@@ -68,7 +66,7 @@ internal static class ReliabilityUiSmokeRunner
         Guid id = parsed.RootElement.GetProperty("Id").GetGuid();
         AssistantToolResult rollback = await ExecuteReviewedAsync(tools, permissions, new { action = "rollback", path, receipt = id }, timeout.Token).ConfigureAwait(true);
         if (rollback.Failed || await File.ReadAllTextAsync(path).ConfigureAwait(true) != source) { throw new InvalidOperationException("Native guarded rollback failed."); }
-        await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "PASS: actual EN/PT HUD and settings, twenty provider switches, protected Gemini credential preserved, no unrelated session reset, two approval modes, native reviewed patch and durable rollback. Synthetic data; no cloud or microphone. Rendered HTML browser acceptance is separate.").ConfigureAwait(true);
+        await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "PASS: actual EN/PT HUD and settings, twenty provider switches, two approval modes, native reviewed patch and durable rollback. Synthetic data; no cloud or microphone. Rendered HTML browser acceptance is separate.").ConfigureAwait(true);
         services.GetRequiredService<Laura.Core.Abstractions.IShellController>().Shutdown();
     }
 

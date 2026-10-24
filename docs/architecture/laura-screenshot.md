@@ -1,5 +1,7 @@
 # LAURA Screenshot
 
+> **Laura 2.2 runtime notice (2026-10-20):** Live/audio behavior and measurements below describe historical implementations. Current operation uses local Whisper/Kokoro, supervised local inference and optional text providers. See [current architecture](laura-local-first.md) and [implementation evidence](../../LAURA-2.2-MIGRATION.md). Historical results are not new acceptance measurements.
+
 Native Windows capture and editable visual references, built after the [permissions gate](laura-permissions.md#gate-executed-on-2026-10-13). The existing .NET 10 MAUI/WinUI, settings, Gemini Live conversation, Brain storage and icon pipeline are reused. No package or separate application was added.
 
 ## Capture and lifetime

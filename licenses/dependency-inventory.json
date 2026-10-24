@@ -333,6 +333,105 @@
     "NugetSHA512": "3+w4f7aGBfJjrRSgTCXwQJR8RGwSCnKGGs3Zmmikyji5NMp8UxTZTJBQyLvho0vjJd9lVerhz/nj7nnwD8JU8w=="
   },
   {
+    "Package": "org.k2fsa.sherpa.onnx.runtime.android-arm64",
+    "Version": "1.13.8",
+    "License": "Apache-2.0",
+    "Copyright": "",
+    "Repository": "https://github.com/k2-fsa/sherpa-onnx",
+    "Commit": "dc5583f49917e4c95f6e7d862bb378e4ed5e9076",
+    "NugetSHA512": "rGw822VzfafocApGOZduy2WOt4c2w/i9Soh/9IVVZ8SvL34gLdDHQw19xBTmT0r/yHivoVilHRIYQ1zYG2naJg=="
+  },
+  {
+    "Package": "org.k2fsa.sherpa.onnx.runtime.android-x64",
+    "Version": "1.13.8",
+    "License": "Apache-2.0",
+    "Copyright": "",
+    "Repository": "https://github.com/k2-fsa/sherpa-onnx",
+    "Commit": "dc5583f49917e4c95f6e7d862bb378e4ed5e9076",
+    "NugetSHA512": "/OqtXlgT0kLyxzmxKGAYuNa107Z7SpxrMXwYv8VLLJnonubtwBkHarpSdXw8Jiocaf+fIIhlZToKykWvBW4zCw=="
+  },
+  {
+    "Package": "org.k2fsa.sherpa.onnx.runtime.linux-arm64",
+    "Version": "1.13.8",
+    "License": "Apache-2.0",
+    "Copyright": "",
+    "Repository": "https://github.com/k2-fsa/sherpa-onnx",
+    "Commit": "dc5583f49917e4c95f6e7d862bb378e4ed5e9076",
+    "NugetSHA512": "1jXmr3EcFkBoXOie3VMwoLXrZlAdMbY8hCuUehU3RbVLTZeyZgr5gLhcuRXTfparxHScDHpDPYiO/BAbY8ctng=="
+  },
+  {
+    "Package": "org.k2fsa.sherpa.onnx.runtime.linux-x64",
+    "Version": "1.13.8",
+    "License": "Apache-2.0",
+    "Copyright": "",
+    "Repository": "https://github.com/k2-fsa/sherpa-onnx",
+    "Commit": "dc5583f49917e4c95f6e7d862bb378e4ed5e9076",
+    "NugetSHA512": "qzbcKztel04totaGoYQdTte/AhTpNZ0DqIGzOHVmgC3K8jh7MY1lC/EKD+d2P87KUtJriQMsHFjjFis6sgYGeQ=="
+  },
+  {
+    "Package": "org.k2fsa.sherpa.onnx.runtime.osx-arm64",
+    "Version": "1.13.8",
+    "License": "Apache-2.0",
+    "Copyright": "",
+    "Repository": "https://github.com/k2-fsa/sherpa-onnx",
+    "Commit": "dc5583f49917e4c95f6e7d862bb378e4ed5e9076",
+    "NugetSHA512": "PYR+g7XY9zfL7lu6A3O4guc2n5TW+7HGnWtwaYBkYJ7WHmW/E4zsadusbT0e20ojSOX1tXSzKFyIwvgi+sspZQ=="
+  },
+  {
+    "Package": "org.k2fsa.sherpa.onnx.runtime.osx-x64",
+    "Version": "1.13.8",
+    "License": "Apache-2.0",
+    "Copyright": "",
+    "Repository": "https://github.com/k2-fsa/sherpa-onnx",
+    "Commit": "dc5583f49917e4c95f6e7d862bb378e4ed5e9076",
+    "NugetSHA512": "u2Wq715bN1CVV08YM8xXUgOU6K6IzhfXo1P8h1iqvwXKQtcEBYZEd5/tGEY5QKUQCk7EurpEvhbQUmHeFaT4tw=="
+  },
+  {
+    "Package": "org.k2fsa.sherpa.onnx.runtime.win-arm64",
+    "Version": "1.13.8",
+    "License": "Apache-2.0",
+    "Copyright": "",
+    "Repository": "https://github.com/k2-fsa/sherpa-onnx",
+    "Commit": "dc5583f49917e4c95f6e7d862bb378e4ed5e9076",
+    "NugetSHA512": "eNR5MntO1r92/ukF2kydlTmMqJZb2HRJypRuxm2+U26BkaKdv92+kpjiJ03DYjK+eKLZnAD62anR+gxbzEWzWA=="
+  },
+  {
+    "Package": "org.k2fsa.sherpa.onnx.runtime.win-x64",
+    "Version": "1.13.8",
+    "License": "Apache-2.0",
+    "Copyright": "",
+    "Repository": "https://github.com/k2-fsa/sherpa-onnx",
+    "Commit": "dc5583f49917e4c95f6e7d862bb378e4ed5e9076",
+    "NugetSHA512": "7ZpIieyGnrhTBTPDeQsq5S36Qe3wxGHFAB/Hl3Q7zrhJ7ayb4co0oCI+ZY6MDC1p519T3DqUIPRUO6g47GSKkw=="
+  },
+  {
+    "Package": "org.k2fsa.sherpa.onnx.runtime.win-x86",
+    "Version": "1.13.8",
+    "License": "Apache-2.0",
+    "Copyright": "",
+    "Repository": "https://github.com/k2-fsa/sherpa-onnx",
+    "Commit": "dc5583f49917e4c95f6e7d862bb378e4ed5e9076",
+    "NugetSHA512": "9i1cy9PqiYhumi0KfComMjQCIFGEDzItQnMwOMzx7N9rvt/1l1A59yYpyoBdrLHlwXQR34jcJuU+WDIWR4y6RQ=="
+  },
+  {
+    "Package": "org.k2fsa.sherpa.onnx",
+    "Version": "1.13.8",
+    "License": "Apache-2.0",
+    "Copyright": "Copyright 2019-2023 Xiaomi Corporation",
+    "Repository": "https://github.com/k2-fsa/sherpa-onnx",
+    "Commit": "dc5583f49917e4c95f6e7d862bb378e4ed5e9076",
+    "NugetSHA512": "HwDbXOncQPzbQmkpaOzRAYqtsa0mZ3OVJTFWJTGOCIC/zeKjYsTPGYRm5VhJ4W3yoX3qyxgh/D7nGVdDHvzucQ=="
+  },
+  {
+    "Package": "SharpCompress",
+    "Version": "0.50.6",
+    "License": "MIT",
+    "Copyright": "Copyright (c) 2025  Adam Hathcock",
+    "Repository": "https://github.com/adamhathcock/sharpcompress",
+    "Commit": "542ed974d4fc276b59d378f6ae2c16eb7cafd38a",
+    "NugetSHA512": "Twhv6SL0BZLAiB6ur9mw2sKbalw0mPWOqkADj17hkggeZU/Fb2x9VQJ5nk73uzpvkmQKvSYWqDfKpFcn66GT+A=="
+  },
+  {
     "Package": "SQLitePCLRaw.bundle_e_sqlite3",
     "Version": "2.1.12",
     "License": "Apache-2.0",
@@ -376,24 +475,6 @@
     "Repository": "https://github.com/dotnet/runtime",
     "Commit": "9ecbfd4f3f330dc9649bce49cb12570b19d48c87",
     "NugetSHA512": "h8j18ju7NzUzn37Z0yR8ndJSaWKwhcTepHF9IjQ2sMjPSIz62kY8Ph1Ee9Qln2lDLKb6pvIQWuVGVB7yjH7cmg=="
-  },
-  {
-    "Package": "System.ServiceProcess.ServiceController",
-    "Version": "10.0.0",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/dotnet",
-    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
-    "NugetSHA512": "PaFmFQXX/qL1vl0CfdJUMPMYT8TOEHlcdEiOZtd4LV2rcaS/WDQM4bpECcbRM4BrD+DWkWd/jtb6iPOqAX9TWA=="
-  },
-  {
-    "Package": "System.Diagnostics.EventLog",
-    "Version": "10.0.0",
-    "License": "MIT",
-    "Copyright": "© Microsoft Corporation. All rights reserved.",
-    "Repository": "https://github.com/dotnet/dotnet",
-    "Commit": "b0f34d51fccc69fd334253924abd8d6853fad7aa",
-    "NugetSHA512": "uaFRda9NjtbJRkdx311eXlAA3n2em7223c1A8d1VWyl+4FL9vkG7y2lpPfBU9HYdj/9KgdRNdn1vFK8ZYCYT/A=="
   },
   {
     "Package": "YamlDotNet",

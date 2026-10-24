@@ -5,7 +5,7 @@ namespace Laura.Core.Conversation;
 /// <summary>Validates the provider's native output contract instead of silently interpreting another encoding or rate.</summary>
 public static class PcmAudioFormat
 {
-    /// <summary>Gets Gemini Live's native output sample rate; samples are signed little-endian 16-bit mono PCM.</summary>
+    /// <summary>Gets the native output sample rate; samples are signed little-endian 16-bit mono PCM.</summary>
     public const int SampleRate = 24000;
     /// <summary>Accepts PCM with the documented native rate and mono channel count, without resampling.</summary>
     public static bool IsNativeOutput(string mimeType)

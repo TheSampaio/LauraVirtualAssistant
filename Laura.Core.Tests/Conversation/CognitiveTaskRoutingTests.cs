@@ -19,7 +19,7 @@ public sealed class CognitiveTaskRoutingTests
     [InlineData(4, 2, 1, 1, CognitiveTaskDemand.Routine)]
     public void ComplexityNeedsMultipleNativeSignals(int steps, int tools, int observed, int cycles, CognitiveTaskDemand expected)
     {
-        var checkpoint = Checkpoint(steps, tools, observed) with { Rounds = new(Cycles: cycles, Provider: "gemini") };
+        var checkpoint = Checkpoint(steps, tools, observed) with { Rounds = new(Cycles: cycles, Provider: "local") };
         Assert.Equal(expected, CognitiveTaskRoutingPolicy.Evaluate(checkpoint).Demand);
     }
     /// <summary>Timeout, context, transport and account failures cannot be reclassified as cognitive inability.</summary>
@@ -44,7 +44,7 @@ public sealed class CognitiveTaskRoutingTests
     {
         var checkpoint = Checkpoint(6, 3, 3); var operations = checkpoint.Operations.ToArray(); operations[^1] = operations[^1] with { Status = "failed" };
         var decision = CognitiveTaskRoutingPolicy.Evaluate(checkpoint with { Operations = operations });
-        Assert.Equal(CognitiveRecoveryAction.InspectTool, decision.Recovery); Assert.Equal("gemini", decision.ContinuityProvider);
+        Assert.Equal(CognitiveRecoveryAction.InspectTool, decision.Recovery); Assert.Equal("local", decision.ContinuityProvider);
     }
     /// <summary>Multiple completed rounds without advancement require existing confirmed evidence before cognitive escalation.</summary>
     [Theory]
@@ -53,7 +53,7 @@ public sealed class CognitiveTaskRoutingTests
     [InlineData(2, 0, CognitiveTaskDemand.Routine)]
     public void EscalationRequiresVerifiedStall(int stalled, int progress, CognitiveTaskDemand expected)
     {
-        var checkpoint = Checkpoint(2, 2, progress) with { Rounds = new(Cycles: 4, Provider: "gemini", StalledCycles: stalled, ConfirmedProgress: progress) };
+        var checkpoint = Checkpoint(2, 2, progress) with { Rounds = new(Cycles: 4, Provider: "local", StalledCycles: stalled, ConfirmedProgress: progress) };
         Assert.Equal(expected, CognitiveTaskRoutingPolicy.Evaluate(checkpoint).Demand);
     }
     /// <summary>Several actually recorded module interpretations support synthesis without claiming that a repository is understood.</summary>
@@ -75,12 +75,12 @@ public sealed class CognitiveTaskRoutingTests
         { run.Plan(["recall_memory", "recall_memory", "probe", "probe"]); return Task.FromResult(new Laura.Core.Abstractions.AssistantToolResult("Native plan.")); }, CancellationToken.None);
         for (int sample = 0; sample < 2; sample++)
         { await tasks.ExecuteAsync(working, tools, "recall_memory", JsonSerializer.SerializeToElement(new { sample }), (_, _) => Task.FromResult(new Laura.Core.Abstractions.AssistantToolResult("Actual evidence.")), CancellationToken.None); }
-        await tasks.EndCycleAsync(working.TurnId, 1, "gemini", "synthetic", null);
+        await tasks.EndCycleAsync(working.TurnId, 1, "local", "synthetic", null);
         for (int cycle = 0; cycle < 2; cycle++)
         {
             await tasks.BeginCycleAsync(working, tools, new(), CancellationToken.None);
             await tasks.ExecuteAsync(working, tools, "task_status", JsonSerializer.SerializeToElement(new { }), (_, _) => Task.FromResult(new Laura.Core.Abstractions.AssistantToolResult("Current metadata.")), CancellationToken.None);
-            await tasks.EndCycleAsync(working.TurnId, 1, "gemini", "synthetic", null);
+            await tasks.EndCycleAsync(working.TurnId, 1, "local", "synthetic", null);
         }
         var saved = (await journal.ReadAsync(working.TurnId))!;
         Assert.Equal(2, saved.Rounds!.ConfirmedProgress); Assert.Equal(2, saved.Rounds.StalledCycles);
@@ -104,6 +104,6 @@ public sealed class CognitiveTaskRoutingTests
         return new(Guid.NewGuid(), "Complex programming debugging analysis synthesis architecture.", now, now, "paused", observed, 32, 0, 600000,
             Enumerable.Range(0, steps).Select(index => new CognitiveTaskStep(index + 1, names[index % tools], "pending")).ToArray(),
             Enumerable.Range(0, observed).Select(index => new CognitiveOperationReceipt(index + 1, names[index % tools], index.ToString("x64", CultureInfo.InvariantCulture), "success", new string('a', 64), false)).ToArray(),
-            Rounds: new(Cycles: 2, Provider: "gemini"));
+            Rounds: new(Cycles: 2, Provider: "local"));
     }
 }

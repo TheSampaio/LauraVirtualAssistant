@@ -54,9 +54,10 @@ public sealed class WindowsApprovalCenter(PermissionManager permissions, ISettin
     {
         try
         {
-            var live = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<GeminiLiveClient>(services);
-            if (!live.IsAvailable || settings.Current.Voice.Volume == 0) { return; }
-            await live.SpeakNotificationAsync(ui.GetForCulture(settings.Current.Culture, "ui.permissions.announcement"), () => permissions.PendingRequests.Any(item => item.Id == requestId), _lifetime.Token).ConfigureAwait(false);
+            var speech = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<Laura.Platform.Windows.Speech.KokoroSpeechSynthesizer>(services);
+            if (!speech.IsAvailable || speech.IsSpeaking || settings.Current.Voice.Volume == 0 || !permissions.PendingRequests.Any(item => item.Id == requestId)) { return; }
+            await speech.SpeakAsync(new Laura.Core.Speech.SpeechRequest(ui.GetForCulture(settings.Current.Culture, "ui.permissions.announcement"), settings.Current.Voice, settings.Current.Culture)
+                { OutputDevice = settings.Current.OutputDevice }, _lifetime.Token).ConfigureAwait(false);
         }
         catch (Exception error) when (error is OperationCanceledException or InvalidOperationException or IOException or System.Net.WebSockets.WebSocketException)
         { /* The independent visual request remains actionable when cloud voice is unavailable. */ }

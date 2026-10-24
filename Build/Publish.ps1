@@ -76,9 +76,11 @@ try {
             Copy-Item -LiteralPath $source -Destination (Join-Path $publish $component.File)
         }
     }
-    Copy-Item -LiteralPath (Join-Path $root 'LICENSE'), (Join-Path $root 'THIRD_PARTY_NOTICES.md'), (Join-Path $root 'README.md') -Destination $publish
+    Copy-Item -LiteralPath (Join-Path $root 'LICENSE'), (Join-Path $root 'THIRD_PARTY_NOTICES.md'), (Join-Path $root 'README.md'), (Join-Path $root 'LAURA-2.2-MIGRATION.md') -Destination $publish
     Copy-Item -LiteralPath (Join-Path $root 'licenses') -Destination $publish -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $root 'docs') -Destination $publish -Recurse -Force
+    & (Join-Path $PSScriptRoot 'Prepare-VoiceSources.ps1')
+    Copy-Item -LiteralPath (Join-Path $root '_Output/VoiceSources') -Destination $publish -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Verify-Package.ps1') -Destination $publish
     & (Join-Path $PSScriptRoot 'Verify-Package.ps1') -PackageDirectory $publish -CreateManifest
     $archive = Join-Path $distribution 'Laura-win-x64.zip'

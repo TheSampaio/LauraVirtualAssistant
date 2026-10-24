@@ -5,8 +5,13 @@ $repository = Split-Path $PSScriptRoot -Parent
 $assetsPath = Join-Path $repository 'Laura.App/obj/project.assets.json'
 if (!(Test-Path -LiteralPath $assetsPath)) { throw 'Restore the application before refreshing its dependency inventory.' }
 $assets = Get-Content -LiteralPath $assetsPath -Raw | ConvertFrom-Json -AsHashtable
-$inventory = foreach ($identity in ($assets.libraries.Keys | Sort-Object)) {
-    $library = $assets.libraries[$identity]
+$allLibraries = @{}
+foreach ($projectAssets in @($assetsPath, (Join-Path $repository 'Laura.VoiceWorker/obj/project.assets.json'))) {
+    $projectData = Get-Content -LiteralPath $projectAssets -Raw | ConvertFrom-Json -AsHashtable
+    foreach ($key in $projectData.libraries.Keys) { $allLibraries[$key] = $projectData.libraries[$key] }
+}
+$inventory = foreach ($identity in ($allLibraries.Keys | Sort-Object)) {
+    $library = $allLibraries[$identity]
     if ($library.type -ne 'package') { continue }
     $packagePath = $null
     foreach ($cacheRoot in $assets.packageFolders.Keys) {

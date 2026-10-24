@@ -129,7 +129,9 @@ public sealed class VersionedFileEditorTests : IDisposable
         var folders = new RedirectedFolders(_root);
         Assert.Equal(Path.Combine(_root, "OneDrive", "Desktop", "site", "index.html"), KnownFolderPaths.Resolve("desktop/site/index.html", folders, _root));
         Assert.Equal(Path.Combine(_root, "CustomDownloads", "hello.cpp"), KnownFolderPaths.Resolve("downloads\\hello.cpp", folders, _root));
+        Assert.Equal(Path.Combine(_root, "site", "index.html"), KnownFolderPaths.Resolve("site/index.html", folders, _root));
         Assert.Throws<IOException>(() => KnownFolderPaths.Resolve("desktop/../../escape.txt", folders, _root));
+        Assert.Throws<IOException>(() => KnownFolderPaths.Resolve("../escape.txt", folders, _root));
     }
 
     /// <inheritdoc />

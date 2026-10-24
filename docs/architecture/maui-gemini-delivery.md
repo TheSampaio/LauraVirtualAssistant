@@ -1,5 +1,7 @@
 # MAUI and Gemini Live delivery
 
+> **Laura 2.2 runtime notice (2026-10-20):** Live/audio behavior and measurements below describe historical implementations. Current operation uses local Whisper/Kokoro, supervised local inference and optional text providers. See [current architecture](laura-local-first.md) and [implementation evidence](../../LAURA-2.2-MIGRATION.md). Historical results are not new acceptance measurements.
+
 Windows Forms was replaced with .NET 10 / .NET MAUI hosted by native WinUI. The reactor is a GraphicsView with counter-rotating rings, microphone/output amplitude, red listening pulse matching idle and bright red speaking glow. The HUD measures actual CPU, RAM, disk occupancy, network throughput and GPU engine utilization. Setup is split into four tabs with fixed Save controls; no offline model/provider or Windows voice controls remain.
 
 ## Speech and input

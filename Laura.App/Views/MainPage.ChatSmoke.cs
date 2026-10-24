@@ -17,6 +17,19 @@ namespace Laura.App.Views;
 
 public sealed partial class MainPage
 {
+    /// <summary>Checks that a delayed coalesced stream cannot recreate a provisional bubble after the final native reply.</summary>
+    internal async Task VerifyStreamCompletionForSmokeAsync()
+    {
+        EnsureSmoke(); Guid turn = Guid.NewGuid();
+        ReceiveStream(null, new(turn, "Synthetic provisional reply", false));
+        await WaitNativeAsync(() => _provisional is not null).ConfigureAwait(true);
+        const string final = "Synthetic finalized reply";
+        ReceiveStream(null, new(turn, final, true));
+        AddMessage(new(ConversationMessageSource.Assistant, final, DateTimeOffset.Now));
+        await Task.Delay(180).ConfigureAwait(true);
+        if (_provisional is not null || _messages.Count(message => message.Text == final) != 1)
+        { throw new InvalidOperationException("A queued stream recreated a finalized reply or produced duplicate native bubbles."); }
+    }
     internal async Task VerifyChatUxForSmokeAsync(string directory)
     {
         EnsureSmoke(); _messages.Clear(); _conversationScroll.Follow(); AttachConversationScroll();

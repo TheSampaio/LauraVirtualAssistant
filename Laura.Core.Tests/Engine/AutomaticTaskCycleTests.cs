@@ -17,7 +17,7 @@ public sealed class AutomaticTaskCycleTests
         var memory = new WorkingConversationMemory(); var conversation = new RecordingConversationEngine(true, "A routine answer."); var tools = new LocalAgentTools();
         var settings = new StubSettingsService(LauraSettings.Default with { GreetOnStartup = false, GenerativeAi = new() { Enabled = true } });
         var localizer = new StubLocalizer(); var user = new StubUserContext(); var clock = new SystemClock();
-        var dispatcher = new GeminiSkillDispatcher(conversation, settings, user, memory, localizer, tasks: tasks, tools: tools);
+        var dispatcher = new AssistantSkillDispatcher(conversation, settings, user, memory, localizer, tasks: tasks, tools: tools);
         await using var engine = new AssistantEngine(new RecordingSpeechSynthesizer(), dispatcher, settings, localizer, new StubShellController(),
             new GreetingComposer(localizer, user, clock), clock, NullLogger<AssistantEngine>.Instance, memory, tasks: tasks, taskTools: tools, conversation: conversation);
         await engine.StartAsync(deadline.Token);
@@ -35,11 +35,13 @@ public sealed class AutomaticTaskCycleTests
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5)); var journal = new RecordingTaskJournal(); using var tasks = new CognitiveTasks(journal);
         var memory = new WorkingConversationMemory(); var conversation = new CyclingConversation(tasks, memory, timeout);
         var settings = new StubSettingsService(LauraSettings.Default with { GreetOnStartup = false, GenerativeAi = new() { Enabled = true },
-            ProviderSelection = chatGpt ? ConversationProviderSelection.ChatGpt : ConversationProviderSelection.Gemini });
+            ProviderSelection = chatGpt ? ConversationProviderSelection.ChatGpt : ConversationProviderSelection.Local,
+            LocalModel = new() { Enabled = true } });
         var inactive = new RecordingConversationEngine(false, null);
-        using var router = new Laura.Core.Conversation.ConversationProviderRouter(settings, chatGpt ? inactive : conversation, chatGpt ? conversation : inactive);
+        using var router = new Laura.Core.Conversation.ConversationProviderRouter(settings, chatGpt ? conversation : inactive,
+            local: chatGpt ? inactive : conversation);
         var localizer = new StubLocalizer(); var user = new StubUserContext(); var clock = new SystemClock();
-        var dispatcher = new GeminiSkillDispatcher(router, settings, user, memory, localizer, tasks: tasks, tools: conversation, routing: router);
+        var dispatcher = new AssistantSkillDispatcher(router, settings, user, memory, localizer, tasks: tasks, tools: conversation, routing: router);
         await using var engine = new AssistantEngine(new RecordingSpeechSynthesizer(), dispatcher, settings, localizer, new StubShellController(),
             new GreetingComposer(localizer, user, clock), clock, NullLogger<AssistantEngine>.Instance, memory, tasks: tasks, taskTools: conversation, conversation: router);
         await engine.StartAsync(deadline.Token);
@@ -52,7 +54,7 @@ public sealed class AutomaticTaskCycleTests
         var saved = (await journal.ReadAsync(conversation.Goal, deadline.Token))!;
         Assert.Equal(3, saved.Rounds!.Cycles); Assert.Equal(timeout ? 1 : 0, saved.Rounds.Recoveries);
         Assert.Equal(4, saved.Operations.Count); Assert.All(saved.Steps, step => Assert.Equal("completed", step.State));
-        Assert.All(conversation.ContinuationProviders, provider => Assert.Equal(chatGpt ? "chatgpt" : "gemini", provider));
+        Assert.All(conversation.ContinuationProviders, provider => Assert.Equal(chatGpt ? "chatgpt" : "local", provider));
         Assert.Equal(3, engine.ConversationHistory.Count(message => message.Source == Laura.Core.Conversation.ConversationMessageSource.UserTyped));
         Assert.DoesNotContain(engine.ConversationHistory, message => message.Source == Laura.Core.Conversation.ConversationMessageSource.UserTyped && message.Text.Contains("Native continuation", StringComparison.Ordinal));
     }

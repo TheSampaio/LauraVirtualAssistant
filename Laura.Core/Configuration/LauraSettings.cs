@@ -26,6 +26,8 @@ public sealed record LauraSettings
 
     /// <summary>Gets the independently selected interface language.</summary>
     public string UiCulture { get; init; } = DefaultCulture;
+    /// <summary>Gets the optional Vulkan reactor renderer; native controls retain the Windows compositor.</summary>
+    public bool VulkanInterface { get; init; }
     /// <summary>Gets the microphone index, or -1 for the system default.</summary>
     public int InputDevice { get; init; } = -1;
     /// <summary>Gets the playback index, or -1 for the system default.</summary>
@@ -61,10 +63,14 @@ public sealed record LauraSettings
 
     /// <summary>Gets the optional generative-mode configuration.</summary>
     public GenerativeAiOptions GenerativeAi { get; init; } = GenerativeAiOptions.Default;
-    /// <summary>Gets optional account-authorized ChatGPT settings, independent of Gemini voice enablement.</summary>
+    /// <summary>Gets optional account-authorized ChatGPT settings, independent of local voice settings.</summary>
     public ChatGptOptions ChatGpt { get; init; } = new();
+    /// <summary>Gets explicit local model installation and resource settings.</summary>
+    public LocalModelOptions LocalModel { get; init; } = new();
+    /// <summary>Gets provider-independent local speech assets.</summary>
+    public LocalVoiceOptions LocalVoice { get; init; } = new();
     /// <summary>Gets the native manual or explicitly authorized automatic routing mode.</summary>
-    public ConversationProviderSelection ProviderSelection { get; init; }
+    public ConversationProviderSelection ProviderSelection { get; init; } = ConversationProviderSelection.Automatic;
     /// <summary>Gets cumulative autonomous task budgets, separate from individual model and tool deadlines.</summary>
     public CognitiveTaskOptions CognitiveTasks { get; init; } = new();
     /// <summary>Gets the local diagnostic detail threshold; no level includes private payloads.</summary>
@@ -128,8 +134,10 @@ public sealed record LauraSettings
             Voice = Voice.Sanitized(),
             GenerativeAi = GenerativeAi.Sanitized(),
             ChatGpt = ChatGpt.Sanitized(),
+            LocalModel = LocalModel.Sanitized(),
+            LocalVoice = LocalVoice.Sanitized(),
             CognitiveTasks = CognitiveTasks.Sanitized(),
-            ProviderSelection = Enum.IsDefined(ProviderSelection) ? ProviderSelection : ConversationProviderSelection.Gemini,
+            ProviderSelection = Enum.IsDefined(ProviderSelection) ? ProviderSelection : ConversationProviderSelection.Automatic,
             DiagnosticLevel = Enum.IsDefined(DiagnosticLevel) ? DiagnosticLevel : Microsoft.Extensions.Logging.LogLevel.Information,
             Brain = Brain.Sanitized(),
             Permissions = Permissions.Sanitized(),

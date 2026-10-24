@@ -1,5 +1,7 @@
 # Brain, concorrência e estabilidade do áudio — 2026-10-14
 
+> **Laura 2.2 runtime notice (2026-10-20):** Live/audio behavior and measurements below describe historical implementations. Current operation uses local Whisper/Kokoro, supervised local inference and optional text providers. See [current architecture](laura-local-first.md) and [implementation evidence](../../LAURA-2.2-MIGRATION.md). Historical results are not new acceptance measurements.
+
 ## Auditoria inicial
 
 Base: `4080246`, após clima e feedback de processamento. A suíte anterior contém 391 testes aprovados. Este relatório distingue código inspecionado, medições e hipóteses; o sintoma de timbre metálico ainda não foi reproduzido nem atribuído ao provedor.

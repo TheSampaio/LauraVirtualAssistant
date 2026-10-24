@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Laura.App.Infrastructure;
 
-/// <summary>Persists explicitly requested reminders and speaks them through Gemini while Laura is running.</summary>
+/// <summary>Persists explicitly requested reminders and speaks them through local Kokoro while Laura is running.</summary>
 public sealed class ReminderScheduler(AssistantStorage storage, IServiceProvider services) : IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -51,9 +51,12 @@ public sealed class ReminderScheduler(AssistantStorage storage, IServiceProvider
                 try { due = _reminders.Where(reminder => reminder.Due <= DateTimeOffset.UtcNow).ToArray(); } finally { _gate.Release(); }
                 foreach (Reminder reminder in due)
                 {
-                    var live = services.GetRequiredService<Laura.Platform.Windows.Conversation.GeminiLiveClient>();
-                    if (!live.IsAvailable || live.IsListening || live.IsSpeaking) { continue; }
-                    try { await live.SpeakAsync(reminder.Text, token).ConfigureAwait(false); await ListAsync(reminder.Id, token).ConfigureAwait(false); }
+                    var voice = services.GetRequiredService<Laura.Platform.Windows.Speech.LocalVoiceSession>();
+                    var speech = services.GetRequiredService<Laura.Platform.Windows.Speech.KokoroSpeechSynthesizer>();
+                    var settings = services.GetRequiredService<ISettingsService>().Current;
+                    if (!speech.IsAvailable || voice.IsListening || speech.IsSpeaking) { continue; }
+                    try { await speech.SpeakAsync(new Laura.Core.Speech.SpeechRequest(reminder.Text, settings.Voice, settings.Culture)
+                        { OutputDevice = settings.OutputDevice }, token).ConfigureAwait(false); await ListAsync(reminder.Id, token).ConfigureAwait(false); }
                     catch (Exception error) when (error is InvalidOperationException or IOException or System.Net.WebSockets.WebSocketException or OperationCanceledException)
                     { token.ThrowIfCancellationRequested(); _retryAfter = DateTimeOffset.UtcNow.AddMinutes(1); break; }
                 }

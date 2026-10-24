@@ -6,13 +6,13 @@ namespace Laura.Core.Tests.Configuration;
 /// <summary>Checks independent provider opt-ins, task limits and secret-free INI persistence.</summary>
 public sealed class ChatGptSettingsTests
 {
-    /// <summary>A fresh installation preserves Gemini selection and grants no ChatGPT disclosure or spending permission.</summary>
+    /// <summary>A fresh installation selects local-first routing and grants no cloud disclosure or spending permission.</summary>
     [Fact]
     public void DefaultsDoNotGrantChatGptAccess()
     {
         var settings = LauraSettings.Default.Sanitized(); Assert.False(settings.ChatGpt.Enabled); Assert.False(settings.ChatGpt.ShareContext);
-        Assert.False(settings.ChatGpt.AllowAutomatic); Assert.False(settings.ChatGpt.IncludedPlanOnly); Assert.Empty(settings.ChatGpt.Model);
-        Assert.Equal(ConversationProviderSelection.Gemini, settings.ProviderSelection);
+        Assert.False(settings.ChatGpt.AllowAutomatic); Assert.False(settings.ChatGpt.IncludedPlanOnly); Assert.Empty(settings.ChatGpt.Model); Assert.Empty(settings.ChatGpt.MaxModel);
+        Assert.Equal(ConversationProviderSelection.Automatic, settings.ProviderSelection);
     }
     /// <summary>Invalid disk values cannot remove cumulative limits or fabricate a valid model identity.</summary>
     [Fact]
@@ -20,7 +20,7 @@ public sealed class ChatGptSettingsTests
     {
         var settings = (LauraSettings.Default with { ChatGpt = new() { Model = "../../private", Enabled = true }, ProviderSelection = (ConversationProviderSelection)123,
             CognitiveTasks = new() { MaximumCycles = int.MaxValue, MaximumProviderCalls = -1, MaximumRecoveries = -1, ActiveMinutes = -3, IdleMinutes = int.MaxValue } }).Sanitized();
-        Assert.Empty(settings.ChatGpt.Model); Assert.Equal(ConversationProviderSelection.Gemini, settings.ProviderSelection);
+        Assert.Empty(settings.ChatGpt.Model); Assert.Equal(ConversationProviderSelection.Automatic, settings.ProviderSelection);
         Assert.Equal(128, settings.CognitiveTasks.MaximumCycles); Assert.Equal(1, settings.CognitiveTasks.MaximumProviderCalls);
         Assert.Equal(0, settings.CognitiveTasks.MaximumRecoveries); Assert.Equal(1, settings.CognitiveTasks.ActiveMinutes); Assert.Equal(10080, settings.CognitiveTasks.IdleMinutes);
     }
@@ -33,7 +33,7 @@ public sealed class ChatGptSettingsTests
         {
             string path = Path.Combine(directory, "settings.ini"); var store = new IniSettingsStore(path, NullLogger<IniSettingsStore>.Instance);
             var expected = LauraSettings.Default with { GenerativeAi = new() { Enabled = true }, ProviderSelection = ConversationProviderSelection.Automatic,
-                ChatGpt = new() { Enabled = true, Model = "account-discovered-model", ShareContext = true, AllowAutomatic = true, IncludedPlanOnly = true },
+                ChatGpt = new() { Enabled = true, Model = "account-discovered-model", AllowMax = true, MaxModel = "verified-max-model", ShareContext = true, AllowAutomatic = true, IncludedPlanOnly = true },
                 CognitiveTasks = new() { MaximumCycles = 7, MaximumProviderCalls = 12, MaximumRecoveries = 3, MaximumToolCalls = 90, ActiveMinutes = 15, IdleMinutes = 200, MaximumResultMegabytes = 4 } };
             await store.SaveAsync(expected); var actual = await store.LoadAsync();
             Assert.Equal(expected.ChatGpt, actual.ChatGpt); Assert.Equal(expected.CognitiveTasks, actual.CognitiveTasks); Assert.True(actual.GenerativeAi.Enabled);

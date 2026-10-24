@@ -19,7 +19,11 @@ $target = Assert-InstallerOutput $InstallerPath
 if ([IO.Path]::GetExtension($target) -ine '.exe' -or ((Test-Path -LiteralPath $target) -and !(Test-Path -LiteralPath $target -PathType Leaf))) { throw 'Installer target must be an executable file path.' }
 $scratch = Assert-InstallerOutput (Join-Path $repository ('_Output/Installer-' + [Guid]::NewGuid().ToString('N').Substring(0,8)))
 $stubPayload = Join-Path $scratch 'StubPayload'
-New-Item -ItemType Directory -Path $scratch, $stubPayload | Out-Null
+$systemTemp = Join-Path $scratch 'SystemTemp'
+New-Item -ItemType Directory -Path $scratch, $stubPayload, $systemTemp | Out-Null
+# Native cabinet tools otherwise stage the entire payload on the system drive.
+$env:TEMP = $systemTemp
+$env:TMP = $systemTemp
 $names = @('Laura-win-x64.zip', 'Install.ps1', 'Install.cmd')
 foreach ($name in $names) {
     $source = Assert-InstallerOutput (Join-Path $payload $name)

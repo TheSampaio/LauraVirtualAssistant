@@ -8,6 +8,7 @@ public static class SettingsDraft
     {
         Culture = Choose(baseline.Culture, edited.Culture, current.Culture),
         UiCulture = Choose(baseline.UiCulture, edited.UiCulture, current.UiCulture),
+        VulkanInterface = Choose(baseline.VulkanInterface, edited.VulkanInterface, current.VulkanInterface),
         UserNickname = Choose(baseline.UserNickname, edited.UserNickname, current.UserNickname),
         WeatherLocation = Choose(baseline.WeatherLocation, edited.WeatherLocation, current.WeatherLocation),
         MicrophoneMuted = Choose(baseline.MicrophoneMuted, edited.MicrophoneMuted, current.MicrophoneMuted),
@@ -24,6 +25,8 @@ public static class SettingsDraft
         Voice = Choose(baseline.Voice, edited.Voice, current.Voice),
         GenerativeAi = Choose(baseline.GenerativeAi, edited.GenerativeAi, current.GenerativeAi),
         ChatGpt = Choose(baseline.ChatGpt, edited.ChatGpt, current.ChatGpt),
+        LocalModel = Choose(baseline.LocalModel, edited.LocalModel, current.LocalModel),
+        LocalVoice = Choose(baseline.LocalVoice, edited.LocalVoice, current.LocalVoice),
         ProviderSelection = Choose(baseline.ProviderSelection, edited.ProviderSelection, current.ProviderSelection),
     };
 

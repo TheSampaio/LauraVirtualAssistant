@@ -27,6 +27,9 @@ public abstract class PhraseSkillBase : ISkill
     /// <inheritdoc />
     public abstract int Priority { get; }
 
+    /// <inheritdoc />
+    public virtual bool ModelCallable => true;
+
     /// <summary>
     /// Gets the localizer used to read phrases and compose responses.
     /// </summary>

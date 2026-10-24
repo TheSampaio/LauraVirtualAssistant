@@ -31,12 +31,6 @@ public static class BrainSmokeRunner
                 Permissions = settings.Current.Permissions with { Voice = ApprovalVoiceMode.Never }, Screenshots = settings.Current.Screenshots with { ShortcutsEnabled = false } }).ConfigureAwait(true);
             var memory = services.GetRequiredService<IConversationMemory>(); var tools = services.GetRequiredService<IAssistantTools>(); var permissions = services.GetRequiredService<PermissionManager>();
             int guiFixture = Array.IndexOf(args, "--gui-launch-smoke");
-            if (args.Contains("--brain-github-smoke", StringComparer.Ordinal))
-            {
-                stage = "public_github_acquisition_and_orchestration";
-                results.AddRange(await BrainGitHubSmokeRunner.RunAsync(services, directory).ConfigureAwait(true));
-                await File.WriteAllLinesAsync(Path.Combine(directory, args.Contains("--github-restart", StringComparer.Ordinal) ? "github-restart-result.txt" : "result.txt"), PassedHeader.Concat(results)).ConfigureAwait(true); return;
-            }
             if (args.Contains("--brain-restart-smoke", StringComparer.Ordinal))
             {
                 stage = "actual_process_restart_recovery"; results.AddRange(await BrainRestartSmokeRunner.VerifyAsync(services, directory).ConfigureAwait(true));
@@ -194,28 +188,6 @@ public static class BrainSmokeRunner
             results.Add(await BrainSkillUsageSmokeRunner.RunAsync(services, workspace, episode).ConfigureAwait(true));
             stage = "native_cognitive_evidence_inspector";
             results.AddRange(await BrainEvidenceSmokeRunner.RunAsync(services, directory).ConfigureAwait(true));
-            if (args.Contains("--brain-live-smoke", StringComparer.Ordinal))
-            {
-                var live = services.GetRequiredService<GeminiLiveClient>(); if (!live.IsAvailable) { throw new InvalidOperationException("A configured model credential is required for live diagnostics."); }
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
-                const string first = "Quando estou programando, fico muito mais confortável no Example Editor do que nos outros.";
-                stage = "live_natural_preference";
-                await live.AskAsync(new(first, CultureInfo.GetCultureInfo("pt-BR"), "Synthetic learner"), timeout.Token).ConfigureAwait(true);
-                BrainNote original = brain.Snapshot.Notes.SingleOrDefault(note => note.IsKnowledge && note.Key == "owner.editor" && note.Title == "Example Editor")
-                    ?? throw new InvalidOperationException("The actual model did not learn the natural synthetic editor preference.");
-                results.Add("Actual configured model interpreted a natural Portuguese preference, proposed verbatim grounded evidence and created the expected Markdown memory.");
-                const string correction = "Na verdade, troquei para Reviewed Editor e agora prefiro ele.";
-                stage = "live_correction";
-                await live.AskAsync(new(correction, CultureInfo.GetCultureInfo("pt-BR"), "Synthetic learner"), timeout.Token).ConfigureAwait(true);
-                if (!brain.Snapshot.Notes.Any(note => note.IsKnowledge && note.Id == original.Id && note.Title == "Reviewed Editor")
-                    || !brain.Snapshot.Notes.Any(note => note.Status == "archived" && note.Body.Contains("Example Editor", StringComparison.Ordinal)))
-                { throw new InvalidOperationException("Actual model correction did not preserve stable identity and previous evidence."); }
-                stage = "live_recall";
-                string? answer = await live.AskAsync(new("Qual é o editor que eu prefiro agora?", CultureInfo.GetCultureInfo("pt-BR"), "Synthetic learner"), timeout.Token).ConfigureAwait(true);
-                if (answer?.Contains("Reviewed Editor", StringComparison.OrdinalIgnoreCase) != true) { throw new InvalidOperationException("Actual model did not recover the corrected preference."); }
-                results.Add("Actual model recalled the real target ID, corrected the preference with history and recovered Reviewed Editor in a subsequent turn.");
-                if (permissions.PendingRequests.Count != 0) { throw new InvalidOperationException("Cognitive diagnostics attempted an unrelated protected action."); }
-            }
             await services.GetRequiredService<BrainLearning>().FlushAsync().ConfigureAwait(true);
             await BrainRestartSmokeRunner.WriteAsync(services, directory).ConfigureAwait(true);
             await File.WriteAllLinesAsync(Path.Combine(directory, "result.txt"), PassedHeader.Concat(results)).ConfigureAwait(true);

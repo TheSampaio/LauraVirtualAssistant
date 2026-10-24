@@ -59,6 +59,7 @@ public sealed record ConversationFailure(ConversationFailureKind Kind, bool Effe
             ConversationFailureKind.UnsupportedInput => LocalizationKeys.GenerativeAi.ImagesUnsupported,
             ConversationFailureKind.RequestRejected => LocalizationKeys.GenerativeAi.RequestRejected,
             ConversationFailureKind.OperationLimit => LocalizationKeys.GenerativeAi.OperationLimit,
+            ConversationFailureKind.MaxAuthorizationRequired => LocalizationKeys.GenerativeAi.MaxAuthorizationRequired,
             _ => LocalizationKeys.GenerativeAi.ProviderFailed,
         };
         string message = localizer.Get(key);

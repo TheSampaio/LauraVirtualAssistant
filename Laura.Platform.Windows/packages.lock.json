@@ -36,6 +36,12 @@
           "NAudio.Core": "2.2.1"
         }
       },
+      "SharpCompress": {
+        "type": "Direct",
+        "requested": "[0.50.6, )",
+        "resolved": "0.50.6",
+        "contentHash": "oZcOFo7qhDKtmuoKpVWhSFHlzKIOiZzhIBAE7Tgbd7Z30juzRXNfQSxQlotnGAI27N0R4DtVT9vbKBoXooyB9A=="
+      },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Direct",
         "requested": "[9.0.13, )",

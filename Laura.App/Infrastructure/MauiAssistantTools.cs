@@ -17,7 +17,7 @@ using IShellController = Laura.Core.Abstractions.IShellController;
 
 namespace Laura.App.Infrastructure;
 
-/// <summary>Implements structured Windows, browser, file, vision, memory and development capabilities for Gemini.</summary>
+/// <summary>Implements structured Windows, browser, file, vision, memory and development capabilities for authorized providers.</summary>
 public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, IProcessLauncher launcher,
     WindowsResourceMonitor resources, ISystemController system, IConversationMemory memory, ISettingsService settings,
     IUiLocalizer ui, IDesktopTools desktop, IEnumerable<ISkill> skills,
@@ -42,6 +42,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
     /// <inheritdoc />
     public object[] Declarations { get; } = [new { googleSearch = new { } }, new { functionDeclarations = new object[] {
         Function("list_capabilities", "Inspect actual registered native tool descriptions, current knowledge availability, installed skill review/dependency states and configured MCP connection states. Discover capabilities before claiming an objective is impossible. Knowledge is not executable ability; every concrete effect still requires its own authorization.", []),
+        Function("brain_stats", "Read actual node and relation counts from the current coherent Brain snapshot. Counts are measured inventory metadata, not search-result extrapolations or proof of understanding.", []),
         Function("plan_task", "Track a bounded multi-tool plan for the current real user objective. Provide a JSON array of 2..16 registered tool names in the intended order. The native coordinator retains original intent, observed results, blockers and budgets. Planning does not execute, authorize or activate anything, and cannot reset budgets or a denial. Continue selecting concrete tools after each result and report partial coverage honestly.", ["tools"], ("tools", "STRING", "JSON array of registered tool names")),
         Function("task_status", "Read the current objective, planned steps, observed tool results and remaining call/time budget. Completed operations do not prove the entire user goal or operational skill validation.", []),
         Function("assess_source_learning", "Conclude a knowledge-only study assessment when no reusable skill is justified by the sources you actually read. Requires prior list_brain_skills, an acquired source ID/hash and exact literal source evidence. A bounded reason records your assessment, not verified capability. If a procedure is supported, use propose_brain_skill instead; never activate or execute it.", ["id", "hash", "evidence", "reason"],
@@ -59,7 +60,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         Function("screenshot_control", "Use Laura's local screenshot selection/editor. Actions: region, window, fullscreen, copy, save, analyze, brain, cancel. Capture stays local until analyze receives exact cloud-image approval. brain attaches the current image to a user-selected topic; never invent success if capture was cancelled.", ["action"], ("action", "STRING", "Screenshot action"), ("topic", "STRING", "Explicitly requested Brain topic")),
         Function("read_brain_image", "Retrieve a visual reference previously stored in Brain, using its actual Markdown Assets/Screenshots hash path. Requires explicit cloud disclosure approval and attaches the actual PNG for visual analysis.", ["path"], ("path", "STRING", "Exact vault-relative Assets/Screenshots/<sha256>.png path")),
         Function("computer_control", "Control actual Windows applications. Actions: list_windows, focus, type, key, click, double_click, right_click, scroll, move, drag. Focus the intended window first. For visual actions first capture screen, then use actual pixel coordinates. Each concrete adapter applies the active native approval mode; do not request verbal approval.", ["action"], ("action", "STRING", "Action"), ("window", "STRING", "Exact or unique window title"), ("text", "STRING", "Literal text or key chord such as CTRL+S"), ("x", "INTEGER", "Primary-screen x coordinate"), ("y", "INTEGER", "Primary-screen y coordinate"), ("x2", "INTEGER", "Drag destination x"), ("y2", "INTEGER", "Drag destination y"), ("steps", "INTEGER", "Scroll wheel steps; positive is up")),
-        Function("browser_control", "Open a URL or search in the default browser. Also supports new_tab, close_tab, next_tab, previous_tab, back, forward, reload, find, zoom_in, zoom_out and zoom_reset on a focused browser window. For current facts use Google Search grounding. For page inspection use screen_process and computer_control.", ["action"], ("action", "STRING", "Browser action"), ("url", "STRING", "HTTP/HTTPS URL"), ("query", "STRING", "Search or find text"), ("window", "STRING", "Browser window title")),
+        Function("browser_control", "Open a URL or search in the default browser. Also supports new_tab, close_tab, next_tab, previous_tab, back, forward, reload, find, zoom_in, zoom_out and zoom_reset on a focused browser window. Opening or searching does not return page content or verify facts. For page inspection use explicitly authorized screen_process and computer_control. Never invent current information.", ["action"], ("action", "STRING", "Browser action"), ("url", "STRING", "HTTP/HTTPS URL"), ("query", "STRING", "Search or find text"), ("window", "STRING", "Browser window title")),
         Function("computer_settings", "Windows settings and media controls. Actions: volume_up, volume_down, volume_mute, play_pause, lock, settings, task_manager, show_desktop, minimize, maximize, dark_mode, light_mode, wallpaper, shutdown, restart. Shutdown/restart require native confirmation.", ["action"], ("action", "STRING", "Setting action"), ("value", "INTEGER", "Optional volume steps"), ("path", "STRING", "Existing wallpaper image"), ("window", "STRING", "Target window when needed")),
         Function("file_control", "Operate on real user files. Actions: list, search, read, write, patch, rollback, mkdir, copy, move, delete, open, info, undo. Aliases support child paths, e.g. desktop/site/index.html. Read returns content and a complete hash. write creates NEW files only. For existing files use patch with expected_hash and exactly one literal old_text/new_text passage; preserve layout and unrelated code. Never rewrite a whole page to fix accents. Use actual Unicode in HTML, preserving JSON/JavaScript escapes. Results contain a durable receipt ID for guarded rollback, including after restart. All effects use native permissions. File verification does not establish objective completion.", ["action"], ("action", "STRING", "File action"), ("path", "STRING", "File or folder"), ("destination", "STRING", "Copy/move destination"), ("content", "STRING", "Literal NEW file content"), ("expected_hash", "STRING", "Complete hash from read"), ("old_text", "STRING", "Exact unique passage"), ("new_text", "STRING", "Replacement passage"), ("receipt", "STRING", "Native edit receipt GUID for rollback"), ("query", "STRING", "File name search")),
         Function("run_program", "Run a resolved executable with literal arguments under the active native approval mode. Supports dotnet, Git and detected pwsh.exe or powershell.exe; use explicit -NoProfile and -NonInteractive, never add ExecutionPolicy Bypass. A working directory is not a sandbox and workspace permission does not grant process execution. Returns separate bounded stdout/stderr, exit code and timeout/cancellation status.", ["executable"], ("executable", "STRING", "Executable name or existing executable path"), ("arguments", "ARRAY", "Literal command-line arguments"), ("directory", "STRING", "Working directory"), ("timeout", "INTEGER", "Timeout seconds, up to 1800"), ("environment", "STRING", "JSON object of explicit task-scoped environment overrides")),
@@ -96,7 +97,7 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
         Function("disconnect_mcp_server", "Disconnect a configured MCP server, remove its advertised capabilities and cancel its pending approvals/calls.", ["server"], ("server", "STRING", "Exact server ID")),
         Function("forget_memory", "Forget a specific saved fact requested by the user.", ["key"], ("key", "STRING", "Fact key")),
         Function("clipboard", "Read or write the clipboard; reading needs native confirmation.", ["action"], ("action", "STRING", "read or write"), ("text", "STRING", "Literal text to copy")),
-        Function("reminder", "Add, list or cancel an explicitly requested persistent reminder. Notifications use Gemini while Laura is running. Do not create schedules unless the user requested them.", ["action"], ("action", "STRING", "add, list or cancel"), ("text", "STRING", "Reminder in the user's language"), ("due", "STRING", "ISO 8601 date/time including timezone offset"), ("seconds", "INTEGER", "Alternative relative delay in seconds"), ("id", "STRING", "Identifier to cancel")),
+        Function("reminder", "Add, list or cancel an explicitly requested persistent reminder. Notifications use local speech while Laura is running. Do not create schedules unless the user requested them.", ["action"], ("action", "STRING", "add, list or cancel"), ("text", "STRING", "Reminder in the user's language"), ("due", "STRING", "ISO 8601 date/time including timezone offset"), ("seconds", "INTEGER", "Alternative relative delay in seconds"), ("id", "STRING", "Identifier to cancel")),
         Function("run_local_command", "Execute existing Laura commands such as time, weather, web/YouTube search, notes, undo, volume and settings. For general app launch use open_app.", ["command"], ("command", "STRING", "Plain local command")),
         RepositoryAnalysisDeclaration(),
         Function("repository_learning_status", "Read measured acquisition, indexed source versions and analyzed modules for a current study. Interpretation is separate from verified comprehension, application and validated outcomes. No mastery percentage is invented.", ["id"], ("id", "STRING", "Actual study ID")),
@@ -346,6 +347,13 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
             }
             switch (name)
             {
+                case "brain_stats":
+                    if (!settings.Current.RememberConversations) { return new("Brain recall is disabled.") { Failed = true }; }
+                    BrainService statistics = services.GetRequiredService<BrainService>(); await statistics.RefreshIfDirtyAsync(cancellationToken).ConfigureAwait(false);
+                    BrainSnapshot snapshot = statistics.Snapshot;
+                    return new(JsonSerializer.Serialize(new { nodes = snapshot.Notes.Count, knowledge = snapshot.Notes.Count(note => note.IsKnowledge),
+                        skills = snapshot.Notes.Count(note => note.Type == "skill"), relations = snapshot.Edges.Count, issues = snapshot.Issues.Count,
+                        verifiedComprehension = "not measured by inventory" }));
                 case "record_repository_analysis":
                     Guid analysisStudyId = Guid.Parse(Value(arguments, "id"));
                     await services.GetRequiredService<RepositoryStudy>().StatusAsync(analysisStudyId, ActiveTask.Checkpoint().Id, MauiToolPermissions.CloudDestination, cancellationToken).ConfigureAwait(false);
@@ -457,8 +465,8 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                     return new(JsonSerializer.Serialize((query.Length == 0 ? applications.Applications : applications.Find(query)).Take(100)));
                 case "system_status": return new(JsonSerializer.Serialize(resources.Sample(storage.Directory)));
                 case "stop_listening":
-                    await services.GetRequiredService<GeminiLiveClient>().RestAsync(sayGoodbye: true).ConfigureAwait(false);
-                    return new("Listening ended and the native farewell was spoken. Laura remains running in standby. Do not repeat the farewell.");
+                    await services.GetRequiredService<Laura.Platform.Windows.Speech.LocalVoiceSession>().RestAsync(sayGoodbye: true).ConfigureAwait(false);
+                    return new("Listening ended. Laura remains running in standby. This tool did not synthesize a farewell.");
                 case "screen_process":
                     if (!services.GetRequiredService<IConversationEngine>().SupportsImages) { return new("The current model has no verified image support. Select a reviewed model before requesting vision."); }
                     bool camera = Value(arguments, "source") == "camera";
@@ -476,10 +484,10 @@ public sealed class MauiAssistantTools(WindowsApplicationCatalog applications, I
                     if (action == "analyze")
                     {
                         if (!services.GetRequiredService<IConversationEngine>().SupportsImages) { return new("The configured model has no verified image support."); }
-                        var snapshot = await screenshot.CurrentSnapshotAsync(cancellationToken).ConfigureAwait(false);
-                        byte[] png = snapshot.Png;
-                        snapshot.Lifetime.ThrowIfCancellationRequested();
-                        return new AssistantToolResult("Edited screenshot prepared locally for a visual follow-up. Cloud transmission still requires authorization.", png, "image/png") { ImageLifetime = snapshot.Lifetime };
+                        var editedSnapshot = await screenshot.CurrentSnapshotAsync(cancellationToken).ConfigureAwait(false);
+                        byte[] png = editedSnapshot.Png;
+                        editedSnapshot.Lifetime.ThrowIfCancellationRequested();
+                        return new AssistantToolResult("Edited screenshot prepared locally for a visual follow-up. Cloud transmission still requires authorization.", png, "image/png") { ImageLifetime = editedSnapshot.Lifetime };
                     }
                     bool performed = await screenshot.PerformAsync(action, false, Value(arguments, "topic"), cancellationToken).ConfigureAwait(false);
                     return new(performed ? "Screenshot action completed: " + action : "Screenshot action was cancelled or unsupported. Do not claim it succeeded.");

@@ -9,20 +9,20 @@ public sealed class SettingsConcurrencyTests
 {
     /// <summary>Concurrent field edits must transform the last committed state, including while a write is pending.</summary>
     [Fact]
-    public async Task ConcurrentEdits_PreserveBothProvidersAndPublishPersistedOrder()
+    public async Task ConcurrentEdits_PreserveVoicePreferencesAndChatGptAndPublishPersistedOrder()
     {
         var store = new BlockingStore();
         using var service = new SettingsService(store, NullLogger<SettingsService>.Instance);
         var published = new List<LauraSettings>();
         service.Changed += (_, value) => { Assert.Equal(store.Saved, value); published.Add(value); };
-        Task<LauraSettings> first = service.UpdateAsync(current => current with { GenerativeAi = current.GenerativeAi with { Enabled = true, LiveVoice = "Aoede" } });
+        Task<LauraSettings> first = service.UpdateAsync(current => current with { GenerativeAi = current.GenerativeAi with { Persona = "Owner voice preference" } });
         await store.Entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
         Task<LauraSettings> second = service.UpdateAsync(current => current with { ChatGpt = current.ChatGpt with { Enabled = true }, ProviderSelection = ConversationProviderSelection.ChatGpt });
         store.Release.TrySetResult();
         await Task.WhenAll(first, second);
-        Assert.True(service.Current.GenerativeAi.Enabled);
+        Assert.False(service.Current.GenerativeAi.Enabled);
         Assert.True(service.Current.ChatGpt.Enabled);
-        Assert.Equal("Aoede", service.Current.GenerativeAi.LiveVoice);
+        Assert.Equal("Owner voice preference", service.Current.GenerativeAi.Persona);
         Assert.Equal(2, published.Count);
         Assert.Equal(store.Saved, service.Current);
     }

@@ -1,0 +1,14 @@
+[
+  {"File":"sherpa-onnx-dc5583f4.zip","Url":"https://github.com/k2-fsa/sherpa-onnx/archive/dc5583f49917e4c95f6e7d862bb378e4ed5e9076.zip","Sha256":"41e481f0c941e90bc75c4dac3ce8178b63ff7e7995dd1f2be77ac77fb420292e"},
+  {"File":"onnxruntime-v1.28.2.zip","Url":"https://github.com/microsoft/onnxruntime/archive/refs/tags/v1.28.2.zip","Sha256":"0a71177b993c8406e0ae50574e2319bd0f53d3e89857cd9acdde0aea22ba27f1"},
+  {"File":"espeak-ng-ed530aa113046142eb5115cf2fc9157854d0ffe1.zip","Url":"https://github.com/csukuangfj/espeak-ng/archive/ed530aa113046142eb5115cf2fc9157854d0ffe1.zip","Sha256":"e4e262cbe34f7fe21f91f1ba3397f2728e1f30eafbae7853f2b753a9ed13f0dd"},
+  {"File":"piper-phonemize-f3ff95afc03640bc1399e113e83361192a2fafb4.zip","Url":"https://github.com/csukuangfj/piper-phonemize/archive/f3ff95afc03640bc1399e113e83361192a2fafb4.zip","Sha256":"d9cca4e2bdc7d6dd8dffb96a4668283dbd3f77a9c194a3e530c1e8eba9406a5d"},
+  {"File":"cargs-1.0.3.tar.gz","Url":"https://github.com/likle/cargs/archive/refs/tags/v1.0.3.tar.gz","Sha256":"ddba25bd35e9c6c75bc706c126001b8ce8e084d40ef37050e6aa6963e836eb8b"},
+  {"File":"json-3.12.0.tar.gz","Url":"https://github.com/nlohmann/json/archive/refs/tags/v3.12.0.tar.gz","Sha256":"4b92eb0c06d10683f7447ce9406cb97cd4b453be18d7279320f7b2f025c10187"},
+  {"File":"kaldi-decoder-0.3.0.tar.gz","Url":"https://github.com/k2-fsa/kaldi-decoder/archive/refs/tags/v0.3.0.tar.gz","Sha256":"b9f34cfb4fd3b1344100eead79ef4d37aa15962274b9e3056de345021f76a1b0"},
+  {"File":"kaldi-native-fbank-1.22.3.tar.gz","Url":"https://github.com/csukuangfj/kaldi-native-fbank/archive/refs/tags/v1.22.3.tar.gz","Sha256":"9176cc66fc7ce1edf85cf355b06e320c57db6297df74277f575183468893cf61"},
+  {"File":"openfst-1.8.5-2026-07-09.tar.gz","Url":"https://github.com/csukuangfj/openfst/archive/refs/tags/v1.8.5-2026-07-09.tar.gz","Sha256":"2ff712a32952fcb01d351121a6bc8ccf4fdc6b2aa06ce8df2b3095dedd518c0e"},
+  {"File":"simple-sentencepiece-0.7.tar.gz","Url":"https://github.com/pkufool/simple-sentencepiece/archive/refs/tags/v0.7.tar.gz","Sha256":"1748a822060a35baa9f6609f84efc8eb54dc0e74b9ece3d82367b7119fdc75af"},
+  {"File":"hclust-cpp-2026-02-25.tar.gz","Url":"https://github.com/csukuangfj/hclust-cpp/archive/refs/tags/2026-02-25.tar.gz","Sha256":"8f14e024c709d73afb40ae69cb22de4b73dba67cbce40f2e518813da8139ab56"},
+  {"File":"eigen-5.0.1.tar.gz","Url":"https://gitlab.com/libeigen/eigen/-/archive/5.0.1/eigen-5.0.1.tar.gz","Sha256":"e9c326dc8c05cd1e044c71f30f1b2e34a6161a3b6ecf445d56b53ff1669e3dec"}
+]

@@ -261,7 +261,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
                 answer = await completion.Task.WaitAsync(generation.Token).ConfigureAwait(false);
             }
             await session.Player.DrainAsync(timeout.Token).ConfigureAwait(false);
-            _spokenAnswer = answer;
+            _spokenAnswer = SpokenTextFormatter.Format(answer);
             return answer;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeout.IsCancellationRequested)
@@ -319,7 +319,7 @@ public sealed class GeminiLiveClient : IConversationEngine, IAsyncDisposable
             for (int frame = 0; frame < 60 && !completion.Task.IsCompleted; frame++)
             { await session.SendAsync(GeminiLiveProtocol.Audio(new byte[1280]), cancellationToken).ConfigureAwait(false); await Task.Delay(40, cancellationToken).ConfigureAwait(false); }
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); timeout.CancelAfter(_settings.Current.GenerativeAi.Timeout);
-            string answer = await completion.Task.WaitAsync(timeout.Token).ConfigureAwait(false); await session.Player.DrainAsync(timeout.Token).ConfigureAwait(false); _spokenAnswer = answer; return answer;
+            string answer = await completion.Task.WaitAsync(timeout.Token).ConfigureAwait(false); await session.Player.DrainAsync(timeout.Token).ConfigureAwait(false); _spokenAnswer = SpokenTextFormatter.Format(answer); return answer;
         }
         catch { Interrupt(); throw; }
         finally { _requests.Release(); }

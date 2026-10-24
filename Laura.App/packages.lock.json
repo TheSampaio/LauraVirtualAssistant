@@ -311,6 +311,11 @@
           "NAudio.Core": "2.2.1"
         }
       },
+      "SharpCompress": {
+        "type": "Transitive",
+        "resolved": "0.50.6",
+        "contentHash": "oZcOFo7qhDKtmuoKpVWhSFHlzKIOiZzhIBAE7Tgbd7Z30juzRXNfQSxQlotnGAI27N0R4DtVT9vbKBoXooyB9A=="
+      },
       "SQLitePCLRaw.bundle_e_sqlite3": {
         "type": "Transitive",
         "resolved": "2.1.12",
@@ -366,6 +371,7 @@
           "ModelContextProtocol.Core": "[2.2.0, )",
           "NAudio.Core": "[2.2.1, )",
           "NAudio.WinMM": "[2.2.1, )",
+          "SharpCompress": "[0.50.6, )",
           "System.Security.Cryptography.ProtectedData": "[9.0.13, )"
         }
       }

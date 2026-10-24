@@ -20,6 +20,16 @@ public sealed partial class BrainTests
         BrainService restarted = Create(cache: "context-restart"); await restarted.InitializeAsync();
         Assert.Contains(await restarted.SearchAsync("Example Editor"), hit => hit.Note.Id == saved.Id && hit.Note.Verification == "user_reported");
     }
+    /// <summary>Stores a spoken website preference when a grounded topic label reorders accented words.</summary>
+    [Fact]
+    public async Task ContextualPreferenceAcceptsGroundedReorderedTopic()
+    {
+        BrainService brain = Create(); await using var learner = new BrainLearning(brain, _settings, _localizer, NullLogger<BrainLearning>.Instance);
+        const string input = "Ao criar sites, sempre use ícones SVG quando possível em seções ou botões.";
+        BrainMemoryResult result = await learner.LearnProposalAsync(new("preference", "SVG icons", "ícones SVG", input), input);
+        Assert.Equal("new", result.Disposition);
+        Assert.Equal(input, brain.Snapshot.Notes.Single(note => note.Id == result.NoteId).Body.TrimEnd());
+    }
     [Fact]
     public async Task ContextualCorrectionPreservesIdentityAndHistoryWhileAmbiguityRetainsBothVersions()
     {

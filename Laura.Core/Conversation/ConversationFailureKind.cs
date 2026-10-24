@@ -35,4 +35,6 @@ public enum ConversationFailureKind
     RequestRejected,
     /// <summary>The native agent exhausted its bounded operation budget.</summary>
     OperationLimit,
+    /// <summary>An exceptional Max task needs explicit owner routing consent and an authorized account model.</summary>
+    MaxAuthorizationRequired,
 }

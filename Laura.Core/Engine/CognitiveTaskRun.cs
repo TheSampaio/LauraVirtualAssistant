@@ -266,14 +266,25 @@ public sealed class CognitiveTaskRun
                 if (data.RootElement.TryGetProperty("Failure", out var failure) && failure.GetString()?.Length > 0) { _studyRemaining = 0; }
                 if (name == "repository_study_status") { return; }
             }
-            _sources.Clear(); _readSources.Clear();
-            if (!sameStudy) { _skillsInspected = false; _relatedRecalled = false; }
+            if (!sameStudy)
+            {
+                _sources.Clear(); _readSources.Clear(); _skillsInspected = false; _relatedRecalled = false;
+            }
+            int newSourceCount = 0;
             foreach (JsonElement document in data.RootElement.GetProperty("Documents").EnumerateArray().Take(24))
             {
                 var source = new CognitiveSourceEvidence(document.GetProperty("Id").GetString()!, document.GetProperty("Hash").GetString()!, document.GetProperty("Path").GetString()!);
-                _sources.RemoveAll(existing => existing.Id == source.Id); if (_sources.Count < 48) { _sources.Add(source); }
+                if (_sources.Any(existing => existing.Id == source.Id && existing.Hash != source.Hash)) { _readSources.Remove(source.Id); }
+                _sources.RemoveAll(existing => existing.Id == source.Id);
+                if (_sources.Count == 48)
+                {
+                    _readSources.Remove(_sources[0].Id);
+                    _sources.RemoveAt(0);
+                }
+                _sources.Add(source);
+                newSourceCount++;
             }
-            _sourceAssessed = false;
+            if (newSourceCount > 0) { _sourceAssessed = false; }
         }
         catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException) { }
     }
