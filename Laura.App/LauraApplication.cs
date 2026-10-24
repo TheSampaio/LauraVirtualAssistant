@@ -195,7 +195,6 @@ public sealed class LauraApplication(IServiceProvider services) : Application, I
         await services.GetRequiredService<Laura.Platform.Windows.Speech.LocalVoiceSession>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<HourlyAnnouncer>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<IAssistantEngine>().StopAsync().ConfigureAwait(true);
-        await services.GetRequiredService<Laura.App.Controls.VulkanReactorHost>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<Laura.Platform.Windows.Conversation.LlamaCppRuntime>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<ISpeechSynthesizer>().DisposeAsync().ConfigureAwait(true);
         await services.GetRequiredService<Laura.Platform.Windows.Speech.LocalVoiceWorkerClient>().DisposeAsync().ConfigureAwait(true);

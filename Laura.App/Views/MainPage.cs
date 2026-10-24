@@ -25,7 +25,6 @@ public sealed partial class MainPage : ContentPage, IDisposable
     private readonly ChatGptConversationEngine _chatGpt;
     private readonly AssistantCoreDrawable _core = new();
     private readonly GraphicsView _reactor;
-    private readonly VulkanReactorHost _vulkan;
     private readonly Grid _body = new() { ColumnSpacing = 16, RowSpacing = 16 };
     private readonly ObservableCollection<ConversationMessage> _messages = [];
     private readonly CollectionView _chat;
@@ -95,7 +94,6 @@ public sealed partial class MainPage : ContentPage, IDisposable
     {
         using var performance = PerformanceTrace.Measure("hud.construct");
         _services = services; _engine = engine; _settings = settings; _ui = ui; _live = live; _resources = resources; _clapListener = clapListener;
-        _vulkan = services.GetRequiredService<VulkanReactorHost>();
         _tasks = services.GetRequiredService<CognitiveTasks>(); _tasks.Changed += OnTaskProgress;
         _chatGpt = services.GetRequiredService<ChatGptConversationEngine>();
         _localText = services.GetRequiredKeyedService<TextConversationEngine>("local");
@@ -320,14 +318,14 @@ public sealed partial class MainPage : ContentPage, IDisposable
     {
         base.OnAppearing(); _pageVisible = true; _lastFrame = Stopwatch.GetTimestamp(); Reload(); InvalidateReactor();
         _timer ??= Dispatcher.CreateTimer();
-        _timer.Interval = TimeSpan.FromMilliseconds(33); _timer.Tick -= Tick; _timer.Tick += Tick;
+        _timer.Interval = TimeSpan.FromMilliseconds(_center.IsVisible ? 16 : 2000); _timer.Tick -= Tick; _timer.Tick += Tick;
         if (_windowVisible) { _timer.Start(); }
     }
     /// <inheritdoc />
-    protected override void OnDisappearing() { _vulkan.Hide(); _pageVisible = false; _timer?.Stop(); base.OnDisappearing(); }
+    protected override void OnDisappearing() { _pageVisible = false; _timer?.Stop(); base.OnDisappearing(); }
     /// <summary>Suspends vector animation while the native window is hidden in the tray.</summary>
     public void SetWindowVisible(bool visible)
-    { _windowVisible = visible; _lastFrame = Stopwatch.GetTimestamp(); if (visible && _pageVisible) { Reload(); InvalidateReactor(); _timer?.Start(); } else { _timer?.Stop(); _vulkan.Hide(); } }
+    { _windowVisible = visible; _lastFrame = Stopwatch.GetTimestamp(); if (visible && _pageVisible) { Reload(); InvalidateReactor(); _timer?.Start(); } else { _timer?.Stop(); } }
     /// <summary>Animates vector rings and refreshes measured system statistics at one-second intervals.</summary>
     private void Tick(object? sender, EventArgs args)
     {
@@ -343,17 +341,17 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _core.Level = animate ? _core.Level + ((_core.Mode == ReactorMode.Listening ? _live.InputLevel : _live.OutputLevel) - _core.Level) * blend : 0;
         if (_smokeAngle is { } angle) { _core.Angle = angle; _core.Level = 0; }
         else if (animate) { _core.Angle = (_core.Angle + (14 + 22 * _core.ActivityAmount) * seconds) % AssistantCoreDrawable.CycleDegrees; }
-        InvalidateReactor();
+        if (_center.IsVisible) { InvalidateReactor(); }
         if (Environment.TickCount64 < _nextMetrics) { return; }
         _nextMetrics = Environment.TickCount64 + 2000;
         _clock.Text = DateTime.Now.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
         if (_monitor.IsVisible && !_samplingMetrics) { _ = RefreshMetricsAsync(); }
 
     }
-    /// <summary>Uses the optional GPU surface without redrawing the managed vector canvas underneath it.</summary>
+    /// <summary>Requests a native MAUI redraw of the reactor.</summary>
     private void InvalidateReactor()
     {
-        if (!_vulkan.Update(_reactor, _settings.Current.VulkanInterface && _pageVisible && _windowVisible && _center.IsVisible && _accessibility.AnimationsEnabled, _core.Mode, _core.Level)) { _reactor.Invalidate(); }
+        _reactor.Invalidate();
     }
     /// <summary>Samples native hardware off the UI thread and publishes one coherent dashboard update.</summary>
     private async Task RefreshMetricsAsync()
@@ -416,6 +414,7 @@ public sealed partial class MainPage : ContentPage, IDisposable
         Theme.DescribeAction(_monitorButton, _ui.Get(_showMonitor ? "ui.maui.core" : "ui.maui.monitor"));
         _monitorButton.BackgroundColor = _showMonitor ? Theme.AssistantSurface : Theme.Field;
         _monitor.IsVisible = !narrow || _showMonitor; _center.IsVisible = !narrow || !_showMonitor;
+        if (_timer is not null) { _timer.Interval = TimeSpan.FromMilliseconds(_center.IsVisible ? 16 : 2000); }
         if (narrow)
         {
             _body.ColumnDefinitions.Add(new(GridLength.Star)); _body.ColumnDefinitions.Add(new(new GridLength(1.1, GridUnitType.Star)));
@@ -593,6 +592,6 @@ public sealed partial class MainPage : ContentPage, IDisposable
         _engine.ConversationMessageReceived -= ReceiveMessage; _live.MessageReceived -= ReceiveMessage; _localText.StreamUpdated -= ReceiveStream; _live.Interrupted -= StreamInterrupted;
         _chatGpt.StreamUpdated -= ReceiveStream;
         _tasks.Changed -= OnTaskProgress;
-        _vulkan.Hide(); _conversationScroll.Dispose(); _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed -= OnApprovalsChanged; _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this);
+        _conversationScroll.Dispose(); _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed -= OnApprovalsChanged; _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this);
     }
 }

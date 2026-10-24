@@ -32,7 +32,6 @@ public sealed class SetupPage : ContentPage
     private readonly Entry _nickname = Theme.Entry(), _weatherLocation = Theme.Entry(), _appSearch = Theme.Entry();
     private readonly Editor _persona = new() { TextColor = Theme.Text, BackgroundColor = Theme.Field, HeightRequest = 120 };
     private readonly Switch _muted, _remember, _greeting, _hourly, _autoStart, _clapWake;
-    private readonly Switch _vulkan;
     private readonly Slider _volume, _silence, _clapSensitivity;
     private readonly int[] _inputIds, _outputIds;
     private readonly Label _result = Theme.Label("", 13, Theme.Listening);
@@ -47,6 +46,7 @@ public sealed class SetupPage : ContentPage
     private readonly View _brand;
     private int _activeTab;
     private bool? _compact;
+    private int _configuredRows;
     private int _searchRevision;
     private readonly View?[] _pages;
     private readonly Func<View>[] _pageFactories;
@@ -75,7 +75,6 @@ public sealed class SetupPage : ContentPage
         _createdCulture = ui.Culture.Name;
         LauraSettings current = settings.Current;
         _baseline = DraftBaseline(current);
-        _vulkan = Toggle(current.VulkanInterface);
         Title = ui.Get("ui.maui.setup"); BackgroundColor = Theme.Background; NavigationPage.SetHasNavigationBar(this, false);
         _voice = Theme.Picker(["af_heart", "af_bella", "bf_alice", "bf_emma", "bf_isabella", "bf_lily", "gb_cori"], current.LocalVoice.EnglishVoice);
         _portugueseVoice = Theme.Picker(["pt_dii", "pf_dora"], current.LocalVoice.PortugueseVoice);
@@ -152,7 +151,7 @@ public sealed class SetupPage : ContentPage
         _geminiVoice.SelectedItem = current.GenerativeAi.LiveVoice;
         _lightProvider.SelectedIndex = current.GenerativeAi.LightProvider == LightProviderSelection.Local ? 1 : 0;
         _geminiKey.Text = ""; _geminiKey.IsPassword = true; RefreshGeminiKeyState();
-        _vulkan.IsToggled = current.VulkanInterface; _result.Text = "";
+        _result.Text = "";
         _nickname.Text = current.UserNickname; _weatherLocation.Text = current.WeatherLocation; _persona.Text = current.GenerativeAi.Persona;
         _permissions.Reload(current.Permissions);
         _screenshots.Reload(current.Screenshots);
@@ -171,9 +170,10 @@ public sealed class SetupPage : ContentPage
     public void SelectTab(int index)
     {
         if (index < 0 || index >= _pages.Length) { throw new ArgumentOutOfRangeException(nameof(index)); }
+        if (_activeTab == index && _active.Content is not null) { return; }
         _activeTab = index;
         _active.Content = _pages[index] ??= _pageFactories[index]();
-        _compact = null; UpdateLayout();
+        UpdateLayout();
         if (index == 4) { RefreshApplications(); }
         for (int item = 0; item < _tabs.Length; item++)
         {
@@ -268,7 +268,6 @@ public sealed class SetupPage : ContentPage
         Hint("ui.maui.listeningHelp"), ActionButton("ui.maui.savePreview", "play", PreviewAsync));
     /// <summary>Builds independent language and assistant behavior preferences.</summary>
     private View PreferencesPanel() => Panel(
-        Row("ui.settings.vulkan", "monitor", _vulkan, "ui.settings.vulkanHelp"),
         Row("ui.maui.uiLanguage", "globe", _uiCulture, "ui.settings.uiLanguageHelp"),
         Row("ui.maui.language", "message_square", _culture, "ui.settings.languageHelp"),
         Row("ui.maui.nickname", "user_round", _nickname, "ui.settings.nicknameHelp"),
@@ -309,8 +308,8 @@ public sealed class SetupPage : ContentPage
     private void UpdateLayout()
     {
         if (Width <= 0) { return; }
-        _body.WidthRequest = -1;
-        _body.ColumnDefinitions[0].Width = new GridLength(Width < 900 ? 148 : 210);
+        int railWidth = Width < 900 ? 148 : 210;
+        if (_body.ColumnDefinitions[0].Width.Value != railWidth) { _body.ColumnDefinitions[0].Width = new GridLength(railWidth); }
         bool brandVisible = Width >= 1360;
         if (_brand.IsVisible != brandVisible || _workspaceHeader.ColumnDefinitions[0].Width.Value != (brandVisible ? 155 : 0))
         {
@@ -319,15 +318,18 @@ public sealed class SetupPage : ContentPage
             _workspaceHeader.ColumnSpacing = brandVisible ? 12 : 0;
         }
         bool compact = Width < 900;
-        if (_compact == compact) { return; }
+        if (_compact == compact && _configuredRows == _responsiveRows.Count) { return; }
+        int firstRow = _compact == compact ? _configuredRows : 0;
         _compact = compact;
-        foreach (var (row, control, toggle) in _responsiveRows)
+        for (int index = firstRow; index < _responsiveRows.Count; index++)
         {
+            var (row, control, toggle) = _responsiveRows[index];
             row.ColumnDefinitions = compact || toggle ? [new(GridLength.Auto), new(GridLength.Star), new(GridLength.Auto)] : [new(GridLength.Auto), new(new GridLength(250)), new(GridLength.Star)];
             bool stack = compact && !toggle || control is Editor;
             row.RowDefinitions = stack ? [new(GridLength.Auto), new(GridLength.Auto)] : [new(GridLength.Auto)];
             Grid.SetRow(control, stack ? 1 : 0); Grid.SetColumn(control, stack ? 1 : 2); Grid.SetColumnSpan(control, stack ? 2 : 1);
         }
+        _configuredRows = _responsiveRows.Count;
     }
     /// <summary>Displays speech-end delay in milliseconds.</summary>
     private void UpdateSilence() => _silenceValue.Text = $"{_silence.Value:F0} ms";
@@ -462,7 +464,7 @@ public sealed class SetupPage : ContentPage
     /// <summary>Captures native fields before asynchronous validation can yield to further edits.</summary>
     private LauraSettings CaptureDraft() => _baseline with
         {
-            ChatGpt = _chatGpt.Options, ProviderSelection = _chatGpt.Selection, VulkanInterface = _vulkan.IsToggled,
+            ChatGpt = _chatGpt.Options, ProviderSelection = _chatGpt.Selection,
             LocalModel = _localSettings.Options, LocalVoice = _localSettings.VoiceOptions with { EnglishVoice = _voice.SelectedItem as string ?? "af_heart",
                 PortugueseVoice = _portugueseVoice.SelectedItem as string ?? "pt_dii" },
             Culture = _culture.SelectedItem as string ?? "pt-BR", UiCulture = _uiCulture.SelectedItem as string ?? "pt-BR",

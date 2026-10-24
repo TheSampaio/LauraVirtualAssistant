@@ -26,8 +26,6 @@ public sealed record LauraSettings
 
     /// <summary>Gets the independently selected interface language.</summary>
     public string UiCulture { get; init; } = DefaultCulture;
-    /// <summary>Gets the optional Vulkan reactor renderer; native controls retain the Windows compositor.</summary>
-    public bool VulkanInterface { get; init; }
     /// <summary>Gets the microphone index, or -1 for the system default.</summary>
     public int InputDevice { get; init; } = -1;
     /// <summary>Gets the playback index, or -1 for the system default.</summary>

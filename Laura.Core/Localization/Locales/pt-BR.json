@@ -1122,7 +1122,5 @@
   "ui.voice.synthesizing": "Preparando áudio",
   "ui.local.advanced": "Configurações avançadas dos modelos",
   "ui.local.ready": "Instalados e prontos: Qwen · llama.cpp · Whisper · Kokoro · Dii · Cori",
-  "ui.settings.vulkan": "Aceleração Vulkan do reator",
-  "ui.settings.vulkanHelp": "Use a GPU para animar o reator. Os controles nativos usam o compositor do Windows. Se Vulkan estiver indisponível, o renderizador padrão permanece ativo.",
   "ui.local.readySpeech": "Os modelos locais e o GPT estão prontos. Minha voz local está funcionando."
 }

@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
-using Laura.App.Controls;
 using Laura.Core.Abstractions;
 using Laura.Core.Configuration;
 using Laura.Core.Conversation;
@@ -31,26 +30,14 @@ internal static class SpokenProvidersSmokeRunner
         {
             await settings.UpdateAsync(settings.Current with { MicrophoneMuted = true, ClapWakeEnabled = false, GreetOnStartup = false, AnnounceHourly = false,
                 GenerativeAi = settings.Current.GenerativeAi with { Enabled = false, Timeout = TimeSpan.FromMinutes(4) }, Voice = settings.Current.Voice with { Volume = 65 } }, timeout.Token).ConfigureAwait(true);
-            foreach (bool vulkan in new[] { false, true })
-            {
-                await settings.UpdateAsync(settings.Current with { VulkanInterface = vulkan }, timeout.Token).ConfigureAwait(true);
-                await Task.Delay(1500, timeout.Token).ConfigureAwait(true);
-                var intervals = new List<double>(); long previous = Stopwatch.GetTimestamp();
-                for (int frame = 0; frame < 100; frame++)
-                { await Task.Delay(20, timeout.Token).ConfigureAwait(true); long now = Stopwatch.GetTimestamp(); intervals.Add(Stopwatch.GetElapsedTime(previous, now).TotalMilliseconds); previous = now; }
-                intervals.Sort(); ulong frames = services.GetRequiredService<VulkanReactorHost>().PresentedFrames;
-                if (vulkan && !services.GetRequiredService<VulkanReactorHost>().IsRendering) { throw new InvalidOperationException("The Vulkan swapchain did not present a hardware frame."); }
-                evidence.Add(new { renderer = vulkan ? "Vulkan" : "Native", presentedFrames = frames, dispatcherMedianMs = intervals[50], dispatcherP95Ms = intervals[95], sampleCount = intervals.Count });
-                await File.WriteAllTextAsync(Path.Combine(directory, "renderers.json"), JsonSerializer.Serialize(evidence, EvidenceJson), timeout.Token).ConfigureAwait(true);
-                if (!vulkan) { await MauiSmokeRunner.CaptureAsync(window, Path.Combine(directory, "native-hud.png")).ConfigureAwait(true); }
-                if (vulkan)
-                {
-                    var native = (Microsoft.UI.Xaml.Window)window.Handler!.PlatformView!;
-                    using var captured = await Laura.App.Platforms.Windows.WindowsWindowCapture.CaptureAsync(new(WinRT.Interop.WindowNative.GetWindowHandle(native).ToInt64(), (uint)Environment.ProcessId, "Laura"), timeout.Token).ConfigureAwait(true);
-                    byte[] image = await Laura.App.Platforms.Windows.WindowsScreenCapture.EncodeAsync(captured.Pixels.ToArray(), captured.Bounds.Width, captured.Bounds.Height, false, timeout.Token).ConfigureAwait(true);
-                    await File.WriteAllBytesAsync(Path.Combine(directory, "vulkan-hud.png"), image, timeout.Token).ConfigureAwait(true);
-                }
-            }
+            await Task.Delay(1500, timeout.Token).ConfigureAwait(true);
+            var intervals = new List<double>(); long previous = Stopwatch.GetTimestamp();
+            for (int frame = 0; frame < 100; frame++)
+            { await Task.Delay(20, timeout.Token).ConfigureAwait(true); long now = Stopwatch.GetTimestamp(); intervals.Add(Stopwatch.GetElapsedTime(previous, now).TotalMilliseconds); previous = now; }
+            intervals.Sort();
+            evidence.Add(new { renderer = "Native", dispatcherMedianMs = intervals[50], dispatcherP95Ms = intervals[95], sampleCount = intervals.Count });
+            await File.WriteAllTextAsync(Path.Combine(directory, "renderers.json"), JsonSerializer.Serialize(evidence, EvidenceJson), timeout.Token).ConfigureAwait(true);
+            await MauiSmokeRunner.CaptureAsync(window, Path.Combine(directory, "native-hud.png")).ConfigureAwait(true);
             var dispatcher = services.GetRequiredService<ISkillDispatcher>();
             var router = services.GetRequiredService<ConversationProviderRouter>();
             var speech = services.GetRequiredService<ISpeechSynthesizer>();

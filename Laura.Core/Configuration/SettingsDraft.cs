@@ -8,7 +8,6 @@ public static class SettingsDraft
     {
         Culture = Choose(baseline.Culture, edited.Culture, current.Culture),
         UiCulture = Choose(baseline.UiCulture, edited.UiCulture, current.UiCulture),
-        VulkanInterface = Choose(baseline.VulkanInterface, edited.VulkanInterface, current.VulkanInterface),
         UserNickname = Choose(baseline.UserNickname, edited.UserNickname, current.UserNickname),
         WeatherLocation = Choose(baseline.WeatherLocation, edited.WeatherLocation, current.WeatherLocation),
         MicrophoneMuted = Choose(baseline.MicrophoneMuted, edited.MicrophoneMuted, current.MicrophoneMuted),
