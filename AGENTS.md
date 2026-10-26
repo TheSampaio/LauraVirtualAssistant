@@ -177,6 +177,11 @@ renders the app itself with isolated storage; it must never capture a microphone
 
 ## Tests
 
+- Always build and run both **Debug and Release** for material code changes. A
+  successful Debug run does not validate Release. Use isolated storage and relevant
+  native smoke checks to verify actual startup and changed behavior in each
+  configuration; report any unverified configuration explicitly. When delivering a
+  published build, run that exact published executable as well.
 - New domain logic (normalization, phrase matching, sanitization, dispatch) needs a
   test in `Laura.Core.Tests`.
 - Use the fakes in `TestDoubles/` instead of mocking frameworks.
