@@ -20,6 +20,18 @@ public static class MauiSmokeRunner
         VerifyReactorTransitions();
         try
         {
+            if (Environment.GetCommandLineArgs().Contains("--brain-graph-smoke", StringComparer.Ordinal))
+            { await BrainGraphSmokeRunner.RunAsync(window, directory).ConfigureAwait(true); return; }
+            if (Environment.GetCommandLineArgs().Contains("--navigation-focus-smoke", StringComparer.Ordinal))
+            {
+                var focusNavigation = (NavigationPage)window.Page!;
+                var focusMain = services.GetRequiredService<MainPage>();
+                for (int visit = 0; visit < 3; visit++) { await VerifyFocusedReturnAsync(focusMain, focusNavigation).ConfigureAwait(true); }
+                await NavigationMotion.PushAsync(focusNavigation.Navigation, services.GetRequiredService<SetupPage>()).ConfigureAwait(true);
+                await VerifyFocusedPageReturnAsync(focusNavigation, false).ConfigureAwait(true);
+                await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), "PASS: three focused returns preserved reusable cached native controls; a noncached focused page disconnected without mapping a missing platform view.").ConfigureAwait(true);
+                return;
+            }
             if (Environment.GetCommandLineArgs().Contains("--spoken-providers-smoke", StringComparer.Ordinal))
             { await SpokenProvidersSmokeRunner.RunAsync(services, window, directory).ConfigureAwait(true); return; }
             if (Environment.GetCommandLineArgs().Contains("--local-runtime-smoke", StringComparer.Ordinal))
@@ -241,10 +253,12 @@ public static class MauiSmokeRunner
             for (int visit = 0; visit < 3; visit++)
             {
                 var elapsed = System.Diagnostics.Stopwatch.StartNew();
-                await main.OpenSetupAsync().ConfigureAwait(true); await NavigationMotion.PopAsync(navigation.Navigation).ConfigureAwait(true);
+                await VerifyFocusedReturnAsync(main, navigation).ConfigureAwait(true);
                 navigationTimes.Add(elapsed.Elapsed.TotalMilliseconds);
             }
             await File.WriteAllTextAsync(Path.Combine(directory, "navigation-timings.txt"), string.Join("\n", navigationTimes.Select(time => time.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) + " ms (open + return, two 300 ms arrival transitions when system animations are enabled)"))).ConfigureAwait(true);
+            await NavigationMotion.PushAsync(navigation.Navigation, services.GetRequiredService<SetupPage>()).ConfigureAwait(true);
+            await VerifyFocusedPageReturnAsync(navigation, false).ConfigureAwait(true);
             for (int visit = 0; visit < 3; visit++) { await main.OpenBrainAsync().ConfigureAwait(true); await NavigationMotion.PopAsync(navigation.Navigation).ConfigureAwait(true); }
             await Task.Delay(150).ConfigureAwait(true);
             main.VerifyHudForSmoke();
@@ -253,6 +267,27 @@ public static class MauiSmokeRunner
         }
         catch (Exception exception) { await File.WriteAllTextAsync(Path.Combine(directory, "result.txt"), exception.ToString()).ConfigureAwait(true); }
         finally { await PerformanceTrace.WriteAsync(directory).ConfigureAwait(true); services.GetRequiredService<Laura.Core.Abstractions.IShellController>().Shutdown(); }
+    }
+    /// <summary>Exercises navigation teardown with a real focused native image button and its visual-state setters.</summary>
+    private static async Task VerifyFocusedReturnAsync(MainPage main, NavigationPage navigation)
+    {
+        await main.OpenSetupAsync().ConfigureAwait(true);
+        await VerifyFocusedPageReturnAsync(navigation, true).ConfigureAwait(true);
+    }
+    /// <summary>Checks focused page teardown or retention after the actual native button is ready.</summary>
+    private static async Task VerifyFocusedPageReturnAsync(NavigationPage navigation, bool retained)
+    {
+        var focusedBack = VisualDescendants(navigation.CurrentPage).OfType<ImageButton>().Single(button => button.AutomationId == "workspace-back");
+        ((Microsoft.UI.Xaml.Window)navigation.Window.Handler!.PlatformView!).Activate();
+        for (int attempt = 0; attempt < 120 && focusedBack.Handler?.PlatformView is not Microsoft.UI.Xaml.Controls.Button; attempt++)
+        { await Task.Delay(16).ConfigureAwait(true); }
+        if (focusedBack.Handler?.PlatformView is not Microsoft.UI.Xaml.Controls.Button nativeBack)
+        { throw new InvalidOperationException("Navigation return did not create its native back button."); }
+        nativeBack.Focus(Microsoft.UI.Xaml.FocusState.Keyboard); await Task.Delay(80).ConfigureAwait(true);
+        if (!focusedBack.IsFocused) { throw new InvalidOperationException("Navigation return did not exercise a focused native back button."); }
+        await NavigationMotion.PopAsync(navigation.Navigation).ConfigureAwait(true);
+        await Task.Delay(100).ConfigureAwait(true);
+        if ((focusedBack.Handler is not null) != retained) { throw new InvalidOperationException("Navigation did not honor native page retention or teardown."); }
     }
     /// <summary>Compares rendered workspace navigation at each window width, independently of its factory.</summary>
     private static void VerifyWorkspaceNavigation(Window window, Page page, Dictionary<int, string> appearances, string description)

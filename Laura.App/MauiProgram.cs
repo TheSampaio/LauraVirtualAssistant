@@ -11,6 +11,7 @@ public static class MauiProgram
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder().UseMauiApp<LauraApplication>();
+        builder.ConfigureMauiHandlers(handlers => handlers.AddHandler<ImageButton, Laura.App.Platforms.Windows.WindowsImageButtonHandler>());
         builder.Logging.AddDebug();
         string[] args = Environment.GetCommandLineArgs();
         int storage = Array.IndexOf(args, "--storage");

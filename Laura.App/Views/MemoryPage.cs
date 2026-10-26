@@ -97,7 +97,7 @@ public sealed class MemoryPage : ContentPage
         _query.Placeholder = T("search"); _query.TextChanged += async (_, _) => { int version = ++_queryVersion; await Task.Delay(180).ConfigureAwait(true); if (version == _queryVersion) { await RefreshSafelyAsync().ConfigureAwait(true); } };
         _folder.SelectedIndexChanged += async (_, _) => { if (!_loading) { await RefreshGraphAsync().ConfigureAwait(true); } };
         _type.SelectedIndexChanged += async (_, _) => { if (!_loading) { await RefreshGraphAsync().ConfigureAwait(true); } };
-        _graph.NodeSelected += async (_, id) => { BrainNote? note = _brain.Snapshot.Notes.FirstOrDefault(note => note.Id == id); if (note is not null) { await OpenAsync(note.Path, false).ConfigureAwait(true); } };
+        _graph.NodeSelected += async (_, id) => { BrainNote? note = _brain.Snapshot.Notes.FirstOrDefault(note => note.Id == id); if (note is not null) { await OpenAsync(note.Path, false, selectGraph: false).ConfigureAwait(true); } };
         _graph.NodeOpened += (_, _) => SetMode("read");
         _files.ItemTemplate = new DataTemplate(() =>
         {
@@ -284,9 +284,9 @@ public sealed class MemoryPage : ContentPage
         _documentButtons["save"].BackgroundColor = Theme.Primary; _documentButtons["save"].TextColor = Theme.Text; _compactNoteActions.IsEnabled = selected && !_busy;
     }
     /// <inheritdoc />
-    protected override async void OnAppearing() { base.OnAppearing(); _visible = true; _findShortcut.IsEnabled = true; _brain.Changed -= OnBrainChanged; _brain.Changed += OnBrainChanged; await RefreshSafelyAsync().ConfigureAwait(true); if (_evidence is not null) { await _evidence.RefreshAsync().ConfigureAwait(true); } }
+    protected override async void OnAppearing() { base.OnAppearing(); _visible = true; _graph.SetAnimationActive(_mode is "graph" or "local"); _findShortcut.IsEnabled = true; _brain.Changed -= OnBrainChanged; _brain.Changed += OnBrainChanged; await RefreshSafelyAsync().ConfigureAwait(true); if (_evidence is not null) { await _evidence.RefreshAsync().ConfigureAwait(true); } }
     /// <inheritdoc />
-    protected override void OnDisappearing() { _visible = false; _findShortcut.IsEnabled = false; _brain.Changed -= OnBrainChanged; base.OnDisappearing(); }
+    protected override void OnDisappearing() { _visible = false; _graph.SetAnimationActive(false); _findShortcut.IsEnabled = false; _brain.Changed -= OnBrainChanged; base.OnDisappearing(); }
     /// <summary>Marshals storage notifications while preserving unsaved editor buffers.</summary>
     private void OnBrainChanged(object? sender, EventArgs args) => Dispatcher.Dispatch(() =>
     {
@@ -388,7 +388,7 @@ public sealed class MemoryPage : ContentPage
     private void SetMode(string mode)
     {
         if (_mode == mode && _center.Content is not null) { return; }
-        _mode = mode; _center.Content = null;
+        _mode = mode; _graph.SetAnimationActive(_visible && (mode is "graph" or "local")); _center.Content = null;
         if (_editor.Parent is Layout editorParent) { editorParent.Children.Remove(_editor); }
         if (_readerScroll.Parent is Layout readerParent) { readerParent.Children.Remove(_readerScroll); }
         // Move the inspector's container with it so WinUI recalculates the rounded clip and keeps the scroll parent stable.
@@ -413,7 +413,7 @@ public sealed class MemoryPage : ContentPage
         LayoutPanels(); UpdateDocumentActions();
     }
     /// <summary>Opens the actual Markdown file after guarding unsaved edits.</summary>
-    private async Task OpenAsync(string path, bool read, bool saved = false)
+    private async Task OpenAsync(string path, bool read, bool saved = false, bool selectGraph = true)
     {
         if (!saved && !await CanLeaveAsync().ConfigureAwait(true)) { return; }
         string content = await _brain.ReadAsync(path).ConfigureAwait(true); _observedHash = FileBrainStorage.Hash(content); _selectedPath = path; _selected = _brain.Snapshot.Notes.FirstOrDefault(note => note.Path == path);
@@ -422,7 +422,7 @@ public sealed class MemoryPage : ContentPage
         _evidence = null;
         _editingSource = _selected is null; _editor.Text = _selected?.Body ?? content; _loadedText = (_editor.Text ?? "").Replace("\r\n", "\n", StringComparison.Ordinal); _reader.Clear(); _details.Clear();
         BrainNote? note = _selected;
-        if (note is not null) { _graph.Select(note.Id); }
+        if (note is not null && selectGraph) { _graph.Select(note.Id); }
         if (note is not null)
         {
             AddReaderPage(note, note.Body.Split("\n\n", StringSplitOptions.RemoveEmptyEntries), 0);

@@ -292,7 +292,11 @@ public sealed partial class MainPage : ContentPage, IDisposable
     {
         using var performance = PerformanceTrace.Measure("settings.prepare");
         if (Navigation.NavigationStack.Count > 0 && Navigation.NavigationStack[^1] is SetupPage) { return Task.CompletedTask; }
-        if (_setupPage is null || !_setupPage.CanReuse) { _setupPage = _services.GetRequiredService<SetupPage>(); }
+        if (_setupPage is null || !_setupPage.CanReuse)
+        {
+            ReleaseCachedPage(_setupPage); _setupPage = _services.GetRequiredService<SetupPage>();
+            HandlerProperties.SetDisconnectPolicy(_setupPage, HandlerDisconnectPolicy.Manual);
+        }
         else { _setupPage.ReloadFromSettings(); }
         return NavigationMotion.PushAsync(Navigation, _setupPage);
     }
@@ -310,7 +314,11 @@ public sealed partial class MainPage : ContentPage, IDisposable
     {
         using var performance = PerformanceTrace.Measure("brain.prepare");
         if (Navigation.NavigationStack[^1] is MemoryPage) { return Task.CompletedTask; }
-        if (_brainPage is null || !_brainPage.CanReuse) { _brainPage = _services.GetRequiredService<MemoryPage>(); }
+        if (_brainPage is null || !_brainPage.CanReuse)
+        {
+            ReleaseCachedPage(_brainPage); _brainPage = _services.GetRequiredService<MemoryPage>();
+            HandlerProperties.SetDisconnectPolicy(_brainPage, HandlerDisconnectPolicy.Manual);
+        }
         return NavigationMotion.PushAsync(Navigation, _brainPage);
     }
     /// <inheritdoc />
@@ -589,9 +597,17 @@ public sealed partial class MainPage : ContentPage, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        ReleaseCachedPage(_setupPage); ReleaseCachedPage(_brainPage);
         _engine.ConversationMessageReceived -= ReceiveMessage; _live.MessageReceived -= ReceiveMessage; _localText.StreamUpdated -= ReceiveStream; _live.Interrupted -= StreamInterrupted;
         _chatGpt.StreamUpdated -= ReceiveStream;
         _tasks.Changed -= OnTaskProgress;
         _conversationScroll.Dispose(); _services.GetRequiredService<Laura.Core.Permissions.PermissionManager>().Changed -= OnApprovalsChanged; _timer?.Stop(); _holdLifetime?.Cancel(); _holdLifetime?.Dispose(); _command?.Cancel(); GC.SuppressFinalize(this);
+    }
+    /// <summary>Releases retained native controls only when their cached workspace is replaced or the owner is disposed.</summary>
+    private static void ReleaseCachedPage(Page? page)
+    {
+        if (page is null) { return; }
+        HandlerProperties.SetDisconnectPolicy(page, HandlerDisconnectPolicy.Automatic);
+        page.DisconnectHandlers();
     }
 }
